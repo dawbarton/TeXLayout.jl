@@ -131,4 +131,72 @@
         @test chars[2].value == "0"
     end
 
+    @testset "Thin space: \\," begin
+        tree = parse_latex("a\\,b")
+        @test length(tree.children) == 3
+        sp = tree.children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 3/18
+    end
+
+    @testset "Medium space: \\:" begin
+        sp = parse_latex("a\\:b").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 4/18
+    end
+
+    @testset "Thick space: \\;" begin
+        sp = parse_latex("a\\;b").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 5/18
+    end
+
+    @testset "Negative thin space: \\!" begin
+        sp = parse_latex("a\\!b").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ -3/18
+    end
+
+    @testset "Aliases: \\quad, \\qquad, \\enspace" begin
+        @test parse(Float64, parse_latex("a\\quad b").children[2].value) ≈ 1.0
+        @test parse(Float64, parse_latex("a\\qquad b").children[2].value) ≈ 2.0
+        @test parse(Float64, parse_latex("a\\enspace b").children[2].value) ≈ 0.5
+    end
+
+    @testset "Aliases: \\thinspace, \\medspace, \\thickspace" begin
+        @test parse(Float64, parse_latex("a\\thinspace b").children[2].value) ≈ 3/18
+        @test parse(Float64, parse_latex("a\\medspace b").children[2].value) ≈ 4/18
+        @test parse(Float64, parse_latex("a\\thickspace b").children[2].value) ≈ 5/18
+    end
+
+    @testset "Kern: \\kern1em (unbraced)" begin
+        sp = parse_latex("a\\kern1emb").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 1.0
+    end
+
+    @testset "Kern: \\kern{0.5em} (braced)" begin
+        sp = parse_latex("a\\kern{0.5em}b").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 0.5
+    end
+
+    @testset "Kern: \\kern{-0.25em} (negative)" begin
+        sp = parse_latex("a\\kern{-0.25em}b").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ -0.25
+    end
+
+    @testset "Mkern: \\mkern18mu gives 1em" begin
+        sp = parse_latex("a\\mkern18mub").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 1.0
+    end
+
+    @testset "Hskip: \\hskip2em gives 2em" begin
+        sp = parse_latex("a\\hskip2emb").children[2]
+        @test sp.kind === NKSpace
+        @test parse(Float64, sp.value) ≈ 2.0
+    end
+
 end

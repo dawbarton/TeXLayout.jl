@@ -151,4 +151,54 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(glyphs) == 3
     end
 
+    find_spaces(boxes) = find_elements(boxes, e -> e isa Space)
+
+    @testset "\\quad produces a Space element of width 1 em" begin
+        boxes  = layout(parse_latex("a\\quad b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        # Text-style scale is 1.0; Space width should be 1.0 em.
+        @test spaces[1].element.width ≈ 1.0 * size_scale(Text, mt.constants)
+    end
+
+    @testset "\\qquad produces a Space element of width 2 em" begin
+        boxes  = layout(parse_latex("a\\qquad b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        @test spaces[1].element.width ≈ 2.0 * size_scale(Text, mt.constants)
+    end
+
+    @testset "\\, produces thin space (3/18 em)" begin
+        boxes  = layout(parse_latex("a\\,b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        @test spaces[1].element.width ≈ (3/18) * size_scale(Text, mt.constants)
+    end
+
+    @testset "\\! produces negative space" begin
+        boxes  = layout(parse_latex("a\\!b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        @test spaces[1].element.width < 0.0
+    end
+
+    @testset "\\kern{1em} produces Space of width 1 em" begin
+        boxes  = layout(parse_latex("a\\kern{1em}b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        @test spaces[1].element.width ≈ 1.0 * size_scale(Text, mt.constants)
+    end
+
+    @testset "Spacing advances cursor left-to-right" begin
+        # With a quad between a and b, b's x-position must be further right
+        # than without spacing.
+        boxes_spaced = layout(parse_latex("a\\quad b"), family, Text)
+        boxes_plain  = layout(parse_latex("ab"), family, Text)
+        glyphs_spaced = find_glyphs(boxes_spaced)
+        glyphs_plain  = find_glyphs(boxes_plain)
+        b_x_spaced = glyphs_spaced[2].x
+        b_x_plain  = glyphs_plain[2].x
+        @test b_x_spaced > b_x_plain
+    end
+
 end

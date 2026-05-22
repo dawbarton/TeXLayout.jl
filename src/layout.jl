@@ -158,7 +158,10 @@ function _layout_node!(
         return cursor - x0
 
     elseif node.kind === NKSpace
-        return 0.0
+        w = parse(Float64, node.value) * scale
+        iszero(w) && return 0.0
+        push!(boxes, LayoutBox(Space(w), x0, y0, scale))
+        return w
 
     elseif node.kind === NKSequence || node.kind === NKGroup
         cursor = x0

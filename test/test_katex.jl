@@ -110,6 +110,23 @@
         @test !isempty(smoke(expr))
     end
 
+    @testset "Kern" begin
+        # ss_data.yaml: Kern — kern with em, ex (unsupported), and negative em.
+        # \kern1ex produces zero-width space (unsupported unit); the rest produce
+        # Space elements.  The expression contains several ordinary chars so the
+        # result is non-empty.
+        expr = "\\frac{a\\kern{1em}b}{c}a\\kern{1em}b\\kern{1ex}c\\kern{-0.25em}d"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "NegativeSpaceBetweenRel" begin
+        # ss_data.yaml: NegativeSpaceBetweenRel — A =\!= B
+        expr = "A =\\!= B"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
 end
 
 @testset "KaTeX malformed-input" begin

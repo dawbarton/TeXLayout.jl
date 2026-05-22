@@ -83,6 +83,10 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
 - Key node kinds:
   - `NKChar` — single character; `value` is the one-character string.
   - `NKCommand` — unrecognised command; `value` is the full token including `\`.
+  - `NKSpace` — explicit horizontal space; `value` is a decimal string giving the
+    width in em units (may be negative for `\!` and similar).  Commands `\,` `\:` `\;`
+    `\!` `\quad` `\qquad` `\kern` `\mkern` `\hskip` `\mskip` and their aliases all
+    produce this node.  1 mu = 1/18 em.
   - `NKOperator` — named math operator (e.g. `\sin`); `value` is the bare name (`"sin"`).
     Rendered upright using `glyph_metrics_upright`.
   - `NKDecorated` — children are `[base, sub, sup]` (always in that order regardless of
@@ -162,6 +166,8 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
   `lower_limit_baseline_drop_min`.
 - **Inter-atom spacing** — TeX inserts thin/medium spaces between atom classes
   (op/ord/bin/rel/…).  Requires classifying each node and looking up the spacing table.
+  Explicit spacing commands (`\,` `\:` `\;` `\!` `\quad` `\qquad` `\kern` etc.) are
+  already implemented; only the *automatic* inter-atom spacing remains.
 - **Delimiter sizing** — `\left`/`\right` delimiters are not yet scaled to the height of
   the enclosed content.  The MATH table `GlyphConstruction` records provide the variant
   glyph sequences needed.

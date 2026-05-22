@@ -39,6 +39,24 @@ end
 Node(kind::NodeKind, value::String) = Node(kind, value, Node[])
 Node(kind::NodeKind, children::Vector{Node}) = Node(kind, "", children)
 
+# Explicit horizontal spacing commands mapped to their width in em units.
+# Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
+const _SPACE_WIDTHS = Dict{String,Float64}(
+    "\\,"             =>  3/18,   # thin space
+    "\\thinspace"     =>  3/18,
+    "\\:"             =>  4/18,   # medium space
+    "\\medspace"      =>  4/18,
+    "\\;"             =>  5/18,   # thick space
+    "\\thickspace"    =>  5/18,
+    "\\!"             => -3/18,   # negative thin space
+    "\\negthinspace"  => -3/18,
+    "\\negmedspace"   => -4/18,
+    "\\negthickspace" => -5/18,
+    "\\enspace"       =>  0.5,
+    "\\quad"          =>  1.0,
+    "\\qquad"         =>  2.0,
+)
+
 # Standard named math operators rendered as upright multi-character strings.
 const _OPERATOR_NAMES = Set{String}([
     "sin", "cos", "tan", "cot", "sec", "csc",
@@ -63,6 +81,45 @@ end
 mutable struct _Parser
     tokens::Vector{Token}
     pos::Int
+end
+
+# Parse a TeX dimension after \kern / \mkern / \hskip / \mskip and return its
+# value in em units.  Supports a braced form (\kern{1em}) and an unbraced form
+# (\kern1em).  Only "em" and "mu" units are recognised; anything else yields 0.
+# One math unit (mu) = 1/18 em by the standard TeX convention.
+function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
+    braced = _current(p).kind === TKLBrace
+    braced && _advance!(p)   # consume '{'
+
+    # Collect sign + digits + decimal point.
+    num = Char[]
+    while _current(p).kind === TKChar
+        c = only(_current(p).value)
+        c ∈ "0123456789.+-" || break
+        push!(num, c); _advance!(p)
+    end
+
+    # Collect exactly 2 letter chars for the unit (em, mu, ex, pt, …).
+    unit = Char[]
+    for _ in 1:2
+        _current(p).kind === TKChar || break
+        c = only(_current(p).value)
+        isletter(c) || break
+        push!(unit, c); _advance!(p)
+    end
+
+    braced && _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+
+    val = tryparse(Float64, isempty(num) ? "0" : String(num))
+    val === nothing && return 0.0
+    unit_str = lowercase(String(unit))
+    if mu_units || unit_str == "mu"
+        return val / 18
+    elseif unit_str == "em"
+        return val
+    else
+        return 0.0   # unsupported unit: zero-width space
+    end
 end
 
 @inline _current(p::_Parser) = p.tokens[p.pos]
@@ -158,12 +215,12 @@ function _parse_primary!(p::_Parser)::Node
 
     elseif tok.kind === TKSpace
         _advance!(p)
-        return Node(NKSpace, tok.value)
+        return Node(NKSpace, "0.0")   # ~ and explicit spaces are zero-width in math
 
     elseif tok.kind === TKEOF
         # Do not advance past the sentinel — leave it in place so every caller
         # that loops on _current(p).kind sees TKEOF and exits cleanly.
-        return Node(NKSpace, "")
+        return Node(NKSpace, "0.0")
 
     else
         # Anything else (unlikely in well-formed input): emit as TKChar.
@@ -177,7 +234,18 @@ function _parse_command!(p::_Parser)::Node
     tok = _advance!(p)
     cmd = tok.value
 
-    if cmd == "\\frac"
+    if haskey(_SPACE_WIDTHS, cmd)
+        return Node(NKSpace, string(_SPACE_WIDTHS[cmd]))
+
+    elseif cmd ∈ ("\\kern", "\\hskip")
+        w = _parse_kern_dimension!(p, false)
+        return Node(NKSpace, string(w))
+
+    elseif cmd ∈ ("\\mkern", "\\mskip")
+        w = _parse_kern_dimension!(p, true)
+        return Node(NKSpace, string(w))
+
+    elseif cmd == "\\frac"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         return Node(NKFrac, [num, den])
