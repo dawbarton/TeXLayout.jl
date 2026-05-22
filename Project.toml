@@ -1,0 +1,13 @@
+name = "Formatic"
+uuid = "2da61a13-e1b6-4a6f-954d-3ae4b998419f"
+authors = ["Claude (David A W Barton) <david.barton@bristol.ac.uk>"]
+version = "0.1.0"
+
+[deps]
+FreeTypeAbstraction = "663a7486-cb36-511b-a19d-713bb74d65c9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

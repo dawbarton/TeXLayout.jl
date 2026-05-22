@@ -1,0 +1,245 @@
+# LaTeX parser: token stream → AST.
+#
+# Produces a typed tree of `Node` values.  The parser handles grouping,
+# sub/superscripts, fractions, roots, and a small set of core commands.
+# Atom classification (mord/mbin/mrel/…) is deferred to the layout engine
+# so that the parser remains context-free.
+
+"""Kinds of AST node produced by the parser."""
+@enum NodeKind begin
+    NKChar          # single character (letter, digit, punctuation)
+    NKSequence      # implicit group: ordered list of children
+    NKGroup         # explicit braced group: {…}
+    NKSuperscript   # base^{exponent} when subscript is absent
+    NKSubscript     # base_{subscript} when superscript is absent
+    NKDecorated     # base with both sub and sup: x_i^2
+    NKFrac          # \frac{num}{den}
+    NKSqrt          # \sqrt[degree]{body}
+    NKDelimited     # \left…\right pair
+    NKAccent        # \hat, \bar, \vec, etc.
+    NKCommand       # unrecognised command or atom-producing command (\alpha, \int, …)
+    NKSpace         # explicit space token (\, \; \quad etc.)
+    NKText          # \text{…} — text-mode fragment
+    NKOperator      # named math operator rendered upright: \sin, \cos, \operatorname{…}
+end
+
+"""
+An AST node.  Leaf nodes (chars, spaces, standalone commands) have an empty
+`children` vector and carry their source text in `value`.  Interior nodes
+carry children and may carry auxiliary text in `value` (e.g. the command name
+for `NKAccent`).
+"""
+struct Node
+    kind::NodeKind
+    value::String           # source text for leaf nodes; command name for interior
+    children::Vector{Node}
+end
+
+# Convenience constructors
+Node(kind::NodeKind, value::String) = Node(kind, value, Node[])
+Node(kind::NodeKind, children::Vector{Node}) = Node(kind, "", children)
+
+# Standard named math operators rendered as upright multi-character strings.
+const _OPERATOR_NAMES = Set{String}([
+    "sin", "cos", "tan", "cot", "sec", "csc",
+    "arcsin", "arccos", "arctan",
+    "ln", "log", "exp",
+    "lim", "sup", "inf", "max", "min",
+    "det", "dim", "ker", "deg", "gcd", "hom", "Pr", "arg",
+])
+
+# ── Recursive-descent implementation ─────────────────────────────────────────
+
+# Extract the plain-text content of a node as a string.  Used to recover the
+# operator name from the braced argument of \operatorname{…}.
+function _node_text(node::Node)::String
+    node.kind === NKChar    && return node.value
+    node.kind === NKCommand && return startswith(node.value, "\\") ? node.value[2:end] : node.value
+    (node.kind === NKSequence || node.kind === NKGroup) &&
+        return join(_node_text(c) for c in node.children)
+    return ""
+end
+
+mutable struct _Parser
+    tokens::Vector{Token}
+    pos::Int
+end
+
+@inline _current(p::_Parser) = p.tokens[p.pos]
+@inline _advance!(p::_Parser) = (t = p.tokens[p.pos]; p.pos += 1; t)
+
+# Consume one argument for a command (e.g. \frac numerator).
+# A braced group is parsed as its interior sequence; single elements are
+# unwrapped.  This differs from _parse_group! which preserves the NKGroup
+# wrapper for explicit braces that appear in a sequence.
+function _parse_argument!(p::_Parser)::Node
+    if _current(p).kind === TKLBrace
+        _advance!(p)   # consume '{'
+        children = _parse_sequence_children!(p)
+        _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+        length(children) == 1 && return children[1]
+        return Node(NKSequence, children)
+    else
+        return _parse_primary!(p)
+    end
+end
+
+# Parse a braced group {…} and return NKGroup with the interior children.
+function _parse_group!(p::_Parser)::Node
+    _advance!(p)   # consume '{'
+    children = _parse_sequence_children!(p)
+    _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    return Node(NKGroup, children)
+end
+
+# Parse atoms until '}' or EOF, returning the list of child nodes.
+function _parse_sequence_children!(p::_Parser)::Vector{Node}
+    children = Node[]
+    while true
+        k = _current(p).kind
+        (k === TKEOF || k === TKRBrace) && break
+        push!(children, _parse_atom!(p))
+    end
+    return children
+end
+
+# Parse a single "atom": a primary optionally decorated with ^ and/or _.
+function _parse_atom!(p::_Parser)::Node
+    # Space tokens in math mode are ignored at the atom level.
+    while _current(p).kind === TKSpace
+        _advance!(p)
+    end
+
+    base = _parse_primary!(p)
+
+    has_sup = false; has_sub = false
+    sup_node = base;  sub_node = base  # placeholders
+
+    # Collect at most one ^ and one _, in either order.
+    for _ in 1:2
+        k = _current(p).kind
+        if k === TKSup && !has_sup
+            _advance!(p)
+            sup_node = _parse_argument!(p)
+            has_sup  = true
+        elseif k === TKSub && !has_sub
+            _advance!(p)
+            sub_node = _parse_argument!(p)
+            has_sub  = true
+        else
+            break
+        end
+    end
+
+    if has_sup && has_sub
+        return Node(NKDecorated, [base, sub_node, sup_node])
+    elseif has_sup
+        return Node(NKSuperscript, [base, sup_node])
+    elseif has_sub
+        return Node(NKSubscript, [base, sub_node])
+    else
+        return base
+    end
+end
+
+# Parse a single primary (no script decoration).
+function _parse_primary!(p::_Parser)::Node
+    tok = _current(p)
+
+    if tok.kind === TKChar
+        _advance!(p)
+        return Node(NKChar, tok.value)
+
+    elseif tok.kind === TKLBrace
+        return _parse_group!(p)
+
+    elseif tok.kind === TKCommand
+        return _parse_command!(p)
+
+    elseif tok.kind === TKSpace
+        _advance!(p)
+        return Node(NKSpace, tok.value)
+
+    elseif tok.kind === TKEOF
+        # Do not advance past the sentinel — leave it in place so every caller
+        # that loops on _current(p).kind sees TKEOF and exits cleanly.
+        return Node(NKSpace, "")
+
+    else
+        # Anything else (unlikely in well-formed input): emit as TKChar.
+        _advance!(p)
+        return Node(NKChar, tok.value)
+    end
+end
+
+# Parse a command token and return the appropriate node.
+function _parse_command!(p::_Parser)::Node
+    tok = _advance!(p)
+    cmd = tok.value
+
+    if cmd == "\\frac"
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKFrac, [num, den])
+
+    elseif cmd == "\\sqrt"
+        # Optional degree: \sqrt[3]{x}
+        if _current(p).kind === TKChar && _current(p).value == "["
+            # Consume the degree argument up to the matching ']'.
+            _advance!(p)   # consume '['
+            deg_children = Node[]
+            while _current(p).kind !== TKEOF && _current(p).value != "]"
+                push!(deg_children, _parse_atom!(p))
+            end
+            _current(p).value == "]" && _advance!(p)  # consume ']'
+            degree = Node(NKGroup, deg_children)
+            body   = _parse_argument!(p)
+            return Node(NKSqrt, [degree, body])
+        else
+            body = _parse_argument!(p)
+            return Node(NKSqrt, [body])
+        end
+
+    elseif cmd == "\\left"
+        # \left<delim> … \right<delim>
+        _current(p).kind !== TKEOF && _advance!(p)  # delimiter token
+        inner = _parse_sequence_children!(p)
+        # Consume \right and its delimiter.
+        if _current(p).kind === TKCommand && _current(p).value == "\\right"
+            _advance!(p)
+            _current(p).kind !== TKEOF && _advance!(p)
+        end
+        return Node(NKDelimited, inner)
+
+    elseif cmd == "\\operatorname"
+        arg = _parse_argument!(p)
+        return Node(NKOperator, _node_text(arg))
+
+    else
+        bare = cmd[2:end]   # strip leading '\'
+        return bare ∈ _OPERATOR_NAMES ? Node(NKOperator, bare) : Node(NKCommand, cmd)
+    end
+end
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+"""
+    parse_latex(tokens) -> Node
+
+Parse a flat token stream (from `tokenize`) into an AST.
+Returns an `NKSequence` node at the top level.
+"""
+function parse_latex(tokens::Vector{Token})::Node
+    p = _Parser(tokens, 1)
+    children = _parse_sequence_children!(p)
+    return Node(NKSequence, children)
+end
+
+"""
+    parse_latex(input) -> Node
+
+Convenience wrapper: lex and parse in one call.
+"""
+function parse_latex(input::AbstractString)::Node
+    parse_latex(tokenize(input))
+end
