@@ -88,7 +88,9 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     `\!` `\quad` `\qquad` `\kern` `\mkern` `\hskip` `\mskip` and their aliases all
     produce this node.  1 mu = 1/18 em.
   - `NKOperator` — named math operator (e.g. `\sin`); `value` is the bare name (`"sin"`).
-    Rendered upright using `glyph_metrics_upright`.
+    Rendered upright using `glyph_metrics_upright`.  In Display style, operators in
+    `_LIMITS_OPERATORS` (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`,
+    `gcd`, `Pr`) automatically use limits placement.
   - `NKDecorated` — children are `[base, sub, sup]` (always in that order regardless of
     source order).
   - `NKFrac` — children `[numerator, denominator]`.
@@ -98,6 +100,9 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     (e.g. `"parenleft\x00parenright"`).  An empty substring means a null delimiter (no glyph
     rendered).  The layout engine looks up `vert_constructions` from the MATH table to pick
     the smallest variant tall enough to cover the inner content, centred on the math axis.
+  - `NKLimitsOverride` — produced by `\limits` or `\nolimits`; wraps the preceding base
+    node as its sole child; `value` is `"limits"` or `"nolimits"`.  The layout engine
+    checks this before dispatching the script placement algorithm.
 
 ### `TexStyle` (`style.jl`)
 Eight styles: `Display`, `CrampedDisplay`, `Text`, `CrampedText`, `Script`,
@@ -155,38 +160,59 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
    the PS-name path in NewCMMath (and most OpenType math fonts) returns the *italic*
    variant; the codepoint path returns the *upright* variant.  This is intentional.
 
-5. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
+5. **Large operator glyphs are resolved by codepoint, not command name.** PS glyph names
+   in OpenType math fonts diverge from LaTeX command names (`\sum` → `"summation"`,
+   `\prod` → `"product"`, `\int` → `"integral"`, etc.).  `_DISPLAY_OP_CODEPOINTS` in
+   `layout.jl` maps bare command names to Unicode codepoints; `glyph_name_by_codepoint`
+   then obtains the correct PS name.  The display-size variant is selected from
+   `vert_constructions` using the `display_operator_min_height` MATH constant.
+
+6. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
    removes or modifies existing entries.  Temporary `LayoutBox` vectors (used for
-   centering fractions) are merged in with adjusted x coordinates.
+   centering fractions and limits) are merged in with adjusted coordinates.
 
 ---
 
+## Implemented features
+
+A summary of major features and their status.
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Fractions (`\frac`) | ✓ | TeX Rule 15d/15e gap clamping; fraction rule from MATH table |
+| Square roots (`\sqrt`, `\sqrt[n]`) | ✓ | Pre-built variants + extensible assembly; top-anchored |
+| Delimiters (`\left`/`\right`) | ✓ | Auto-sized from `vert_constructions`; centred on math axis |
+| Sub/superscripts | ✓ | Standard beside-base placement using MATH shift constants |
+| Named operators (`\sin`, `\cos`, `\lim`, …) | ✓ | Upright glyphs; 30+ operators including `\limsup`, `\liminf` |
+| Large operators (`\sum`, `\prod`, `\int`, …) | ✓ | Display-size variant selected via `display_operator_min_height` |
+| Limits placement | ✓ | Sub/sup centred below/above in Display style; 4 MATH constants used |
+| `\limits` / `\nolimits` override | ✓ | Parsed as `NKLimitsOverride`; respected in all script branches |
+| Explicit spacing (`\,` `\;` `\quad` `\kern` …) | ✓ | Width in em; negative spaces supported |
+| Inter-atom spacing | ✓ | TeX atom-class table (ord/bin/rel/op/open/close/punct/inner) |
+| Accents (`\hat`, `\bar`, `\vec`, …) | Partial | Parsed as `NKAccent`; base rendered but accent mark not placed |
+| Horizontal extensibles (`\widehat`, …) | ✗ | Not yet implemented |
+| Font switching (`\mathbf`, `\mathrm`, …) | ✗ | Fall through as `NKCommand` |
+| Array/matrix environments | ✗ | Not yet parsed |
+| `default_font_family()` | ✗ | Throws "not implemented" |
+
 ## Known limitations / future work
 
-(See `notes.md` for KaTeX test file locations and grep terms for each item.)
-
-- **Limits placement** — `\lim_{x}` in Display style should place the subscript centred
-  below; currently it is placed beside.  Detection hook: check
-  `node.children[1].kind === NKOperator` in the `NKSubscript`/`NKDecorated` layout
-  branch.  Relevant MATH constants: `upper_limit_baseline_rise_min`,
-  `lower_limit_baseline_drop_min`.
-- **Inter-atom spacing** — TeX inserts thin/medium spaces between atom classes
-  (op/ord/bin/rel/…).  Requires classifying each node and looking up the spacing table.
-  Explicit spacing commands (`\,` `\:` `\;` `\!` `\quad` `\qquad` `\kern` etc.) are
-  already implemented; only the *automatic* inter-atom spacing remains.
-- **Delimiter sizing** — implemented: `\left`/`\right` delimiters are auto-sized using the
-  `vert_constructions` records from the OpenType MATH table and centred on the math axis.
-  Pre-built size variants are tried first; when the required height exceeds the largest variant
-  the extensible glyph assembly (bottom cap + repeated extenders + top cap) is used.
-  Horizontal extensible assemblies (e.g. `\widehat`) are not yet implemented.
 - **Accents** — `NKAccent` is parsed and represented in the AST but the layout engine
-  emits only the base (accent mark not rendered).
+  emits only the base; the accent mark is not rendered.  The MATH table provides
+  `MathTopAccentAttachment` records that give the attachment x-coordinate for both base
+  and accent glyphs.
+- **Horizontal extensible assemblies** — `\widehat`, `\widetilde`, `\overline`,
+  `\underline`, and similar wide accents require horizontal `vert_constructions` (actually
+  stored as `horiz_constructions` in the MATH table).  Not yet implemented.
 - **Font switching** — `\mathbf`, `\mathrm`, `\mathbb`, `\mathit`, `\mathcal` etc. are
-  not yet implemented; they fall through as `NKCommand`.
+  not yet implemented; they fall through as `NKCommand`.  Each would require selecting a
+  different font face from `FontFamily` or remapping codepoints.
 - **Array/matrix environments** — `\begin{array}…\end{array}`, `pmatrix`, `cases`, etc.
-  Not yet parsed.
+  Not yet parsed; requires extending the parser and adding a two-dimensional layout branch.
 - **`default_font_family()`** — throws "not implemented"; must be configured before
   the zero-argument form of `generate_tex_elements` can be used from Makie.
+- **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
+  atom-class spacing purposes.
 
 ---
 
