@@ -107,23 +107,31 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     end
 end
 
-# Maximum y-extent (top of the ink) of all Glyph boxes, in em units.
+# Maximum y-extent (top of the ink) of all boxes, in em units.
+# HRule stores its bottom edge in box.y; its top is box.y + element.thickness.
 function _boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64
     top = 0.0
     for b in boxes
-        if b.element isa Glyph
-            top = max(top, b.y + b.element.y_max / upm * b.scale)
+        el = b.element
+        if el isa Glyph
+            top = max(top, b.y + el.y_max / upm * b.scale)
+        elseif el isa HRule
+            top = max(top, b.y + el.thickness)
         end
     end
     return top
 end
 
-# Minimum y-extent (bottom of the ink) of all Glyph boxes, in em units.
+# Minimum y-extent (bottom of the ink) of all boxes, in em units.
+# HRule stores its bottom edge in box.y.
 function _boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64
     bot = 0.0
     for b in boxes
-        if b.element isa Glyph
-            bot = min(bot, b.y + b.element.y_min / upm * b.scale)
+        el = b.element
+        if el isa Glyph
+            bot = min(bot, b.y + el.y_min / upm * b.scale)
+        elseif el isa HRule
+            bot = min(bot, b.y)
         end
     end
     return bot
@@ -378,31 +386,48 @@ function _layout_node!(
         den_s = frac_den_style(style);  den_scale = size_scale(den_s, mc)
 
         rule_thickness = mc.fraction_rule_thickness / upm * scale
+        axis_em = mc.axis_height / upm * scale
         # Rule centre at the math axis; rule.y is the bottom edge.
-        rule_y = y0 + mc.axis_height / upm * scale - rule_thickness / 2
+        rule_y = y0 + axis_em - rule_thickness / 2
 
-        # Numerator and denominator baselines (measured from y0).
+        # Initial shifts and minimum gap constants from the MATH table.
         if is_display(style)
-            num_y = y0 + mc.fraction_numerator_display_style_shift_up / upm * scale
-            den_y = y0 - mc.fraction_denominator_display_style_shift_down / upm * scale
+            num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
+            den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
+            num_gap   = mc.fraction_num_display_style_gap_min / upm * scale
+            den_gap   = mc.fraction_denom_display_style_gap_min / upm * scale
         else
-            num_y = y0 + mc.fraction_numerator_shift_up / upm * scale
-            den_y = y0 - mc.fraction_denominator_shift_down / upm * scale
+            num_shift = mc.fraction_numerator_shift_up / upm * scale
+            den_shift = mc.fraction_denominator_shift_down / upm * scale
+            num_gap   = mc.fraction_numerator_gap_min / upm * scale
+            den_gap   = mc.fraction_denominator_gap_min / upm * scale
         end
 
-        # Measure widths via temporary boxes, then centre.
+        # Layout at y=0 to measure ink extents before applying shifts.
         tmp_num = LayoutBox[];  tmp_den = LayoutBox[]
-        num_w = _layout_node!(num_node, ctx, num_s, 0.0, num_y, num_scale, tmp_num)
-        den_w = _layout_node!(den_node, ctx, den_s, 0.0, den_y, den_scale, tmp_den)
+        num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
+        den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
+
+        # Clamp shifts so the minimum gap between content and rule is respected
+        # (TeX Rule 15d/15e).  num_depth is how far the numerator ink extends
+        # below its own baseline; den_height is how far the denominator ink
+        # extends above its own baseline.
+        num_depth  = max(0.0, -_boxes_bottom(tmp_num, upm))
+        den_height = max(0.0,  _boxes_top(tmp_den,    upm))
+        num_shift  = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
+        den_shift  = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
+
         frac_w = max(num_w, den_w)
+        num_y  = y0 + num_shift
+        den_y  = y0 - den_shift
 
         Δnum = (frac_w - num_w) / 2
         for b in tmp_num
-            push!(boxes, LayoutBox(b.element, x0 + Δnum + b.x, b.y, b.scale))
+            push!(boxes, LayoutBox(b.element, x0 + Δnum + b.x, num_y + b.y, b.scale))
         end
         Δden = (frac_w - den_w) / 2
         for b in tmp_den
-            push!(boxes, LayoutBox(b.element, x0 + Δden + b.x, b.y, b.scale))
+            push!(boxes, LayoutBox(b.element, x0 + Δden + b.x, den_y + b.y, b.scale))
         end
         push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
         return frac_w
