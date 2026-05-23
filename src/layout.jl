@@ -786,6 +786,40 @@ end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
+# Lay out a list of child nodes with inter-atom auto-spacing in math mode.
+# Returns the total advance width.  Used by NKSequence, NKGroup, and the inner
+# content loop of NKDelimited so spacing is consistent in all three contexts.
+function _layout_children!(
+    children,
+    ctx::_LayoutCtx,
+    style::TexStyle,
+    x0::Float64,
+    y0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    cursor = x0
+    prev_class = :nothing
+    for child in children
+        cls = _atom_class(child)
+        if cls === :neutral
+            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            prev_class = :nothing
+        else
+            if ctx.mode === :math && prev_class !== :nothing
+                sp = _interatom_space(prev_class, cls, style) * scale
+                if sp > 0.0
+                    push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
+                    cursor += sp
+                end
+            end
+            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            prev_class = cls
+        end
+    end
+    return cursor - x0
+end
+
 # Lay out `node` into `boxes`, with the left-baseline anchor at (x0, y0) and
 # the given scale.  Returns the horizontal advance of the node in em units.
 function _layout_node!(
@@ -832,26 +866,7 @@ function _layout_node!(
         return w
 
     elseif node.kind === NKSequence || node.kind === NKGroup
-        cursor = x0
-        prev_class = :nothing
-        for child in node.children
-            cls = _atom_class(child)
-            if cls === :neutral
-                cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
-                prev_class = :nothing   # explicit space resets spacing context
-            else
-                if ctx.mode === :math && prev_class !== :nothing
-                    sp = _interatom_space(prev_class, cls, style) * scale
-                    if sp > 0.0
-                        push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
-                        cursor += sp
-                    end
-                end
-                cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
-                prev_class = cls
-            end
-        end
-        return cursor - x0
+        return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
 
     elseif node.kind === NKSuperscript
         base, sup = node.children[1], node.children[2]
@@ -972,12 +987,8 @@ function _layout_node!(
         right_name = sep === nothing ? ""          : node.value[sep+1:end]
 
         # Lay out inner content in a scratch buffer to measure its vertical extent.
-        tmp    = LayoutBox[]
-        cursor = x0
-        for child in node.children
-            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, tmp)
-        end
-        content_w = cursor - x0
+        tmp       = LayoutBox[]
+        content_w = _layout_children!(node.children, ctx, style, x0, y0, scale, tmp)
 
         # Vertical extent of the inner content (in em units relative to y0).
         content_top = _boxes_top(tmp, upm)
