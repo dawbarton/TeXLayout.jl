@@ -1130,10 +1130,11 @@ function _layout_node!(
             shift_up = is_cramped(style) ?
                 mc.superscript_shift_up_cramped / upm * scale :
                 mc.superscript_shift_up / upm * scale
-            # For large operators (e.g. \int) in Display style, clamp the script
-            # baseline to sit above the top ink of the glyph rather than inside it.
+            # For large operators (e.g. \int) in Display style, apply TeX Rule 18:
+            # the superscript baseline must not drop below base_top − supDrop, where
+            # supDrop = SuperscriptBaselineDropMax (OpenType equivalent of σ₁₈).
             y_sup = _is_large_op(base) && is_display(style) ?
-                max(y0 + shift_up, _boxes_top(tmp_base, upm)) : y0 + shift_up
+                max(y0 + shift_up, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max / upm * scale) : y0 + shift_up
             sup_adv  = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y_sup, sup_scale, boxes)
             return base_adv + sup_adv + mc.space_after_script / upm * scale
         end
@@ -1164,9 +1165,11 @@ function _layout_node!(
             base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
             append!(boxes, tmp_base)
             shift_dn = mc.subscript_shift_down / upm * scale
-            # For large operators in Display style, clamp below the bottom ink.
+            # For large operators in Display style, apply TeX Rule 18: the subscript
+            # baseline must not rise above base_bottom + subDrop, where subDrop =
+            # SubscriptBaselineDropMin (OpenType equivalent of σ₁₉).
             y_sub = _is_large_op(base) && is_display(style) ?
-                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm)) : y0 - shift_dn
+                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm) + mc.subscript_baseline_drop_min / upm * scale) : y0 - shift_dn
             sub_adv  = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y_sub, sub_scale, boxes)
             return base_adv + sub_adv + mc.space_after_script / upm * scale
         end
@@ -1211,10 +1214,11 @@ function _layout_node!(
                 mc.superscript_shift_up_cramped / upm * scale :
                 mc.superscript_shift_up / upm * scale
             shift_dn = mc.subscript_shift_down / upm * scale
-            # For large operators in Display style, clamp scripts outside the glyph ink.
+            # For large operators in Display style, apply TeX Rule 18 (σ₁₈/σ₁₉):
+            # scripts may not fall within base_top − supDrop .. base_bottom + subDrop.
             y_sup, y_sub = if _is_large_op(base) && is_display(style)
-                max(y0 + shift_up, _boxes_top(tmp_base, upm)),
-                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm))
+                max(y0 + shift_up, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max / upm * scale),
+                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm) + mc.subscript_baseline_drop_min / upm * scale)
             else
                 y0 + shift_up, y0 - shift_dn
             end
