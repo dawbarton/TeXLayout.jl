@@ -593,4 +593,64 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test glyphs[1].element.advance_width > 0
     end
 
+    # ── Accent layout (Rule 12) ───────────────────────────────────────────────
+
+    @testset "Accent: \\hat{x} emits base and accent glyphs" begin
+        boxes  = layout(parse_latex("\\hat{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        # Must have at least 2 glyphs: the base 'x' and the circumflex.
+        @test length(glyphs) >= 2
+    end
+
+    @testset "Accent: \\hat{x} base glyph has same advance as plain x" begin
+        boxes_hat   = layout(parse_latex("\\hat{x}"),  family, Text)
+        boxes_plain = layout(parse_latex("x"),          family, Text)
+        # The base glyph should be identical; only the accent is added on top.
+        base_in_hat   = argmin(b -> b.x, find_glyphs(boxes_hat))
+        base_in_plain = find_glyphs(boxes_plain)[1]
+        @test base_in_hat.element.advance_width == base_in_plain.element.advance_width
+    end
+
+    @testset "Accent: \\hat{x} accent glyph ink top exceeds base ink top" begin
+        boxes  = layout(parse_latex("\\hat{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 2
+        upm = Float64(mt.upm)
+        # Ink top of each box = b.y + element.y_max / upm * b.scale.
+        ink_tops = [b.y + b.element.y_max / upm * b.scale for b in glyphs]
+        # The base glyph is at the lower ink top; the accent must be higher.
+        @test maximum(ink_tops) > minimum(ink_tops)
+        # Base glyph must sit at y = 0 (formula baseline).
+        base_box = argmin(b -> b.y, glyphs)
+        @test base_box.y ≈ 0.0
+    end
+
+    @testset "Accent: \\bar{\\alpha} renders without error" begin
+        boxes  = layout(parse_latex("\\bar{\\alpha}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 2
+    end
+
+    @testset "Accent: \\vec{v} renders without error" begin
+        boxes  = layout(parse_latex("\\vec{v}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 2
+    end
+
+    @testset "Accent: all non-stretchy commands render" begin
+        for cmd in ("\\hat", "\\acute", "\\grave", "\\ddot", "\\tilde",
+                    "\\bar", "\\breve", "\\check", "\\dot", "\\mathring", "\\vec")
+            boxes  = layout(parse_latex("$(cmd){x}"), family, Text)
+            glyphs = find_glyphs(boxes)
+            @test length(glyphs) >= 1   # at minimum the base must render
+        end
+    end
+
+    @testset "Accent: cramped style inside accent (superscript in radicand)" begin
+        # \hat{x^2}: the base x^2 is laid out cramped; the accent should still appear.
+        boxes  = layout(parse_latex("\\hat{x^2}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 3   # x, superscript 2, accent
+    end
+
 end

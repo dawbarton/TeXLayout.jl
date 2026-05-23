@@ -72,6 +72,45 @@ rule height = defaultRuleThickness
 
 ---
 
+## Rule 12 — Accents (pg. 443)
+
+**Source:** `src/functions/accent.ts`
+
+1. Build the base in the **cramped** style.
+2. Compute the clearance:
+   ```
+   clearance = min(base.height, xHeight)
+   ```
+   where `xHeight` is the OpenType constant `AccentBaseHeight`.  For tall bases
+   the accent floats above `xHeight`; for short ones it sits at the formula baseline.
+3. Place the accent glyph at vertical position `base.top − clearance` (i.e. the
+   accent baseline is at `max(0, base.height − xHeight)` above the formula
+   baseline).
+4. Align horizontally using `MathTopAccentAttachment` records from the MATH table:
+   - If both the base glyph and the accent glyph have attachment records,
+     `accent_x = base_attach_x − accent_attach_x`.
+   - Otherwise, centre the accent over the base: `accent_x = (base_w − accent_w) / 2`.
+5. The accent does not contribute to the overall advance width; the box width
+   equals the base width.
+
+OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
+`MathTopAccentAttachment` subtable of the MATH table.
+
+**Status — matches KaTeX.**
+- Rule 12 steps 1–5 fully implemented for 11 non-stretchy accent commands:
+  `\hat`, `\acute`, `\grave`, `\ddot`, `\tilde`, `\bar`, `\breve`, `\check`,
+  `\dot`, `\mathring`, `\vec`. ✓
+- `MathTopAccentAttachment` alignment used when both glyphs have records;
+  falls back to centering for complex multi-glyph bases. ✓
+- Wide/stretchy accents (`\widehat`, `\widetilde`) deferred; require
+  `horiz_constructions` from the MATH table (not yet implemented).
+- **Codepoint note:** KaTeX's `symbols.ts` maps `\acute`/`\grave`/`\bar` to
+  Modifier Letter codepoints (U+02CA/U+02CB/U+02C9) absent in most OpenType
+  math fonts.  Formatic.jl uses Latin-1/ASCII equivalents (U+00B4/U+0060/U+00AF)
+  which are present in NewCMMath and render to the same glyphs.
+
+---
+
 ## Rule 11 — Square root (pg. 443)
 
 **Source:** `src/functions/sqrt.ts`

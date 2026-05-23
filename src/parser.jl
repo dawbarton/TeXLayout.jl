@@ -81,6 +81,25 @@ const _DELIM_GLYPH_NAMES = Dict{String,String}(
     "."          => "",   # null delimiter — renders nothing
 )
 
+# Math accent commands mapped to the Unicode codepoint of the accent glyph.
+# Codepoints follow KaTeX's symbols.ts.  The layout engine looks up the PS glyph
+# name via the font's cmap so that the correct variant is used in each math font.
+# Wide/stretchy accents (\widehat, \widetilde) are excluded; they need horizontal
+# extensible constructions and are not yet implemented.
+const _ACCENT_CODEPOINTS = Dict{String,UInt32}(
+    "\\hat"      => 0x005E,   # ^ CIRCUMFLEX ACCENT
+    "\\acute"    => 0x00B4,   # ´ ACUTE ACCENT (Latin-1; U+02CA absent in most math fonts)
+    "\\grave"    => 0x0060,   # ` GRAVE ACCENT (ASCII; U+02CB absent in most math fonts)
+    "\\ddot"     => 0x00A8,   # ¨ DIAERESIS
+    "\\tilde"    => 0x007E,   # ~ TILDE
+    "\\bar"      => 0x00AF,   # ¯ MACRON (Latin-1; U+02C9 absent in most math fonts)
+    "\\breve"    => 0x02D8,   # ˘ BREVE
+    "\\check"    => 0x02C7,   # ˇ CARON
+    "\\dot"      => 0x02D9,   # ˙ DOT ABOVE
+    "\\mathring" => 0x02DA,   # ˚ RING ABOVE
+    "\\vec"      => 0x20D7,   # ⃗ COMBINING RIGHT ARROW ABOVE
+)
+
 # Font-switching commands mapped to their variant name.
 # The variant name is passed as `value` in the NKFontSwitch node and is used by
 # the layout engine to select the correct Unicode math-variant codepoints.
@@ -359,6 +378,10 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\operatorname"
         arg = _parse_argument!(p)
         return Node(NKOperator, _node_text(arg))
+
+    elseif haskey(_ACCENT_CODEPOINTS, cmd)
+        body = _parse_argument!(p)
+        return Node(NKAccent, cmd, [body])
 
     elseif haskey(_FONT_SWITCH_COMMANDS, cmd)
         variant = _FONT_SWITCH_COMMANDS[cmd]

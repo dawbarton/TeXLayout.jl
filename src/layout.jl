@@ -68,6 +68,7 @@ struct _LayoutCtx
     mc::MathConstants
     upm::Float64
     vert_constructions::Dict{String,GlyphConstruction}
+    top_accent_attachments::Dict{String,Int}  # PS glyph name → x position (design units)
     min_connector_overlap::Int
     mode::Symbol          # :math | :text
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
@@ -1427,15 +1428,62 @@ function _layout_node!(
     elseif node.kind === NKFontSwitch
         # Switch the active font variant for all recursive calls within the body.
         new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
-                             ctx.min_connector_overlap, ctx.mode,
-                             Symbol(node.value))
+                             ctx.top_accent_attachments, ctx.min_connector_overlap,
+                             ctx.mode, Symbol(node.value))
         isempty(node.children) && return 0.0
         return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 
     elseif node.kind === NKAccent
-        # Lay out the base; the accent mark is not yet implemented.
+        # KaTeX Rule 12 (accent.ts).  Build base in cramped style, then place the
+        # accent glyph above it, aligned via MathTopAccentAttachment when available.
         isempty(node.children) && return 0.0
-        return _layout_node!(node.children[1], ctx, style, x0, y0, scale, boxes)
+        upm = ctx.upm; mc = ctx.mc; s = scale
+
+        # Build base in cramped style (Rule 12: base is typeset cramped).
+        tmp = LayoutBox[]
+        base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, s, tmp)
+        base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
+
+        # Emit base at (x0, y0).
+        for b in tmp
+            push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
+        end
+
+        # Look up the accent glyph.  Return base-only if not present in the font.
+        accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
+        isempty(accent_ps) && return base_w
+        accent_m = glyph_metrics(ctx.family, accent_ps)
+
+        # Vertical placement: clearance = min(base_top, accent_base_height_em).
+        # This places the accent so it just clears a normal x-height character while
+        # riding higher above ascenders, matching the KaTeX clearance formula.
+        accent_base_h = mc.accent_base_height * s / upm
+        accent_y = y0 + max(0.0, base_top - accent_base_h)
+
+        # Horizontal placement via MathTopAccentAttachment.
+        # If the base is a single glyph with a known attachment point, align the
+        # attachment x of the accent to the attachment x of the base.
+        # Fall back to centering when attachment data is unavailable.
+        base_attach_du = if length(tmp) == 1 && tmp[1].element isa Glyph
+            get(ctx.top_accent_attachments, (tmp[1].element::Glyph).glyph_name, nothing)
+        else
+            nothing
+        end
+        accent_attach_du = get(ctx.top_accent_attachments, accent_ps, nothing)
+
+        accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
+            x0 + (base_attach_du - accent_attach_du) * s / upm
+        else
+            accent_w = accent_m.advance_width * s / upm
+            x0 + base_w / 2 - accent_w / 2
+        end
+
+        push!(boxes, LayoutBox(Glyph(accent_ps, accent_m.advance_width,
+                                     accent_m.left_side_bearing,
+                                     accent_m.x_min, accent_m.y_min,
+                                     accent_m.x_max, accent_m.y_max),
+                               accent_x, accent_y, s))
+        return base_w
 
     else
         return 0.0   # NKText and unrecognised nodes: emit nothing
@@ -1453,7 +1501,7 @@ Returns a flat list of positioned elements.
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
     ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-                     mt.min_connector_overlap, :math, :default)
+                     mt.top_accent_attachments, mt.min_connector_overlap, :math, :default)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes

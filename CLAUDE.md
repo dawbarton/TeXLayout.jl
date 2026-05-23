@@ -189,8 +189,8 @@ A summary of major features and their status.
 | `\limits` / `\nolimits` override | ✓ | Parsed as `NKLimitsOverride`; respected in all script branches |
 | Explicit spacing (`\,` `\;` `\quad` `\kern` …) | ✓ | Width in em; negative spaces supported |
 | Inter-atom spacing | ✓ | TeX atom-class table (ord/bin/rel/op/open/close/punct/inner) |
-| Accents (`\hat`, `\bar`, `\vec`, …) | Partial | Parsed as `NKAccent`; base rendered but accent mark not placed |
-| Horizontal extensibles (`\widehat`, …) | ✗ | Not yet implemented |
+| Accents (`\hat`, `\bar`, `\vec`, …) | ✓ | Rule 12; `MathTopAccentAttachment` alignment; 11 non-stretchy commands |
+| Horizontal extensibles (`\widehat`, `\widetilde`, `\overline`, `\underline`) | ✗ | Requires `horiz_constructions`; not yet implemented |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Array/matrix environments | ✗ | Not yet parsed |
 | `default_font_family()` | ✗ | Throws "not implemented" |
