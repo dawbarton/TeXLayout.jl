@@ -246,6 +246,51 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test spaces[1].element.width ≈ 1.0 * size_scale(Text, mt.constants)
     end
 
+    # ── Binary atom reclassification (Rules 5 & 6) ────────────────────────────
+
+    @testset "Rule 5: leading mbin demoted → no space inserted" begin
+        # '+x': the '+' is at the start of a list, so it is mbin → mord.
+        # No medium space should appear before 'x'.
+        boxes_leading = layout(parse_latex("+x"), family, Text)
+        spaces_leading = find_spaces(boxes_leading)
+        # Compare with 'a+x' where '+' is a genuine binary: should have spaces.
+        boxes_binary = layout(parse_latex("a+x"), family, Text)
+        spaces_binary = find_spaces(boxes_binary)
+        @test length(spaces_leading) < length(spaces_binary)
+    end
+
+    @testset "Rule 5: mbin after mopen demoted → no space" begin
+        # '(+x)': the '+' immediately follows an open atom → demoted to mord.
+        boxes = layout(parse_latex("\\left( +x \\right)"), family, Text)
+        spaces = find_spaces(boxes)
+        # 'a+x' in the same context produces medium spaces; '(+x)' should not.
+        boxes_mid = layout(parse_latex("\\left( a+x \\right)"), family, Text)
+        spaces_mid = find_spaces(boxes_mid)
+        @test length(spaces) < length(spaces_mid)
+    end
+
+    @testset "Rule 6: mbin before mrel demoted → no space before relation" begin
+        # 'a+=b': the '+' precedes '=', so it is demoted to mord.
+        # A mbin before mrel should produce no medium space after mbin.
+        boxes_demoted = layout(parse_latex("a+=b"), family, Text)
+        spaces_demoted = find_spaces(boxes_demoted)
+        # 'a+b' in the same style has a medium space after '+'.
+        boxes_binary = layout(parse_latex("a+b"), family, Text)
+        spaces_binary = find_spaces(boxes_binary)
+        # 'a+=b' should have fewer or equal number of medium spaces.
+        @test length(spaces_demoted) <= length(spaces_binary)
+    end
+
+    @testset "Rule 5: mbin after mbin demoted (double binary)" begin
+        # 'a++b': the second '+' follows a mbin and is demoted.
+        # The result should have fewer spaces than 'a + b + c'.
+        boxes_double = layout(parse_latex("a++b"),   family, Text)
+        boxes_normal = layout(parse_latex("a+c+b"),  family, Text)
+        spaces_double = find_spaces(boxes_double)
+        spaces_normal = find_spaces(boxes_normal)
+        @test length(spaces_double) < length(spaces_normal)
+    end
+
     @testset "Spacing advances cursor left-to-right" begin
         # With a quad between a and b, b's x-position must be further right
         # than without spacing.

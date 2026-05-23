@@ -34,8 +34,12 @@ A `mbin` atom is demoted to `mord` if:
 - it appears immediately before `mrel`, `mclose`, or `mpunct` (Rule 6 /
   right-canceller).
 
-**Status:** Not implemented.  Inter-atom spacing uses the atom class as parsed;
-`mbin` atoms are never reclassified.
+**Status — matches KaTeX.**
+- Two-pass reclassification in `_layout_children!`: left-to-right (Rule 5) then
+  right-to-left (Rule 6). ✓
+- Neutral atoms (`:neutral` — spaces, `NKSpace`) are transparent to both passes. ✓
+- `_BIN_LEFT_CANCEL = (:bin, :open, :rel, :op, :punct)` and
+  `_BIN_RIGHT_CANCEL = (:rel, :close, :punct)` defined as module-level constants. ✓
 
 ---
 

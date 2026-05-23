@@ -993,9 +993,20 @@ end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
+# Atom classes that left-cancel a following mbin atom (Rule 5).
+# A mbin at the start of a list or immediately after one of these is demoted to mord.
+const _BIN_LEFT_CANCEL  = (:bin, :open, :rel, :op, :punct)
+# Atom classes that right-cancel a preceding mbin atom (Rule 6).
+# A mbin immediately before one of these is demoted to mord.
+const _BIN_RIGHT_CANCEL = (:rel, :close, :punct)
+
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
 # Returns the total advance width.  Used by NKSequence, NKGroup, and the inner
 # content loop of NKDelimited so spacing is consistent in all three contexts.
+#
+# Applies TeX Rules 5 & 6 (binary atom reclassification) before computing spacing:
+# a mbin atom is demoted to mord when the surrounding context would produce
+# nonsensical spacing (e.g. a leading or trailing binary operator).
 function _layout_children!(
     children,
     ctx::_LayoutCtx,
@@ -1005,12 +1016,46 @@ function _layout_children!(
     scale::Float64,
     boxes::Vector{LayoutBox},
 )::Float64
-    cursor = x0
+    isempty(children) && return 0.0
+
+    # Collect into an indexable array and compute initial atom classes.
+    nodes   = children isa Vector ? children : collect(children)
+    n       = length(nodes)
+    classes = Vector{Symbol}(undef, n)
+    for i in 1:n
+        classes[i] = _atom_class(nodes[i])
+    end
+
+    # Rule 5: mbin → mord when left-context is start-of-list, bin, open, rel, op, or punct.
+    # Neutral (space) nodes are transparent: they do not update the context.
+    prev_nc = :nothing
+    for i in 1:n
+        cls = classes[i]
+        cls === :neutral && continue
+        if cls === :bin && (prev_nc === :nothing || prev_nc ∈ _BIN_LEFT_CANCEL)
+            classes[i] = :ord
+        end
+        prev_nc = classes[i]
+    end
+
+    # Rule 6: mbin → mord when right-context is rel, close, or punct.
+    next_nc = :nothing
+    for i in n:-1:1
+        cls = classes[i]
+        cls === :neutral && continue
+        if cls === :bin && next_nc ∈ _BIN_RIGHT_CANCEL
+            classes[i] = :ord
+        end
+        next_nc = classes[i]
+    end
+
+    # Emit nodes with inter-atom spacing using the reclassified classes.
+    cursor     = x0
     prev_class = :nothing
-    for child in children
-        cls = _atom_class(child)
+    for i in 1:n
+        cls = classes[i]
         if cls === :neutral
-            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
             prev_class = :nothing
         else
             if ctx.mode === :math && prev_class !== :nothing
@@ -1020,7 +1065,7 @@ function _layout_children!(
                     cursor += sp
                 end
             end
-            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
             prev_class = cls
         end
     end
