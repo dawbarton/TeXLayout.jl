@@ -76,6 +76,390 @@ const _MATH_CHAR_REMAP = Dict{Char,Char}(
     '*' => '∗',   # U+002A ASTERISK      → U+2217 ASTERISK OPERATOR
 )
 
+# ── Atom classification ───────────────────────────────────────────────────────
+
+# Inter-atom spacing follows TeX's eight atom classes (Knuth, Chapter 17) and
+# KaTeX's spacingData.ts.  Characters/commands not listed default to :ord.
+# _MATH_CHAR_REMAP is applied before char lookup so '-' and '−' both yield :bin.
+const _CHAR_ATOM_CLASS = Dict{Char,Symbol}(
+    # Binary operators
+    '+' => :bin,
+    '-' => :bin,    # U+002D (also remapped to U+2212 for glyph lookup)
+    '−' => :bin,    # U+2212 MINUS SIGN
+    '*' => :bin,    # U+002A (remapped to U+2217)
+    '∗' => :bin,    # U+2217 ASTERISK OPERATOR
+    '×' => :bin,    '÷' => :bin,
+    '·' => :bin,    '±' => :bin,
+    '∓' => :bin,    '∧' => :bin,
+    '∨' => :bin,    '∩' => :bin,
+    '∪' => :bin,    '⊕' => :bin,
+    '⊖' => :bin,    '⊗' => :bin,
+    '⊘' => :bin,    '⊙' => :bin,
+    '∘' => :bin,    '•' => :bin,
+    '⋆' => :bin,    '†' => :bin,
+    '‡' => :bin,
+    # Relations
+    '=' => :rel,    '<' => :rel,
+    '>' => :rel,    ':' => :rel,
+    '≤' => :rel,    '≥' => :rel,
+    '≠' => :rel,    '≈' => :rel,
+    '∼' => :rel,    '≃' => :rel,
+    '≅' => :rel,    '∝' => :rel,
+    '⊥' => :rel,    '∥' => :rel,
+    '∣' => :rel,    '⊂' => :rel,
+    '⊃' => :rel,    '⊆' => :rel,
+    '⊇' => :rel,    '∈' => :rel,
+    '∉' => :rel,    '∋' => :rel,
+    '→' => :rel,    '←' => :rel,
+    '↔' => :rel,    '⇒' => :rel,
+    '⇐' => :rel,    '⇔' => :rel,
+    '↦' => :rel,    '≡' => :rel,
+    '≺' => :rel,    '≻' => :rel,
+    '≪' => :rel,    '≫' => :rel,
+    '⊢' => :rel,    '⊣' => :rel,
+    '⊨' => :rel,    '↑' => :rel,
+    '↓' => :rel,    '⇑' => :rel,
+    '⇓' => :rel,
+    # Open delimiters
+    '(' => :open,   '[' => :open,
+    # Close delimiters
+    ')' => :close,  ']' => :close,
+    '!' => :close,
+    # Punctuation
+    ',' => :punct,  ';' => :punct,
+    # Inner (ellipses)
+    '…' => :inner,  '⋯' => :inner,
+    '⋱' => :inner,
+)
+
+# Atom class by command name (bare, without leading backslash).
+const _CMD_ATOM_CLASS = Dict{String,Symbol}(
+    # ── Binary operators ────────────────────────────────────────────────────
+    "pm"                => :bin,  "mp"                => :bin,
+    "times"             => :bin,  "div"               => :bin,
+    "cdot"              => :bin,  "ast"               => :bin,
+    "star"              => :bin,  "circ"              => :bin,
+    "bullet"            => :bin,
+    "cap"               => :bin,  "cup"               => :bin,
+    "sqcap"             => :bin,  "sqcup"             => :bin,
+    "wedge"             => :bin,  "land"              => :bin,
+    "vee"               => :bin,  "lor"               => :bin,
+    "setminus"          => :bin,  "smallsetminus"     => :bin,
+    "oplus"             => :bin,  "ominus"            => :bin,
+    "otimes"            => :bin,  "oslash"            => :bin,
+    "odot"              => :bin,
+    "boxplus"           => :bin,  "boxminus"          => :bin,
+    "boxtimes"          => :bin,  "boxdot"            => :bin,
+    "ltimes"            => :bin,  "rtimes"            => :bin,
+    "wr"                => :bin,  "amalg"             => :bin,
+    "dagger"            => :bin,  "ddagger"           => :bin,
+    "dag"               => :bin,  "ddag"              => :bin,
+    "triangleleft"      => :bin,  "triangleright"     => :bin,
+    "barwedge"          => :bin,  "curlywedge"        => :bin,
+    "curlyvee"          => :bin,  "intercal"          => :bin,
+    "dotplus"           => :bin,  "leftthreetimes"    => :bin,
+    "rightthreetimes"   => :bin,  "doublebarwedge"    => :bin,
+    "divideontimes"     => :bin,
+
+    # ── Relations ───────────────────────────────────────────────────────────
+    "leq"               => :rel,  "le"                => :rel,
+    "geq"               => :rel,  "ge"                => :rel,
+    "neq"               => :rel,  "ne"                => :rel,
+    "equiv"             => :rel,  "approx"            => :rel,
+    "sim"               => :rel,  "simeq"             => :rel,
+    "cong"              => :rel,  "propto"            => :rel,
+    "perp"              => :rel,  "parallel"          => :rel,
+    "mid"               => :rel,  "nmid"              => :rel,
+    "subset"            => :rel,  "supset"            => :rel,
+    "subseteq"          => :rel,  "supseteq"          => :rel,
+    "sqsubseteq"        => :rel,  "sqsupseteq"        => :rel,
+    "in"                => :rel,  "notin"             => :rel,
+    "ni"                => :rel,  "owns"              => :rel,
+    "prec"              => :rel,  "succ"              => :rel,
+    "preceq"            => :rel,  "succeq"            => :rel,
+    "ll"                => :rel,  "gg"                => :rel,
+    "lll"               => :rel,  "ggg"               => :rel,
+    "to"                => :rel,
+    "leftarrow"         => :rel,  "rightarrow"        => :rel,
+    "Leftarrow"         => :rel,  "Rightarrow"        => :rel,
+    "leftrightarrow"    => :rel,  "Leftrightarrow"    => :rel,
+    "longleftarrow"     => :rel,  "longrightarrow"    => :rel,
+    "Longleftarrow"     => :rel,  "Longrightarrow"    => :rel,
+    "longleftrightarrow" => :rel, "Longleftrightarrow" => :rel,
+    "iff"               => :rel,  "implies"           => :rel,
+    "mapsto"            => :rel,  "longmapsto"        => :rel,
+    "hookleftarrow"     => :rel,  "hookrightarrow"    => :rel,
+    "uparrow"           => :rel,  "downarrow"         => :rel,
+    "Uparrow"           => :rel,  "Downarrow"         => :rel,
+    "updownarrow"       => :rel,  "Updownarrow"       => :rel,
+    "nearrow"           => :rel,  "searrow"           => :rel,
+    "swarrow"           => :rel,  "nwarrow"           => :rel,
+    "vdash"             => :rel,  "dashv"             => :rel,
+    "models"            => :rel,
+    "smile"             => :rel,  "frown"             => :rel,
+    "asymp"             => :rel,  "bowtie"            => :rel,
+    "Join"              => :rel,  "not"               => :rel,
+    "xleftarrow"        => :rel,  "xrightarrow"       => :rel,
+    "nleq"              => :rel,  "ngeq"              => :rel,
+    "nless"             => :rel,  "ngtr"              => :rel,
+    "nsim"              => :rel,  "nparallel"         => :rel,
+    "nsubseteq"         => :rel,  "nsupseteq"         => :rel,
+    "subsetneq"         => :rel,  "supsetneq"         => :rel,
+    "varsubsetneq"      => :rel,  "varsupsetneq"      => :rel,
+    "lneq"              => :rel,  "gneq"              => :rel,
+    "lnsim"             => :rel,  "gnsim"             => :rel,
+    "preccurlyeq"       => :rel,  "succcurlyeq"       => :rel,
+    "curlyeqprec"       => :rel,  "curlyeqsucc"       => :rel,
+    "sqsubset"          => :rel,  "sqsupset"          => :rel,
+    "Supset"            => :rel,  "Subset"            => :rel,
+    "trianglelefteq"    => :rel,  "trianglerighteq"   => :rel,
+    "vartriangleleft"   => :rel,  "vartriangleright"  => :rel,
+    "blacktriangleleft" => :rel,  "blacktriangleright" => :rel,
+    "leqq"              => :rel,  "geqq"              => :rel,
+    "leqslant"          => :rel,  "geqslant"          => :rel,
+    "eqslantless"       => :rel,  "eqslantgtr"        => :rel,
+    "lesssim"           => :rel,  "gtrsim"            => :rel,
+    "lessapprox"        => :rel,  "gtrapprox"         => :rel,
+    "approxeq"          => :rel,
+    "lessdot"           => :rel,  "gtrdot"            => :rel,
+    "lessgtr"           => :rel,  "gtrless"           => :rel,
+    "lesseqgtr"         => :rel,  "gtreqless"         => :rel,
+    "lesseqqgtr"        => :rel,  "gtreqqless"        => :rel,
+    "doteq"             => :rel,  "doteqdot"          => :rel,
+    "risingdotseq"      => :rel,  "fallingdotseq"     => :rel,
+    "backsim"           => :rel,  "backsimeq"         => :rel,
+    "eqcirc"            => :rel,  "circeq"            => :rel,
+    "triangleq"         => :rel,
+    "bumpeq"            => :rel,  "Bumpeq"            => :rel,
+    "thicksim"          => :rel,  "thickapprox"       => :rel,
+    "supseteqq"         => :rel,  "subseteqq"         => :rel,
+    "shortparallel"     => :rel,  "between"           => :rel,
+    "pitchfork"         => :rel,  "therefore"         => :rel,
+    "because"           => :rel,  "shortmid"          => :rel,
+    "backepsilon"       => :rel,  "varpropto"         => :rel,
+    "nleqslant"         => :rel,  "ngeqslant"         => :rel,
+    "nleqq"             => :rel,  "ngeqq"             => :rel,
+    "lvertneqq"         => :rel,  "gvertneqq"         => :rel,
+    "nprec"             => :rel,  "nsucc"             => :rel,
+    "npreceq"           => :rel,  "nsucceq"           => :rel,
+
+    # ── Large operators ─────────────────────────────────────────────────────
+    "int"               => :op,   "iint"              => :op,
+    "iiint"             => :op,   "iiiint"            => :op,
+    "oint"              => :op,   "oiint"             => :op,
+    "oiiint"            => :op,
+    "sum"               => :op,   "prod"              => :op,
+    "coprod"            => :op,
+    "bigcap"            => :op,   "bigcup"            => :op,
+    "bigsqcup"          => :op,   "bigsqcap"          => :op,
+    "bigwedge"          => :op,   "bigvee"            => :op,
+    "bigoplus"          => :op,   "bigotimes"         => :op,
+    "bigodot"           => :op,   "biguplus"          => :op,
+    "bigplus"           => :op,
+
+    # ── Manual delimiter sizing ──────────────────────────────────────────────
+    "bigl"              => :open,  "Bigl"             => :open,
+    "biggl"             => :open,  "Biggl"            => :open,
+    "bigr"              => :close, "Bigr"             => :close,
+    "biggr"             => :close, "Biggr"            => :close,
+    "bigm"              => :rel,   "Bigm"             => :rel,
+    "biggm"             => :rel,   "Biggm"            => :rel,
+
+    # ── Open delimiters ─────────────────────────────────────────────────────
+    "{"                 => :open,
+    "langle"            => :open,
+    "lfloor"            => :open,
+    "lceil"             => :open,
+    "lvert"             => :open,
+    "lVert"             => :open,
+    "lgroup"            => :open,
+    "lmoustache"        => :open,
+    "llbracket"         => :open,
+
+    # ── Close delimiters ────────────────────────────────────────────────────
+    "}"                 => :close,
+    "rangle"            => :close,
+    "rfloor"            => :close,
+    "rceil"             => :close,
+    "rvert"             => :close,
+    "rVert"             => :close,
+    "rgroup"            => :close,
+    "rmoustache"        => :close,
+    "rrbracket"         => :close,
+
+    # ── Punctuation ─────────────────────────────────────────────────────────
+    "colon"             => :punct,
+    "cdotp"             => :punct,
+    "ldotp"             => :punct,
+
+    # ── Inner (ellipses, \bmod, \pmod) ──────────────────────────────────────
+    "ldots"             => :inner,
+    "cdots"             => :inner,
+    "ddots"             => :inner,
+    "dots"              => :inner,
+    "dotsb"             => :inner,
+    "dotsc"             => :inner,
+    "dotsi"             => :inner,
+    "dotsm"             => :inner,
+    "dotso"             => :inner,
+    "bmod"              => :inner,
+    "pmod"              => :inner,
+
+    # ── Ordinary symbols ────────────────────────────────────────────────────
+    # Greek lowercase
+    "alpha"             => :ord,  "beta"              => :ord,
+    "gamma"             => :ord,  "delta"             => :ord,
+    "epsilon"           => :ord,  "varepsilon"        => :ord,
+    "zeta"              => :ord,  "eta"               => :ord,
+    "theta"             => :ord,  "vartheta"          => :ord,
+    "iota"              => :ord,  "kappa"             => :ord,
+    "lambda"            => :ord,  "mu"                => :ord,
+    "nu"                => :ord,  "xi"                => :ord,
+    "pi"                => :ord,  "varpi"             => :ord,
+    "rho"               => :ord,  "varrho"            => :ord,
+    "sigma"             => :ord,  "varsigma"          => :ord,
+    "tau"               => :ord,  "upsilon"           => :ord,
+    "phi"               => :ord,  "varphi"            => :ord,
+    "chi"               => :ord,  "psi"               => :ord,
+    "omega"             => :ord,
+    # Greek uppercase
+    "Gamma"             => :ord,  "Delta"             => :ord,
+    "Theta"             => :ord,  "Lambda"            => :ord,
+    "Xi"                => :ord,  "Pi"                => :ord,
+    "Sigma"             => :ord,  "Upsilon"           => :ord,
+    "Phi"               => :ord,  "Psi"               => :ord,
+    "Omega"             => :ord,
+    # Miscellaneous ordinary symbols
+    "infty"             => :ord,  "partial"           => :ord,
+    "nabla"             => :ord,  "forall"            => :ord,
+    "exists"            => :ord,  "nexists"           => :ord,
+    "emptyset"          => :ord,  "varnothing"        => :ord,
+    "angle"             => :ord,  "measuredangle"     => :ord,
+    "sphericalangle"    => :ord,
+    "ell"               => :ord,
+    "imath"             => :ord,  "jmath"             => :ord,
+    "hbar"              => :ord,  "hslash"            => :ord,
+    "Re"                => :ord,  "Im"                => :ord,
+    "wp"                => :ord,
+    "aleph"             => :ord,  "beth"              => :ord,
+    "gimel"             => :ord,  "daleth"            => :ord,
+    "prime"             => :ord,  "backprime"         => :ord,
+    "complement"        => :ord,
+    "surd"              => :ord,
+    "top"               => :ord,  "bot"               => :ord,
+    "flat"              => :ord,  "natural"           => :ord,
+    "sharp"             => :ord,
+    "diagup"            => :ord,  "diagdown"          => :ord,
+    "eth"               => :ord,
+    "Finv"              => :ord,  "Game"              => :ord,
+    "Bbbk"              => :ord,
+    "triangle"          => :ord,  "triangledown"      => :ord,
+    "square"            => :ord,  "blacksquare"       => :ord,
+    "lozenge"           => :ord,  "blacklozenge"      => :ord,
+    "bigstar"           => :ord,
+    "clubsuit"          => :ord,  "diamondsuit"       => :ord,
+    "heartsuit"         => :ord,  "spadesuit"         => :ord,
+    "checkmark"         => :ord,
+    "vert"              => :ord,  "Vert"              => :ord,
+    "backslash"         => :ord,
+    "S"                 => :ord,  "P"                 => :ord,
+    "copyright"         => :ord,  "circledR"          => :ord,
+    "maltese"           => :ord,
+    "yen"               => :ord,  "pounds"            => :ord,
+    "mho"               => :ord,  "Angstrom"          => :ord,
+    "digamma"           => :ord,  "varkappa"          => :ord,
+    "circledS"          => :ord,  "degree"            => :ord,
+    "textdollar"        => :ord,
+    "vdots"             => :ord,  # vertical — ordinary, not inner like \cdots
+    # Accents (base is an ordinary atom in terms of spacing)
+    "hat"               => :ord,  "bar"               => :ord,
+    "vec"               => :ord,  "dot"               => :ord,
+    "ddot"              => :ord,  "tilde"             => :ord,
+    "widehat"           => :ord,  "widetilde"         => :ord,
+    "overline"          => :ord,  "underline"         => :ord,
+    # Font-mode selectors: the result is an ordinary atom
+    "mathbf"            => :ord,  "mathrm"            => :ord,
+    "mathit"            => :ord,  "mathbb"            => :ord,
+    "mathcal"           => :ord,  "mathfrak"          => :ord,
+    "mathsf"            => :ord,  "mathtt"            => :ord,
+    "boldsymbol"        => :ord,  "text"              => :ord,
+    "mbox"              => :ord,
+)
+
+# Spacing amounts in em (18-mu convention: thin = 3 mu, medium = 4 mu, thick = 5 mu).
+const _THIN   = 3 / 18
+const _MEDIUM = 4 / 18
+const _THICK  = 5 / 18
+
+# Automatic inter-atom spacing for Display/Text style: (prev, next) → em.
+# Derived from KaTeX spacingData.ts; pairs with no entry have zero spacing.
+const _SPACINGS = Dict{Tuple{Symbol,Symbol},Float64}(
+    (:ord,   :op)    => _THIN,   (:ord,   :bin)   => _MEDIUM,
+    (:ord,   :rel)   => _THICK,  (:ord,   :inner) => _THIN,
+    (:op,    :ord)   => _THIN,   (:op,    :op)    => _THIN,
+    (:op,    :rel)   => _THICK,  (:op,    :inner) => _THIN,
+    (:bin,   :ord)   => _MEDIUM, (:bin,   :op)    => _MEDIUM,
+    (:bin,   :open)  => _MEDIUM, (:bin,   :inner) => _MEDIUM,
+    (:rel,   :ord)   => _THICK,  (:rel,   :op)    => _THICK,
+    (:rel,   :open)  => _THICK,  (:rel,   :inner) => _THICK,
+    # :open has no outgoing entries
+    (:close, :op)    => _THIN,   (:close, :bin)   => _MEDIUM,
+    (:close, :rel)   => _THICK,  (:close, :inner) => _THIN,
+    (:punct, :ord)   => _THIN,   (:punct, :op)    => _THIN,
+    (:punct, :rel)   => _THICK,  (:punct, :open)  => _THIN,
+    (:punct, :close) => _THIN,   (:punct, :punct) => _THIN,
+    (:punct, :inner) => _THIN,
+    (:inner, :ord)   => _THIN,   (:inner, :op)    => _THIN,
+    (:inner, :bin)   => _MEDIUM, (:inner, :rel)   => _THICK,
+    (:inner, :open)  => _THIN,   (:inner, :punct) => _THIN,
+    (:inner, :inner) => _THIN,
+)
+
+# Tight spacing for Script/ScriptScript: only thin spaces survive (KaTeX tightSpacings).
+const _TIGHT_SPACINGS = Dict{Tuple{Symbol,Symbol},Float64}(
+    (:ord,   :op) => _THIN,
+    (:op,    :ord) => _THIN,  (:op,    :op)  => _THIN,
+    (:close, :op)  => _THIN,
+    (:inner, :op)  => _THIN,
+)
+
+# Return the TeX atom class for a given AST node.
+# Scripted nodes (NKSuperscript, NKSubscript, NKDecorated) inherit from their
+# base (first child).  Groups and sequences are treated as ordinary atoms.
+# NKSpace yields :neutral — these nodes are transparent to auto-spacing.
+function _atom_class(node::Node)::Symbol
+    k = node.kind
+    if k === NKChar
+        ch = only(node.value)
+        ch = get(_MATH_CHAR_REMAP, ch, ch)   # same remap as _char_glyph
+        return get(_CHAR_ATOM_CLASS, ch, :ord)
+    elseif k === NKCommand
+        cmd  = node.value
+        name = startswith(cmd, "\\") ? cmd[2:end] : cmd
+        return get(_CMD_ATOM_CLASS, name, :ord)
+    elseif k === NKOperator
+        return :op
+    elseif k === NKFrac || k === NKDelimited
+        return :inner
+    elseif k === NKSqrt || k === NKAccent || k === NKText
+        return :ord
+    elseif k === NKSuperscript || k === NKSubscript || k === NKDecorated
+        isempty(node.children) && return :ord
+        return _atom_class(node.children[1])   # inherit from base
+    elseif k === NKSpace
+        return :neutral   # explicit spaces reset the spacing context
+    else
+        return :ord   # NKSequence, NKGroup: braced sub-expressions are ordinary
+    end
+end
+
+# Return automatic inter-atom spacing in em between atoms of class `prev` and
+# `next`.  Uses tight spacings in Script/ScriptScript style.
+function _interatom_space(prev::Symbol, next::Symbol, style::TexStyle)::Float64
+    tight = is_script(style) || is_script_script(style)
+    return get(tight ? _TIGHT_SPACINGS : _SPACINGS, (prev, next), 0.0)
+end
+
 # Return a Glyph for a Unicode character.
 # In math mode, certain ASCII characters are remapped to their correct math
 # Unicode equivalents before the glyph lookup (e.g. '-' → U+2212).
@@ -449,8 +833,23 @@ function _layout_node!(
 
     elseif node.kind === NKSequence || node.kind === NKGroup
         cursor = x0
+        prev_class = :nothing
         for child in node.children
-            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            cls = _atom_class(child)
+            if cls === :neutral
+                cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+                prev_class = :nothing   # explicit space resets spacing context
+            else
+                if ctx.mode === :math && prev_class !== :nothing
+                    sp = _interatom_space(prev_class, cls, style) * scale
+                    if sp > 0.0
+                        push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
+                        cursor += sp
+                    end
+                end
+                cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+                prev_class = cls
+            end
         end
         return cursor - x0
 

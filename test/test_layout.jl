@@ -159,6 +159,57 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
 
     find_spaces(boxes) = find_elements(boxes, e -> e isa Space)
 
+    # ── Inter-atom spacing ──────────────────────────────────────────────────────
+
+    @testset "Inter-atom: ord+bin+ord (a+b) inserts two medium spaces" begin
+        boxes  = layout(parse_latex("a+b"), family, Text)
+        spaces = find_spaces(boxes)
+        # Expected: medium space before '+' (ord→bin) and after '+' (bin→ord).
+        @test length(spaces) == 2
+        medium = (4/18) * size_scale(Text, mt.constants)
+        @test all(s -> isapprox(s.element.width, medium, atol=1e-6), spaces)
+    end
+
+    @testset "Inter-atom: ord+rel+ord (a=b) inserts two thick spaces" begin
+        boxes  = layout(parse_latex("a=b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 2
+        thick = (5/18) * size_scale(Text, mt.constants)
+        @test all(s -> isapprox(s.element.width, thick, atol=1e-6), spaces)
+    end
+
+    @testset "Inter-atom: punct→ord (a,b) inserts thin space after comma" begin
+        boxes  = layout(parse_latex("a,b"), family, Text)
+        spaces = find_spaces(boxes)
+        # punct→ord yields thin; there is no space before the comma.
+        @test length(spaces) == 1
+        thin = (3/18) * size_scale(Text, mt.constants)
+        @test spaces[1].element.width ≈ thin  atol=1e-6
+    end
+
+    @testset "Inter-atom: op→ord (\\sin x) inserts thin space" begin
+        boxes  = layout(parse_latex("\\sin x"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+        thin = (3/18) * size_scale(Text, mt.constants)
+        @test spaces[1].element.width ≈ thin  atol=1e-6
+    end
+
+    @testset "Inter-atom: Script style suppresses medium/thick spacing" begin
+        # In Script style the tight-spacing table applies: ord+bin+ord → no space.
+        boxes  = layout(parse_latex("a+b"), family, Script)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 0
+    end
+
+    @testset "Inter-atom: explicit space resets context, no double gap" begin
+        # 'a \quad b': the \quad is neutral; spacing context is reset after it,
+        # so 'b' gets no additional auto-space.  Exactly 1 Space element (the \quad).
+        boxes  = layout(parse_latex("a\\quad b"), family, Text)
+        spaces = find_spaces(boxes)
+        @test length(spaces) == 1
+    end
+
     @testset "\\quad produces a Space element of width 1 em" begin
         boxes  = layout(parse_latex("a\\quad b"), family, Text)
         spaces = find_spaces(boxes)
