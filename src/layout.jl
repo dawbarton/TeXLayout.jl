@@ -848,6 +848,20 @@ function _layout_radical_assembly!(
     return max_adv_w / upm * scale
 end
 
+# Return the GlyphMetrics for the smallest radical variant that covers
+# `required_du` design units (same selection logic as `_layout_radical!`),
+# or `nothing` if no variant information is available.  Does NOT push to boxes.
+function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph,Nothing}
+    if haskey(ctx.vert_constructions, "radical")
+        vc = ctx.vert_constructions["radical"]
+        for v in vc.variants
+            Float64(v.advance) >= required_du && return _cmd_glyph(ctx, v.glyph_name)
+        end
+        !isempty(vc.variants) && return _cmd_glyph(ctx, last(vc.variants).glyph_name)
+    end
+    return _cmd_glyph(ctx, "radical")
+end
+
 # Choose and place a radical glyph (or assembly) whose ink top aligns with
 # `rule_top_em`.  `required_du` is the minimum vertical span (design units)
 # the radical must cover — from the body's bottom ink to the rule top.
@@ -1291,6 +1305,23 @@ function _layout_node!(
             mc.radical_display_style_vertical_gap / upm * scale :
             mc.radical_vertical_gap / upm * scale
         rule_thickness = mc.radical_rule_thickness / upm * scale
+
+        # KaTeX Rule 11: when the radical hook extends significantly below the
+        # body, redistribute excess vertical space so it is shared equally above
+        # and below rather than entirely below.  We peek at which glyph would be
+        # selected, measure its hook depth (−y_min), and increase the gap if
+        # the hook would overshoot the body by more than the initial clearance.
+        let peek_du = (body_top + gap + rule_thickness - body_bot) / scale * upm
+            g = _peek_radical_glyph(ctx, peek_du)
+            if g !== nothing
+                delim_depth = -g.y_min / upm * scale
+                body_extent = body_top - body_bot
+                if delim_depth > body_extent + gap
+                    gap = (gap + delim_depth - body_extent) / 2
+                end
+            end
+        end
+
         rule_y_local   = body_top + gap           # bottom of rule bar (em, relative to y0)
         rule_top_local = rule_y_local + rule_thickness
 
