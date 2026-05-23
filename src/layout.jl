@@ -454,6 +454,90 @@ const _LIMITS_OP_COMMANDS = Set{String}([
     "bigoplus", "bigotimes", "bigodot", "biguplus",
 ])
 
+# Unicode codepoints for symbols whose LaTeX command name differs from the
+# PostScript glyph name used in OpenType math fonts (e.g. \infty → "infinity",
+# not "infty").  Looked up by codepoint so the correct PS name is resolved
+# independently of font-specific naming conventions.
+const _SYMBOL_CODEPOINTS = Dict{String,UInt32}(
+    # Misc math
+    "infty"          => 0x221E,  "partial"        => 0x2202,
+    "forall"         => 0x2200,  "exists"         => 0x2203,
+    "nexists"        => 0x2204,  "emptyset"       => 0x2205,
+    "varnothing"     => 0x2205,  "nabla"          => 0x2207,
+    "hbar"           => 0x210F,  "ell"            => 0x2113,
+    "Re"             => 0x211C,  "Im"             => 0x2111,
+    "wp"             => 0x2118,  "aleph"          => 0x2135,
+    "beth"           => 0x2136,  "gimel"          => 0x2137,
+    "daleth"         => 0x2138,  "angle"          => 0x2220,
+    "top"            => 0x22A4,  "bot"            => 0x22A5,
+    "prime"          => 0x2032,  "backprime"      => 0x2035,
+    "surd"           => 0x221A,  "complement"     => 0x2201,
+    "eth"            => 0x00F0,
+    # Binary operators
+    "pm"             => 0x00B1,  "mp"             => 0x2213,
+    "times"          => 0x00D7,  "div"            => 0x00F7,
+    "cdot"           => 0x22C5,  "ast"            => 0x2217,
+    "star"           => 0x22C6,  "circ"           => 0x2218,
+    "bullet"         => 0x2219,  "dagger"         => 0x2020,
+    "ddagger"        => 0x2021,  "dag"            => 0x2020,
+    "ddag"           => 0x2021,  "cap"            => 0x2229,
+    "cup"            => 0x222A,  "sqcap"          => 0x2293,
+    "sqcup"          => 0x2294,  "wedge"          => 0x2227,
+    "land"           => 0x2227,  "vee"            => 0x2228,
+    "lor"            => 0x2228,  "setminus"       => 0x2216,
+    "smallsetminus"  => 0x2216,  "oplus"          => 0x2295,
+    "ominus"         => 0x2296,  "otimes"         => 0x2297,
+    "oslash"         => 0x2298,  "odot"           => 0x2299,
+    "wr"             => 0x2240,  "amalg"          => 0x2A3F,
+    # Relations
+    "leq"            => 0x2264,  "le"             => 0x2264,
+    "geq"            => 0x2265,  "ge"             => 0x2265,
+    "neq"            => 0x2260,  "ne"             => 0x2260,
+    "approx"         => 0x2248,  "equiv"          => 0x2261,
+    "sim"            => 0x223C,  "simeq"          => 0x2243,
+    "cong"           => 0x2245,  "propto"         => 0x221D,
+    "perp"           => 0x22A5,  "parallel"       => 0x2225,
+    "mid"            => 0x2223,  "nmid"           => 0x2224,
+    "subset"         => 0x2282,  "supset"         => 0x2283,
+    "subseteq"       => 0x2286,  "supseteq"       => 0x2287,
+    "sqsubseteq"     => 0x2291,  "sqsupseteq"     => 0x2292,
+    "in"             => 0x2208,  "notin"          => 0x2209,
+    "ni"             => 0x220B,  "owns"           => 0x220B,
+    "prec"           => 0x227A,  "succ"           => 0x227B,
+    "preceq"         => 0x2AAF,  "succeq"         => 0x2AB0,
+    "ll"             => 0x226A,  "gg"             => 0x226B,
+    "vdash"          => 0x22A2,  "dashv"          => 0x22A3,
+    "models"         => 0x22A8,  "smile"          => 0x2323,
+    "frown"          => 0x2322,  "asymp"          => 0x224D,
+    # Arrows
+    "to"             => 0x2192,
+    "rightarrow"     => 0x2192,  "leftarrow"      => 0x2190,
+    "Rightarrow"     => 0x21D2,  "Leftarrow"      => 0x21D0,
+    "leftrightarrow" => 0x2194,  "Leftrightarrow" => 0x21D4,
+    "mapsto"         => 0x21A6,  "longmapsto"     => 0x27FC,
+    "longrightarrow" => 0x27F6,  "longleftarrow"  => 0x27F5,
+    "Longrightarrow" => 0x27F9,  "Longleftarrow"  => 0x27F8,
+    "hookrightarrow" => 0x21AA,  "hookleftarrow"  => 0x21A9,
+    "uparrow"        => 0x2191,  "downarrow"      => 0x2193,
+    "Uparrow"        => 0x21D1,  "Downarrow"      => 0x21D3,
+    "updownarrow"    => 0x2195,  "Updownarrow"    => 0x21D5,
+    "nearrow"        => 0x2197,  "searrow"        => 0x2198,
+    "swarrow"        => 0x2199,  "nwarrow"        => 0x2196,
+    "iff"            => 0x21D4,  "implies"        => 0x27F9,
+    # Ellipses
+    "ldots"          => 0x2026,  "cdots"          => 0x22EF,
+    "vdots"          => 0x22EE,  "ddots"          => 0x22F1,
+    "dots"           => 0x2026,
+    # Musical / misc
+    "sharp"          => 0x266F,  "flat"           => 0x266D,
+    "natural"        => 0x266E,
+    # Delimiters (used in \big* manual sizing, where the name is the bare symbol)
+    "langle"         => 0x27E8,  "rangle"         => 0x27E9,
+    "lfloor"         => 0x230A,  "rfloor"         => 0x230B,
+    "lceil"          => 0x2308,  "rceil"          => 0x2309,
+    "vert"           => 0x007C,  "Vert"           => 0x2016,
+)
+
 # Return the TeX atom class for a given AST node.
 # Scripted nodes (NKSuperscript, NKSubscript, NKDecorated) inherit from their
 # base (first child).  Groups and sequences are treated as ordinary atoms.
@@ -868,6 +952,16 @@ function _use_limits(base::Node, style::TexStyle)::Bool
     return false
 end
 
+# Return true when `node` is a large operator whose scripts should be clamped
+# to the glyph extents in Display style (integral-family operators).  Unlike
+# _use_limits, this returns true for integrals and oint which use side placement.
+function _is_large_op(node::Node)::Bool
+    n = node.kind === NKLimitsOverride ? node.children[1] : node
+    n.kind === NKCommand || return false
+    name = startswith(n.value, "\\") ? n.value[2:end] : n.value
+    return haskey(_DISPLAY_OP_CODEPOINTS, name)
+end
+
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
@@ -920,9 +1014,15 @@ function _layout_node!(
 
     if node.kind === NKChar
         ch = only(node.value)
-        g  = ctx.font_variant === :default ?
-             _char_glyph(ctx, ch) :
-             _variant_glyph(ctx, ctx.font_variant, ch)
+        g  = if ctx.font_variant !== :default
+                 _variant_glyph(ctx, ctx.font_variant, ch)
+             elseif ctx.mode === :math && isletter(ch)
+                 # Standard LaTeX renders math-mode letters italic; use the
+                 # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
+                 _variant_glyph(ctx, :mathit, ch)
+             else
+                 _char_glyph(ctx, ch)
+             end
         g === nothing && return 0.0
         push!(boxes, LayoutBox(g, x0, y0, scale))
         return g.advance_width / upm * scale
@@ -955,7 +1055,23 @@ function _layout_node!(
             push!(boxes, LayoutBox(g, x0, y_op, scale))
             return g.advance_width / upm * scale
         else
-            g = _cmd_glyph(ctx, name)
+            # Try the symbol codepoint table first so that commands whose PS
+            # glyph name differs from the command name (e.g. \infty → "infinity")
+            # are resolved correctly regardless of font-specific naming.
+            g = if haskey(_SYMBOL_CODEPOINTS, name)
+                    cp = _SYMBOL_CODEPOINTS[name]
+                    try
+                        m  = glyph_metrics_by_codepoint(ctx.family, cp)
+                        ps = glyph_name_by_codepoint(ctx.family, cp)
+                        Glyph(isempty(ps) ? name : ps,
+                              m.advance_width, m.left_side_bearing,
+                              m.x_min, m.y_min, m.x_max, m.y_max)
+                    catch
+                        _cmd_glyph(ctx, name)
+                    end
+                else
+                    _cmd_glyph(ctx, name)
+                end
             g === nothing && return 0.0
             push!(boxes, LayoutBox(g, x0, y0, scale))
             return g.advance_width / upm * scale
@@ -1008,11 +1124,17 @@ function _layout_node!(
             end
             return total_w
         else
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            tmp_base = LayoutBox[]
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            append!(boxes, tmp_base)
             shift_up = is_cramped(style) ?
                 mc.superscript_shift_up_cramped / upm * scale :
                 mc.superscript_shift_up / upm * scale
-            sup_adv  = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y0 + shift_up, sup_scale, boxes)
+            # For large operators (e.g. \int) in Display style, clamp the script
+            # baseline to sit above the top ink of the glyph rather than inside it.
+            y_sup = _is_large_op(base) && is_display(style) ?
+                max(y0 + shift_up, _boxes_top(tmp_base, upm)) : y0 + shift_up
+            sup_adv  = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y_sup, sup_scale, boxes)
             return base_adv + sup_adv + mc.space_after_script / upm * scale
         end
 
@@ -1038,9 +1160,14 @@ function _layout_node!(
             end
             return total_w
         else
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            tmp_base = LayoutBox[]
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            append!(boxes, tmp_base)
             shift_dn = mc.subscript_shift_down / upm * scale
-            sub_adv  = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y0 - shift_dn, sub_scale, boxes)
+            # For large operators in Display style, clamp below the bottom ink.
+            y_sub = _is_large_op(base) && is_display(style) ?
+                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm)) : y0 - shift_dn
+            sub_adv  = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y_sub, sub_scale, boxes)
             return base_adv + sub_adv + mc.space_after_script / upm * scale
         end
 
@@ -1076,12 +1203,23 @@ function _layout_node!(
             end
             return total_w
         else
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            tmp_base = LayoutBox[]
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            append!(boxes, tmp_base)
             script_x = x0 + base_adv
-            sub_adv = _layout_node!(sub, ctx, sub_s, script_x,
-                                    y0 - mc.subscript_shift_down / upm * scale, sub_scale, boxes)
-            sup_adv = _layout_node!(sup, ctx, sup_s, script_x,
-                                    y0 + mc.superscript_shift_up / upm * scale, sup_scale, boxes)
+            shift_up = is_cramped(style) ?
+                mc.superscript_shift_up_cramped / upm * scale :
+                mc.superscript_shift_up / upm * scale
+            shift_dn = mc.subscript_shift_down / upm * scale
+            # For large operators in Display style, clamp scripts outside the glyph ink.
+            y_sup, y_sub = if _is_large_op(base) && is_display(style)
+                max(y0 + shift_up, _boxes_top(tmp_base, upm)),
+                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm))
+            else
+                y0 + shift_up, y0 - shift_dn
+            end
+            sub_adv = _layout_node!(sub, ctx, sub_s, script_x, y_sub, sub_scale, boxes)
+            sup_adv = _layout_node!(sup, ctx, sup_s, script_x, y_sup, sup_scale, boxes)
             return base_adv + max(sub_adv, sup_adv) + mc.space_after_script / upm * scale
         end
 

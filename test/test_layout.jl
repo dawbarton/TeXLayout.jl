@@ -527,11 +527,10 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test name_bb != name_def
     end
 
-    @testset "FontSwitch: \\mathrm{x} produces upright glyph" begin
-        # \mathrm uses the upright lookup path. In NewCMMath the PS name "x" (default path)
-        # also maps to the upright glyph, so mathrm is the same as default for plain 'x'.
-        # The meaningful contrast is against \mathit{x}, whose codepoint U+1D465 gives the
-        # dedicated italic form (PS name "u1D465", distinct advance width).
+    @testset "FontSwitch: \\mathrm{x} produces upright glyph distinct from \\mathit{x}" begin
+        # \mathrm uses the upright lookup path; \mathit (and the default math-mode path)
+        # uses U+1D465 (PS name "u1D465").  The upright "x" and the italic "u1D465" are
+        # distinct glyphs with different metrics.
         boxes_rm = layout(parse_latex("\\mathrm{x}"),  family, Text)
         boxes_it = layout(parse_latex("\\mathit{x}"),  family, Text)
         @test !isempty(find_glyphs(boxes_rm))
