@@ -6,7 +6,7 @@
 # beneath the glyphs.  The result is written as a binary PGM (P5) file.
 #
 # Usage:  julia tools/visualise_bitmap.jl [expression] [output.pgm]
-# Defaults: expression = "\\frac{a}{b}", output = "output.pgm"
+# Defaults: expression = "\\frac{a}{b}", output = "output.png"
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
@@ -73,13 +73,24 @@ function hline!(canvas, row, c1, c2, val::UInt8)
     canvas[r, c1c:c2c] .= val
 end
 
-# ── PGM output ────────────────────────────────────────────────────────────────
-function write_pgm(path, canvas::Matrix{UInt8})
+# ── Image output ─────────────────────────────────────────────────────────────
+# Writes the canvas as PGM or PNG (detected from the file extension).
+# PNG uses ImageMagick's `convert` via a pipe; no extra Julia packages needed.
+function write_image(path, canvas::Matrix{UInt8})
     H, W = size(canvas)
-    open(path, "w") do io
-        write(io, "P5\n$W $H\n255\n")
-        for row in 1:H
-            write(io, view(canvas, row, :))
+    if endswith(path, ".png")
+        open(`convert pgm:- png:$path`, "w") do io
+            write(io, "P5\n$W $H\n255\n")
+            for row in 1:H
+                write(io, view(canvas, row, :))
+            end
+        end
+    else
+        open(path, "w") do io
+            write(io, "P5\n$W $H\n255\n")
+            for row in 1:H
+                write(io, view(canvas, row, :))
+            end
         end
     end
 end
@@ -87,7 +98,7 @@ end
 # ── Main ───────────────────────────────────────────────────────────────────────
 function main()
     expr  = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
-    outf  = length(ARGS) >= 2 ? ARGS[2] : "output.pgm"
+    outf  = length(ARGS) >= 2 ? ARGS[2] : "output.png"
     style = Formatic.Display
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
@@ -166,7 +177,7 @@ function main()
         # Space elements have no visual representation in the bitmap
     end
 
-    write_pgm(outf, canvas)
+    write_image(outf, canvas)
     println("Written $outf  ($(W)×$(H) px, $(length(boxes)) boxes)")
 end
 
