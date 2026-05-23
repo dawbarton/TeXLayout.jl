@@ -62,6 +62,7 @@ struct _LayoutCtx
     mc::MathConstants
     upm::Float64
     vert_constructions::Dict{String,GlyphConstruction}
+    min_connector_overlap::Int
 end
 
 # Return a Glyph for a Unicode character.
@@ -128,23 +129,161 @@ function _boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64
     return bot
 end
 
-# Return the PS glyph name of the smallest size variant whose vertical advance
-# (in design units) is at least `required_du`.  Falls back to the largest
-# variant if none is large enough.  Returns `glyph_name` unchanged when there
-# is no construction entry for it (i.e. use the base glyph as-is).
-function _pick_delim_variant(
+# ── Extensible assembly helpers ───────────────────────────────────────────────
+
+# Build the expanded parts list with extenders repeated `n` times each.
+# Parts are in bottom-to-top order (as stored in the font).
+function _expand_assembly_parts(
+    parts::Vector{GlyphAssemblyPart},
+    n::Int,
+)::Vector{GlyphAssemblyPart}
+    n == 1 && return parts
+    result = GlyphAssemblyPart[]
+    for p in parts
+        reps = p.is_extender ? n : 1
+        for _ in 1:reps
+            push!(result, p)
+        end
+    end
+    return result
+end
+
+# The minimum permissible overlap between two adjacent parts (design units).
+# Clamped to the per-gap maximum so we never exceed the connector lengths.
+@inline function _gap_min_overlap(
+    p1::GlyphAssemblyPart,
+    p2::GlyphAssemblyPart,
+    min_conn::Int,
+)::Int
+    max_allowed = min(p1.end_connector, p2.start_connector)
+    return min(min_conn, max_allowed)
+end
+
+# Total height of an expanded parts list with minimum overlaps (design units).
+# Minimum overlaps → maximum possible height for that n.
+function _assembly_max_height(parts::Vector{GlyphAssemblyPart}, min_conn::Int)::Float64
+    isempty(parts) && return 0.0
+    h = Float64(parts[1].full_advance)
+    for i in 2:length(parts)
+        h += parts[i].full_advance - _gap_min_overlap(parts[i-1], parts[i], min_conn)
+    end
+    return h
+end
+
+# Find the minimum number of extender repetitions so the assembly is at least
+# `required_du` tall.  Uses minimum overlaps (giving the tallest assembly) to
+# find the tightest bound on n.
+function _min_extender_reps(
+    parts::Vector{GlyphAssemblyPart},
+    required_du::Float64,
+    min_conn::Int,
+)::Int
+    for n in 0:256
+        _assembly_max_height(_expand_assembly_parts(parts, n), min_conn) >= required_du &&
+            return n
+    end
+    return 256
+end
+
+# Lay out a glyph assembly centred on the math axis.  Returns the horizontal
+# advance of the widest part.
+function _layout_assembly!(
+    asm::GlyphAssembly,
+    ctx::_LayoutCtx,
+    x0::Float64,
+    y0::Float64,
+    scale::Float64,
+    required_du::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    upm      = ctx.upm
+    mc       = ctx.mc
+    min_conn = ctx.min_connector_overlap
+
+    n     = _min_extender_reps(asm.parts, required_du, min_conn)
+    parts = _expand_assembly_parts(asm.parts, n)
+    isempty(parts) && return 0.0
+
+    # Overlap for each gap between adjacent parts (minimum overlap, so the
+    # assembly is as tall as the required extent).
+    overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
+    for i in 1:length(overlaps)
+        overlaps[i] = _gap_min_overlap(parts[i], parts[i+1], min_conn)
+    end
+
+    # Total assembly height in design units.
+    total_du = Float64(parts[1].full_advance)
+    for i in 1:length(overlaps)
+        total_du += parts[i+1].full_advance - overlaps[i]
+    end
+
+    # Place the assembly so its ink centre aligns with the math axis.
+    axis_em     = y0 + mc.axis_height / upm * scale
+    asm_bot_em  = axis_em - (total_du / upm * scale) / 2.0
+
+    max_adv_w = 0
+    cursor_du = 0.0
+    for i in 1:length(parts)
+        p = parts[i]
+        g = _cmd_glyph(ctx, p.glyph_name)
+        if g !== nothing
+            # Each part has y_min=0, y_max=full_advance; place baseline at bottom of part.
+            y_part = asm_bot_em + cursor_du / upm * scale
+            push!(boxes, LayoutBox(g, x0, y_part, scale))
+            max_adv_w = max(max_adv_w, g.advance_width)
+        end
+        if i <= length(overlaps)
+            cursor_du += Float64(p.full_advance) - overlaps[i]
+        end
+    end
+
+    return max_adv_w / upm * scale
+end
+
+# Lay out one delimiter (left or right) at position (x0, y0), centred on the
+# math axis.  Tries pre-built size variants first; falls back to the glyph
+# assembly when no variant is large enough.  Returns horizontal advance.
+function _layout_delim!(
     ctx::_LayoutCtx,
     glyph_name::String,
     required_du::Float64,
-)::String
-    isempty(glyph_name) && return ""
-    haskey(ctx.vert_constructions, glyph_name) || return glyph_name
-    variants = ctx.vert_constructions[glyph_name].variants
-    isempty(variants) && return glyph_name
-    for v in variants
-        Float64(v.advance) >= required_du && return v.glyph_name
+    x0::Float64,
+    y0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    isempty(glyph_name) && return 0.0
+    upm = ctx.upm
+    mc  = ctx.mc
+
+    function _place_glyph(name::String)::Float64
+        g = _cmd_glyph(ctx, name)
+        g === nothing && return 0.0
+        glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
+        y_del = y0 + (mc.axis_height / upm - glyph_center) * scale
+        push!(boxes, LayoutBox(g, x0, y_del, scale))
+        return g.advance_width / upm * scale
     end
-    return last(variants).glyph_name   # largest available
+
+    if !haskey(ctx.vert_constructions, glyph_name)
+        return _place_glyph(glyph_name)
+    end
+
+    vc = ctx.vert_constructions[glyph_name]
+
+    # Try pre-built variants (smallest sufficient first).
+    for v in vc.variants
+        Float64(v.advance) >= required_du && return _place_glyph(v.glyph_name)
+    end
+
+    # No variant is large enough; try the glyph assembly.
+    if vc.assembly !== nothing
+        return _layout_assembly!(vc.assembly, ctx, x0, y0, scale, required_du, boxes)
+    end
+
+    # Fall back to largest variant (or base glyph when no variants exist).
+    chosen = isempty(vc.variants) ? glyph_name : last(vc.variants).glyph_name
+    return _place_glyph(chosen)
 end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
@@ -307,48 +446,22 @@ function _layout_node!(
         content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
 
         # Required delimiter advance: sized so the delimiter covers the content
-        # symmetrically around the math axis.
+        # symmetrically around the math axis.  Converted to unscaled design units
+        # because GlyphVariant.advance and GlyphAssemblyPart.full_advance are
+        # both stored in unscaled design units.
         axis_em     = y0 + mc.axis_height / upm * scale
         h_above     = max(0.0, content_top - axis_em)
         h_below     = max(0.0, axis_em - content_bot)
         required_em = 2.0 * max(h_above, h_below)
-        # Convert to design units (the GlyphVariant advance is in unscaled design units).
         required_du = required_em / scale * upm
 
-        # Select the appropriate size variant for each delimiter.
-        left_variant  = _pick_delim_variant(ctx, left_name,  required_du)
-        right_variant = _pick_delim_variant(ctx, right_name, required_du)
-
-        # Place left delimiter centred on math axis.
-        left_w = 0.0
-        if !isempty(left_variant)
-            g = _cmd_glyph(ctx, left_variant)
-            if g !== nothing
-                # Shift glyph baseline so its ink centre aligns with the math axis.
-                glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
-                y_del = y0 + (mc.axis_height / upm - glyph_center) * scale
-                push!(boxes, LayoutBox(g, x0, y_del, scale))
-                left_w = g.advance_width / upm * scale
-            end
-        end
-
-        # Shift inner content to sit after the left delimiter.
+        # Place left delimiter (variant or assembly), then inner content, then right.
+        left_w  = _layout_delim!(ctx, left_name,  required_du, x0,               y0, scale, boxes)
         inner_x = x0 + left_w
         for b in tmp
             push!(boxes, LayoutBox(b.element, inner_x + (b.x - x0), b.y, b.scale))
         end
-
-        # Place right delimiter centred on math axis.
-        right_w = 0.0
-        if !isempty(right_variant)
-            g = _cmd_glyph(ctx, right_variant)
-            if g !== nothing
-                glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
-                y_del = y0 + (mc.axis_height / upm - glyph_center) * scale
-                push!(boxes, LayoutBox(g, inner_x + content_w, y_del, scale))
-                right_w = g.advance_width / upm * scale
-            end
-        end
+        right_w = _layout_delim!(ctx, right_name, required_du, inner_x + content_w, y0, scale, boxes)
 
         return left_w + content_w + right_w
 
@@ -372,7 +485,8 @@ Returns a flat list of positioned elements.
 """
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
-    ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions)
+    ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
+                     mt.min_connector_overlap)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes

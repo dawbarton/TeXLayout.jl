@@ -126,8 +126,9 @@ driven by `MathConstants.script_percent_scale_down` and
   formula baseline.
 - Element subtypes: `Glyph` (name + cached metrics), `HRule` (width + thickness),
   `VRule`, `Space`.
-- `_LayoutCtx` carries `family`, `mc` (MathConstants), `upm`, and `vert_constructions`
-  (from the MATH table) so the `NKDelimited` branch can look up delimiter variants.
+- `_LayoutCtx` carries `family`, `mc` (MathConstants), `upm`, `vert_constructions`, and
+  `min_connector_overlap` (all from the MATH table) so the `NKDelimited` branch can look
+  up delimiter variants and construct extensible assemblies.
 
 ### `MathConstants` (`math_table.jl`)
 Parsed directly from the font's OpenType MATH table.  All constants are in design units;
@@ -175,8 +176,9 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
   already implemented; only the *automatic* inter-atom spacing remains.
 - **Delimiter sizing** — implemented: `\left`/`\right` delimiters are auto-sized using the
   `vert_constructions` records from the OpenType MATH table and centred on the math axis.
-  Extensible assemblies (for very large delimiters exceeding the largest pre-built variant)
-  are not yet used.
+  Pre-built size variants are tried first; when the required height exceeds the largest variant
+  the extensible glyph assembly (bottom cap + repeated extenders + top cap) is used.
+  Horizontal extensible assemblies (e.g. `\widehat`) are not yet implemented.
 - **Accents** — `NKAccent` is parsed and represented in the AST but the layout engine
   emits only the base (accent mark not rendered).
 - **Font switching** — `\mathbf`, `\mathrm`, `\mathbb`, `\mathit`, `\mathcal` etc. are

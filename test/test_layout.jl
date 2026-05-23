@@ -245,4 +245,48 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(find_glyphs(boxes_null)) == length(find_glyphs(boxes_paren)) - 1
     end
 
+    @testset "Assembly: 4-level nested fraction triggers extensible assembly" begin
+        # \\left( \\frac{\\frac{\\frac{\\frac{a}{b}}{c}}{d}}{e} \\right) in Display
+        # style produces required_du > 2991 (the largest parenleft pre-built variant),
+        # so the glyph assembly (bottom cap + extender + top cap) is used for each
+        # delimiter.  With 5 content chars and 3-part assemblies on each side the total
+        # glyph count must exceed the 7 glyphs produced when single-glyph variants are used.
+        expr  = "\\left( \\frac{\\frac{\\frac{\\frac{a}{b}}{c}}{d}}{e} \\right)"
+        boxes = layout(parse_latex(expr), family, Display)
+        glyphs = find_glyphs(boxes)
+        # Minimum: 5 letters + 3 (left assembly) + 3 (right assembly) = 11 glyphs.
+        @test length(glyphs) >= 11
+    end
+
+    @testset "Assembly: delimiter height exceeds largest pre-built variant" begin
+        # The assembly delimiter must be taller than any pre-built variant.
+        # Largest parenleft variant advance = 2991 design units in NewCMMath.
+        largest_variant_du = 2991
+        expr   = "\\left( \\frac{\\frac{\\frac{\\frac{a}{b}}{c}}{d}}{e} \\right)"
+        boxes  = layout(parse_latex(expr), family, Display)
+        glyphs = find_glyphs(boxes)
+        # Assembly parts are placed with y_min=0; their y_max = full_advance.
+        # The outermost glyph in the assembly is the top cap (uni239B, full_adv=1495).
+        # Assembly top = axis + total_height/2 > largest_variant_du/2 / upm.
+        top_em  = maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in glyphs)
+        bot_em  = minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in glyphs)
+        span_du = (top_em - bot_em) * FONT_UPM   # convert em → du (at scale=1)
+        @test span_du > largest_variant_du
+    end
+
+    @testset "Assembly: delimiter centred on math axis" begin
+        # The assembly's ink centre must lie on the math axis (±1 du tolerance).
+        expr   = "\\left( \\frac{\\frac{\\frac{\\frac{a}{b}}{c}}{d}}{e} \\right)"
+        boxes  = layout(parse_latex(expr), family, Display)
+        glyphs = find_glyphs(boxes)
+        axis_em = mt.constants.axis_height / FONT_UPM
+        # Isolate the left-delimiter glyphs (all at x=0 with the same advance width).
+        left_x = glyphs[1].x
+        left_glyphs = filter(b -> b.x ≈ left_x, glyphs)
+        top_em  = maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in left_glyphs)
+        bot_em  = minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in left_glyphs)
+        center  = (top_em + bot_em) / 2
+        @test center ≈ axis_em  atol=1e-3
+    end
+
 end
