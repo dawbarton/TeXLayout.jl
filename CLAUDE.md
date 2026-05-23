@@ -191,7 +191,7 @@ A summary of major features and their status.
 | Inter-atom spacing | ✓ | TeX atom-class table (ord/bin/rel/op/open/close/punct/inner) |
 | Accents (`\hat`, `\bar`, `\vec`, …) | Partial | Parsed as `NKAccent`; base rendered but accent mark not placed |
 | Horizontal extensibles (`\widehat`, …) | ✗ | Not yet implemented |
-| Font switching (`\mathbf`, `\mathrm`, …) | ✗ | Fall through as `NKCommand` |
+| Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Array/matrix environments | ✗ | Not yet parsed |
 | `default_font_family()` | ✗ | Throws "not implemented" |
 
@@ -204,9 +204,10 @@ A summary of major features and their status.
 - **Horizontal extensible assemblies** — `\widehat`, `\widetilde`, `\overline`,
   `\underline`, and similar wide accents require horizontal `vert_constructions` (actually
   stored as `horiz_constructions` in the MATH table).  Not yet implemented.
-- **Font switching** — `\mathbf`, `\mathrm`, `\mathbb`, `\mathit`, `\mathcal` etc. are
-  not yet implemented; they fall through as `NKCommand`.  Each would require selecting a
-  different font face from `FontFamily` or remapping codepoints.
+- **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
+  from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
+  yet used; adding them would give better coverage for characters outside the math block
+  (e.g., Greek bold letters) and is deferred to steps 5–6.
 - **Array/matrix environments** — `\begin{array}…\end{array}`, `pmatrix`, `cases`, etc.
   Not yet parsed; requires extending the parser and adding a two-dimensional layout branch.
 - **`default_font_family()`** — throws "not implemented"; must be configured before
