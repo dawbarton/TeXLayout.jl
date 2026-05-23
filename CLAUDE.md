@@ -37,6 +37,11 @@ Formatic.jl/
 │   ├── test_parser.jl     # Tests for AST structure
 │   ├── test_layout.jl     # Tests for layout engine invariants
 │   └── test_katex.jl      # KaTeX-derived test suite (smoke, malformed, nested)
+├── tools/
+│   ├── visualise_bitmap.jl  # Render one expression to PNG via FreeType (usage: julia tools/visualise_bitmap.jl "expr" out.png)
+│   ├── visualise_svg.jl     # Render bounding-box diagram to SVG (glyph boxes + reference lines; good for debugging metrics)
+│   ├── visualise_spacing.jl # Grid of expressions showing inter-atom spacing
+│   └── demo_features.jl     # Generate accents.png / overunder.png / binary_reclass.png feature panels
 ├── external/              # Source references (read-only; not part of the package)
 │   ├── KaTeX/             # Original KaTeX JS implementation
 │   ├── Makie.jl/          # Makie ecosystem packages
@@ -44,6 +49,17 @@ Formatic.jl/
 ├── Project.toml
 └── README.md
 ```
+
+### Rendering tools
+
+All tools in `tools/` activate the package's own project environment and require no extra setup beyond the registered dependencies.  `FreeTypeAbstraction` must be present (it is listed in `Project.toml`).  PNG output uses `convert` from ImageMagick, which must be available on `PATH`.
+
+| Script | Purpose | Key options |
+|--------|---------|-------------|
+| `visualise_bitmap.jl` | Pixel-accurate render of a single expression using FreeType glyph rasterisation.  Useful as a quick sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
+| `visualise_svg.jl` | Bounding-box diagram: each `LayoutBox` drawn as a coloured rectangle with glyph-name label, baseline and math-axis reference lines.  Best for debugging metric or positioning bugs. | `julia tools/visualise_svg.jl "expr" out.svg` |
+| `visualise_spacing.jl` | Multi-row grid of spacing test expressions with inter-atom gaps highlighted. | `julia tools/visualise_spacing.jl` |
+| `demo_features.jl` | Renders panels for accents, `\overline`/`\underline`, and binary reclassification (one PNG per feature) into a specified output directory. | `julia tools/demo_features.jl /path/to/output/` |
 
 ---
 
