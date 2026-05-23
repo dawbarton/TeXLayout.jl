@@ -82,6 +82,17 @@
 - All planned items (2 → 3 → 4) complete; 649 tests passing.
 - Next: `default_font_family()` via Artifacts, array/matrix environments, or wide accents (`\widehat`/`\widetilde`).
 
+## 2026-05-23T23:49+00:00 Implement horizontal brace family (\overbrace, \underbrace, etc.)
+
+- Added `NKHorizBrace` node kind (`value = command name`, `children[1] = body`). Six commands: `\overbrace` (uni23DE), `\underbrace` (uni23DF), `\overbracket` (uni23B4), `\underbracket` (uni23B5), `\overparen` (uni23DC), `\underparen` (uni23DD).
+- Normal `^`/`_` parsing naturally wraps `NKHorizBrace` in `NKSuperscript`/`NKSubscript`/`NKDecorated`; the layout engine intercepts these before the standard script algorithm.
+- Atom class: `NKHorizBrace → :inner` (matching KaTeX's `minner`).
+- `_layout_horiz_brace!` algorithm: body → brace (horizontally stretched via `_layout_wide_accent!`) → note (primary script, limits-style centered over max(body_w, note_w)) → secondary script (side-placed to the right using standard shift constants).
+- Brace placement: gap between body ink edge and brace ink edge = `0.1 * scale`; gap between brace ink edge and note ink edge = `0.2 * scale`. Reference glyph y_min/y_max obtained by same variant-selection logic as `_layout_wide_accent!` to derive brace_y from the chosen glyph's actual metrics.
+- "Over" braces (overbrace/overbracket/overparen): note is the `sup`, placed above. "Under" braces (underbrace/underbracket/underparen): note is the `sub`, placed below. The opposite script becomes the secondary (side-placed).
+- 712 tests passing (46 new: 9 parser + 11 layout, plus the existing KaTeX suite was unaffected).
+- Updated `CLAUDE.md` feature table; added `horiz_braces.png` demo panel to `demo_features.jl`.
+
 ## 2026-05-23T22:52+00:00 Implement \widehat and \widetilde (horizontal extensible accents)
 
 - Added `\widehat => 0x02C6` and `\widetilde => 0x02DC` to `_ACCENT_CODEPOINTS` in `parser.jl`. They share codepoints with `\hat`/`\tilde`; the layout engine distinguishes them via `_WIDE_ACCENT_COMMANDS`.

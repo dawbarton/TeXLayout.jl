@@ -209,6 +209,7 @@ A summary of major features and their status.
 | `\overline`, `\underline` | ✓ | Rules 9 & 10; gap and thickness from MATH table |
 | Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
+| Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
 | Array/matrix environments | ✗ | Not yet parsed |
 | `default_font_family()` | ✗ | Throws "not implemented" |
 

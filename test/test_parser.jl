@@ -320,4 +320,59 @@
         @test length(body.children) == 3
     end
 
+    @testset "\\overbrace{x}: produces NKHorizBrace with command in value" begin
+        tree = parse_latex("\\overbrace{x}")
+        brace = tree.children[1]
+        @test brace.kind  === NKHorizBrace
+        @test brace.value == "\\overbrace"
+        @test length(brace.children) == 1
+        @test brace.children[1].kind === NKChar
+        @test brace.children[1].value == "x"
+    end
+
+    @testset "\\underbrace{x}: produces NKHorizBrace" begin
+        tree  = parse_latex("\\underbrace{x}")
+        brace = tree.children[1]
+        @test brace.kind  === NKHorizBrace
+        @test brace.value == "\\underbrace"
+        @test length(brace.children) == 1
+    end
+
+    @testset "\\overbracket / \\underbracket / \\overparen / \\underparen" begin
+        for cmd in ("\\overbracket", "\\underbracket", "\\overparen", "\\underparen")
+            tree  = parse_latex("$(cmd){x}")
+            brace = tree.children[1]
+            @test brace.kind  === NKHorizBrace
+            @test brace.value == cmd
+        end
+    end
+
+    @testset "\\overbrace{x}^{n}: NKSuperscript with NKHorizBrace base" begin
+        tree = parse_latex("\\overbrace{x}^{n}")
+        sup  = tree.children[1]
+        @test sup.kind === NKSuperscript
+        @test sup.children[1].kind === NKHorizBrace
+        @test sup.children[2].kind === NKChar
+        @test sup.children[2].value == "n"
+    end
+
+    @testset "\\underbrace{x}_{n}: NKSubscript with NKHorizBrace base" begin
+        tree = parse_latex("\\underbrace{x}_{n}")
+        sub  = tree.children[1]
+        @test sub.kind === NKSubscript
+        @test sub.children[1].kind === NKHorizBrace
+        @test sub.children[2].kind === NKChar
+        @test sub.children[2].value == "n"
+    end
+
+    @testset "\\overbrace{x}^{n}_{m}: NKDecorated with NKHorizBrace base" begin
+        tree = parse_latex("\\overbrace{x}^{n}_{m}")
+        dec  = tree.children[1]
+        @test dec.kind === NKDecorated
+        @test dec.children[1].kind === NKHorizBrace   # base
+        # children[2] = sub, children[3] = sup
+        @test dec.children[2].kind === NKChar   # m (sub)
+        @test dec.children[3].kind === NKChar   # n (sup)
+    end
+
 end

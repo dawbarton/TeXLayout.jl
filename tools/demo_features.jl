@@ -1,10 +1,11 @@
 # Render demonstration panels for newly implemented Formatic.jl features.
 #
-# Generates three PNG files (one per feature group) in the directory given
+# Generates four PNG files (one per feature group) in the directory given
 # as the first argument (default: current directory):
 #   accents.png         — Rule 12: \hat, \bar, \vec, \tilde, \dot, \ddot, \acute, \grave
 #   overunder.png       — Rules 9 & 10: \overline and \underline
 #   binary_reclass.png  — Rules 5 & 6: mbin → mord reclassification
+#   horiz_braces.png    — \overbrace / \underbrace / \overbracket / \overparen family
 #
 # Each PNG is a column of rendered expressions at 120 px/em with captions
 # drawn using the system monospace font (via FreeType) and light reference
@@ -279,6 +280,43 @@ function main()
         push!(rows2, rows[i])
     end
     write_png(joinpath(outdir, "binary_reclass.png"), make_panel(rows2))
+
+    # ── Panel 4: Horizontal braces ────────────────────────────────────────────
+    hb_rows = Pair{String,String}[
+        "\\overbrace{x+y+z}"            => "\\overbrace{x+y+z}",
+        "\\underbrace{x+y+z}"           => "\\underbrace{x+y+z}",
+        "\\overbrace{x+y}^{n}"          => "\\overbrace{x+y}^{n}  (note above)",
+        "\\underbrace{x+y}_{k}"         => "\\underbrace{x+y}_{k}  (note below)",
+        "\\overbrace{x}^{n}_{m}"        => "\\overbrace{x}^{n}_{m}  (note above + side sub)",
+        "\\underbrace{x}_{k}^{j}"       => "\\underbrace{x}_{k}^{j}  (note below + side sup)",
+        "\\overbracket{a+b+c}"          => "\\overbracket{a+b+c}",
+        "\\underbracket{a+b+c}"         => "\\underbracket{a+b+c}",
+        "\\overparen{abc}"              => "\\overparen{abc}",
+        "\\underparen{abc}"             => "\\underparen{abc}",
+        "\\underbrace{\\frac{a}{b}+c}_{\\text{total}}" =>
+            "\\underbrace{\\frac{a}{b}+c}_{\\text{total}}",
+    ]
+
+    rows = Matrix{UInt8}[]
+    W_cap = 0
+    for (expr, cap) in hb_rows
+        local c
+        try
+            c = render_expr(expr, family, mt, face_math)
+        catch e
+            @warn "render failed for $expr: $e"
+            c = fill(0xff, 40, 300)
+        end
+        W_cap = max(W_cap, size(c, 2))
+        push!(rows, c)
+    end
+    W_cap = max(W_cap, 520)
+    rows2 = Matrix{UInt8}[]
+    for (i, (_, cap)) in enumerate(hb_rows)
+        push!(rows2, render_caption(face_math, cap, W_cap))
+        push!(rows2, rows[i])
+    end
+    write_png(joinpath(outdir, "horiz_braces.png"), make_panel(rows2))
 end
 
 main()

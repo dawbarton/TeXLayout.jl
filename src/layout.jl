@@ -461,6 +461,18 @@ const _LIMITS_OP_COMMANDS = Set{String}([
 # selects a glyph variant wide enough to span the base, or assembles one.
 const _WIDE_ACCENT_COMMANDS = Set{String}(["\\widehat", "\\widetilde"])
 
+# Horizontal brace/bracket/paren commands mapped to their PS glyph names in
+# horiz_constructions.  Over-variants sit entirely above the baseline; under-
+# variants sit entirely below — see the formulae in _layout_horiz_brace!.
+const _HORIZ_BRACE_GLYPHS = Dict{String,String}(
+    "\\overbrace"    => "uni23DE",   # ⏞ TOP CURLY BRACKET
+    "\\underbrace"   => "uni23DF",   # ⏟ BOTTOM CURLY BRACKET
+    "\\overbracket"  => "uni23B4",   # ⎴ TOP SQUARE BRACKET
+    "\\underbracket" => "uni23B5",   # ⎵ BOTTOM SQUARE BRACKET
+    "\\overparen"    => "uni23DC",   # ⏜ TOP PARENTHESIS
+    "\\underparen"   => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
+)
+
 # Unicode codepoints for symbols whose LaTeX command name differs from the
 # PostScript glyph name used in OpenType math fonts (e.g. \infty → "infinity",
 # not "infty").  Looked up by codepoint so the correct PS name is resolved
@@ -561,7 +573,7 @@ function _atom_class(node::Node)::Symbol
         return get(_CMD_ATOM_CLASS, name, :ord)
     elseif k === NKOperator
         return :op
-    elseif k === NKFrac || k === NKDelimited
+    elseif k === NKFrac || k === NKDelimited || k === NKHorizBrace
         return :inner
     elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
         return :ord
@@ -1026,6 +1038,143 @@ function _layout_wide_accent!(
     return nothing
 end
 
+# Lay out a horizontal brace node with optional script note.
+#
+# KaTeX horizBrace.ts algorithm:
+#   - Body at current style; brace stretched horizontally to body width.
+#   - Gap = 0.1 em between body ink edge and brace ink edge (body_gap).
+#   - Gap = 0.2 em between brace ink edge and note ink edge (note_gap).
+#   - Note (primary script) is centred over max(body_w, note_w).
+#   - Secondary script (opposite side) is placed as a normal side script.
+#
+# sub_node / sup_node: subscript / superscript children (nothing if absent).
+function _layout_horiz_brace!(
+    brace_node::Node,
+    sub_node::Union{Node,Nothing},
+    sup_node::Union{Node,Nothing},
+    ctx::_LayoutCtx,
+    style::TexStyle,
+    x0::Float64,
+    y0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    upm = ctx.upm
+    mc  = ctx.mc
+    is_over  = startswith(brace_node.value, "\\over")
+    glyph_ps = _HORIZ_BRACE_GLYPHS[brace_node.value]
+
+    # Primary note lives on the brace side; secondary note is the opposite.
+    primary_node   = is_over ? sup_node : sub_node
+    secondary_node = is_over ? sub_node : sup_node
+
+    # Body at current style.
+    tmp_body = LayoutBox[]
+    body_w   = _layout_node!(brace_node.children[1], ctx, style, 0.0, 0.0, scale, tmp_body)
+    body_top = _boxes_top(tmp_body, upm)
+    body_bot = _boxes_bottom(tmp_body, upm)
+
+    # Primary note at the script style of the brace side.
+    pri_s     = is_over ? sup_style(style) : sub_style(style)
+    pri_scale = size_scale(pri_s, mc)
+    tmp_pri   = LayoutBox[]
+    pri_w     = 0.0
+    if primary_node !== nothing
+        pri_w = _layout_node!(primary_node, ctx, pri_s, 0.0, 0.0, pri_scale, tmp_pri)
+    end
+
+    # Total span: body and note are both centred over max(body_w, note_w).
+    total_w = max(body_w, pri_w)
+    Δbody   = (total_w - body_w) / 2
+
+    # Reference glyph for brace ink-extent calculation: find the same variant
+    # that _layout_wide_accent! would select (smallest covering body_w or largest).
+    hc       = get(ctx.horiz_constructions, glyph_ps, nothing)
+    req_du   = body_w / scale * upm
+    sel_name = glyph_ps
+    if hc !== nothing
+        for v in hc.variants
+            Float64(v.advance) >= req_du && (sel_name = v.glyph_name; break)
+        end
+        sel_name == glyph_ps && !isempty(hc.variants) &&
+            (sel_name = last(hc.variants).glyph_name)
+    end
+    g_ref = _cmd_glyph(ctx, sel_name)
+
+    # Brace baseline y: place the ink edge of the brace at body_edge + body_gap.
+    # For over: bottom ink of brace = body_top + body_gap
+    #           brace_y + y_min/upm*scale = y0 + body_top + body_gap
+    # For under: top ink of brace = body_bot - body_gap
+    #           brace_y + y_max/upm*scale = y0 + body_bot - body_gap
+    body_gap = 0.1 * scale
+    if g_ref !== nothing
+        brace_y = is_over ?
+            y0 + body_top + body_gap - Float64(g_ref.y_min) / upm * scale :
+            y0 + body_bot - body_gap - Float64(g_ref.y_max) / upm * scale
+        brace_top = brace_y + Float64(g_ref.y_max) / upm * scale
+        brace_bot = brace_y + Float64(g_ref.y_min) / upm * scale
+    else
+        brace_y   = is_over ? y0 + body_top + body_gap : y0 + body_bot - body_gap
+        brace_top = is_over ? brace_y + 0.25 * scale : y0 + body_top
+        brace_bot = is_over ? y0 + body_bot          : brace_y - 0.25 * scale
+    end
+
+    # Place body (centred over total_w at y0).
+    for b in tmp_body
+        push!(boxes, LayoutBox(b.element, x0 + Δbody + b.x, y0 + b.y, b.scale))
+    end
+
+    # Place brace (centred over body_w; extension fills body width).
+    _layout_wide_accent!(ctx, glyph_ps, body_w, brace_y, x0 + Δbody, scale, boxes)
+
+    # Place primary note centred over total_w.
+    # Gap = 0.2 em between brace ink edge and note ink edge (KaTeX horizBrace.ts).
+    note_gap = 0.2 * scale
+    if !isempty(tmp_pri)
+        Δpri = (total_w - pri_w) / 2
+        if is_over
+            # Note bottom ink = brace_top + note_gap
+            note_y = brace_top + note_gap - _boxes_bottom(tmp_pri, upm)
+        else
+            # Note top ink = brace_bot - note_gap
+            note_y = brace_bot - note_gap - _boxes_top(tmp_pri, upm)
+        end
+        for b in tmp_pri
+            push!(boxes, LayoutBox(b.element, x0 + Δpri + b.x, note_y + b.y, b.scale))
+        end
+    end
+
+    # Secondary note: placed as a normal side script to the right of the stack.
+    if secondary_node !== nothing
+        sec_s     = is_over ? sub_style(style) : sup_style(style)
+        sec_scale = size_scale(sec_s, mc)
+        tmp_sec   = LayoutBox[]
+        sec_w     = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, tmp_sec)
+        s         = scale / upm
+        script_x  = x0 + total_w
+        if is_over
+            y_sub = min(y0 - mc.subscript_shift_down * s,
+                        y0 + body_bot - mc.subscript_baseline_drop_min * s)
+            y_sub = min(y_sub, y0 - _boxes_top(tmp_sec, upm) + mc.subscript_top_max * s)
+            for b in tmp_sec
+                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sub + b.y, b.scale))
+            end
+        else
+            min_sup = is_cramped(style) ?
+                mc.superscript_shift_up_cramped * s : mc.superscript_shift_up * s
+            y_sup = max(y0 + min_sup,
+                        y0 + body_top - mc.superscript_baseline_drop_max * s)
+            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sec, upm))
+            for b in tmp_sec
+                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sup + b.y, b.scale))
+            end
+        end
+        total_w += sec_w + mc.space_after_script * s
+    end
+
+    return total_w
+end
+
 # ── Limits-placement helpers ─────────────────────────────────────────────────
 
 # Unwrap NKLimitsOverride to expose the actual operator node for layout.
@@ -1256,6 +1405,8 @@ function _layout_node!(
 
     elseif node.kind === NKSuperscript
         base, sup = node.children[1], node.children[2]
+        base.kind === NKHorizBrace &&
+            return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
         sup_s     = sup_style(style);  sup_scale = size_scale(sup_s, mc)
         if _use_limits(base, style)
             # Limits placement: sup centred above base.
@@ -1298,6 +1449,8 @@ function _layout_node!(
 
     elseif node.kind === NKSubscript
         base, sub = node.children[1], node.children[2]
+        base.kind === NKHorizBrace &&
+            return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
         sub_s     = sub_style(style);  sub_scale = size_scale(sub_s, mc)
         if _use_limits(base, style)
             # Limits placement: sub centred below base.
@@ -1338,6 +1491,8 @@ function _layout_node!(
 
     elseif node.kind === NKDecorated
         base, sub, sup = node.children[1], node.children[2], node.children[3]
+        base.kind === NKHorizBrace &&
+            return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
         sub_s = sub_style(style);  sub_scale = size_scale(sub_s, mc)
         sup_s = sup_style(style);  sup_scale = size_scale(sup_s, mc)
         if _use_limits(base, style)
@@ -1642,6 +1797,10 @@ function _layout_node!(
         end
         push!(boxes, LayoutBox(HRule(body_w, rule_t), x0, rule_y, scale))
         return body_w
+
+    elseif node.kind === NKHorizBrace
+        # Standalone brace with no script: body + brace only, no note.
+        return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
 
     else
         return 0.0   # NKText and unrecognised nodes: emit nothing

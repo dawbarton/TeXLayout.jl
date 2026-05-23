@@ -24,6 +24,7 @@
     NKOperator       # named math operator rendered upright: \sin, \cos, \operatorname{…}
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
     NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
+    NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
 end
 
 """
@@ -124,6 +125,17 @@ const _FONT_SWITCH_COMMANDS = Dict{String,String}(
     "\\Bbb"         => "mathbb",    # AMS alias for \mathbb
     "\\bold"        => "mathbf",    # KaTeX alias for \mathbf
     "\\frak"        => "mathfrak",  # KaTeX alias for \mathfrak
+)
+
+# Horizontal brace/bracket/paren commands that stretch over a body.
+# Maps command name → PS glyph name in horiz_constructions.
+const _HORIZ_BRACE_COMMANDS = Dict{String,String}(
+    "\\overbrace"   => "uni23DE",   # ⏞ TOP CURLY BRACKET
+    "\\underbrace"  => "uni23DF",   # ⏟ BOTTOM CURLY BRACKET
+    "\\overbracket" => "uni23B4",   # ⎴ TOP SQUARE BRACKET
+    "\\underbracket"=> "uni23B5",   # ⎵ BOTTOM SQUARE BRACKET
+    "\\overparen"   => "uni23DC",   # ⏜ TOP PARENTHESIS
+    "\\underparen"  => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
 )
 
 # Standard named math operators rendered as upright multi-character strings.
@@ -395,6 +407,10 @@ function _parse_command!(p::_Parser)::Node
         variant = _FONT_SWITCH_COMMANDS[cmd]
         body    = _parse_argument!(p)
         return Node(NKFontSwitch, variant, [body])
+
+    elseif haskey(_HORIZ_BRACE_COMMANDS, cmd)
+        body = _parse_argument!(p)
+        return Node(NKHorizBrace, cmd, [body])
 
     else
         bare = cmd[2:end]   # strip leading '\'

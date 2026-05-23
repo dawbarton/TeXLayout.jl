@@ -798,4 +798,90 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(hrules) >= 2   # fraction rule + overline rule
     end
 
+    # ── Horizontal braces (\\overbrace / \\underbrace family) ───────────────────
+
+    @testset "HorizBrace: all six commands render at least two glyphs" begin
+        for cmd in ("\\overbrace", "\\underbrace", "\\overbracket",
+                    "\\underbracket", "\\overparen", "\\underparen")
+            boxes  = layout(parse_latex("$(cmd){x}"), family, Text)
+            glyphs = find_glyphs(boxes)
+            @test length(glyphs) >= 2
+        end
+    end
+
+    @testset "HorizBrace: \\overbrace brace ink extends above body ink" begin
+        # Overbrace glyph (uni23DE) sits entirely above the baseline; its presence
+        # must push the overall ink top higher than the plain body glyph alone.
+        boxes_brace = layout(parse_latex("\\overbrace{x}"), family, Text)
+        boxes_plain = layout(parse_latex("x"),               family, Text)
+        glyphs_brace = find_glyphs(boxes_brace)
+        glyphs_plain = find_glyphs(boxes_plain)
+        upm = Float64(mt.upm)
+        @test length(glyphs_brace) >= 2
+        top_brace = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs_brace)
+        top_plain = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs_plain)
+        @test top_brace > top_plain
+    end
+
+    @testset "HorizBrace: \\underbrace brace ink extends below body ink" begin
+        # Underbrace glyph (uni23DF) sits entirely below the baseline; its presence
+        # must push the overall ink bottom lower than the plain body glyph alone.
+        boxes_brace = layout(parse_latex("\\underbrace{x}"), family, Text)
+        boxes_plain = layout(parse_latex("x"),                family, Text)
+        glyphs_brace = find_glyphs(boxes_brace)
+        glyphs_plain = find_glyphs(boxes_plain)
+        upm = Float64(mt.upm)
+        @test length(glyphs_brace) >= 2
+        bot_brace = minimum(b.y + b.element.y_min / upm * b.scale for b in glyphs_brace)
+        bot_plain = minimum(b.y + b.element.y_min / upm * b.scale for b in glyphs_plain)
+        @test bot_brace < bot_plain
+    end
+
+    @testset "HorizBrace: \\overbrace{xyz} renders multi-char body with brace above" begin
+        boxes  = layout(parse_latex("\\overbrace{xyz}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        upm    = Float64(mt.upm)
+        # Three body characters (x, y, z) plus at least one brace glyph.
+        @test length(glyphs) >= 4
+        # Brace must still reach above the multi-char body.
+        top_brace = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs)
+        boxes_plain = layout(parse_latex("xyz"), family, Text)
+        top_plain   = maximum(b.y + b.element.y_max / upm * b.scale
+                              for b in find_glyphs(boxes_plain))
+        @test top_brace > top_plain
+    end
+
+    @testset "HorizBrace: \\overbrace{x}^{n} note glyph appears above brace" begin
+        # The note 'n' is placed at script style (scale ≈ 0.7); its ink bottom
+        # must be at or above the top ink edge of the brace stack.
+        boxes  = layout(parse_latex("\\overbrace{x}^{n}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        upm    = Float64(mt.upm)
+        @test length(glyphs) >= 3   # body + brace + note
+        script_scale = mt.constants.script_percent_scale_down / 100.0
+        note = filter(b -> b.scale ≈ script_scale, glyphs)
+        @test length(note) == 1
+        # All base-scale glyphs (body + brace); note must sit above their maximum ink top.
+        base = filter(b -> b.scale ≈ 1.0, glyphs)
+        base_top  = maximum(b.y + b.element.y_max / upm * b.scale for b in base)
+        note_bot  = note[1].y + note[1].element.y_min / upm * note[1].scale
+        @test note_bot >= base_top - 1e-10
+    end
+
+    @testset "HorizBrace: \\underbrace{x}_{n} note glyph appears below brace" begin
+        # The note 'n' is placed at script style; its ink top must be at or below
+        # the bottom ink edge of the brace stack.
+        boxes  = layout(parse_latex("\\underbrace{x}_{n}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        upm    = Float64(mt.upm)
+        @test length(glyphs) >= 3   # body + brace + note
+        script_scale = mt.constants.script_percent_scale_down / 100.0
+        note = filter(b -> b.scale ≈ script_scale, glyphs)
+        @test length(note) == 1
+        base = filter(b -> b.scale ≈ 1.0, glyphs)
+        base_bot  = minimum(b.y + b.element.y_min / upm * b.scale for b in base)
+        note_top  = note[1].y + note[1].element.y_max / upm * note[1].scale
+        @test note_top <= base_bot + 1e-10
+    end
+
 end
