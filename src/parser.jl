@@ -22,6 +22,7 @@
     NKText           # \text{…} — text-mode fragment
     NKOperator       # named math operator rendered upright: \sin, \cos, \operatorname{…}
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
+    NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
 end
 
 """
@@ -78,6 +79,28 @@ const _DELIM_GLYPH_NAMES = Dict{String,String}(
     "\\lceil"    => "uni2308",
     "\\rceil"    => "uni2309",
     "."          => "",   # null delimiter — renders nothing
+)
+
+# Font-switching commands mapped to their variant name.
+# The variant name is passed as `value` in the NKFontSwitch node and is used by
+# the layout engine to select the correct Unicode math-variant codepoints.
+const _FONT_SWITCH_COMMANDS = Dict{String,String}(
+    "\\mathbf"      => "mathbf",
+    "\\mathit"      => "mathit",
+    "\\mathrm"      => "mathrm",
+    "\\mathbb"      => "mathbb",
+    "\\mathcal"     => "mathcal",
+    "\\mathfrak"    => "mathfrak",
+    "\\mathscr"     => "mathscr",
+    "\\mathsf"      => "mathsf",
+    "\\mathtt"      => "mathtt",
+    "\\boldsymbol"  => "boldsymbol",
+    "\\bm"          => "boldsymbol",
+    "\\mathnormal"  => "mathnormal",
+    "\\mathsfit"    => "mathsfit",
+    "\\Bbb"         => "mathbb",    # AMS alias for \mathbb
+    "\\bold"        => "mathbf",    # KaTeX alias for \mathbf
+    "\\frak"        => "mathfrak",  # KaTeX alias for \mathfrak
 )
 
 # Standard named math operators rendered as upright multi-character strings.
@@ -336,6 +359,11 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\operatorname"
         arg = _parse_argument!(p)
         return Node(NKOperator, _node_text(arg))
+
+    elseif haskey(_FONT_SWITCH_COMMANDS, cmd)
+        variant = _FONT_SWITCH_COMMANDS[cmd]
+        body    = _parse_argument!(p)
+        return Node(NKFontSwitch, variant, [body])
 
     else
         bare = cmd[2:end]   # strip leading '\'

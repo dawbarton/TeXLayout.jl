@@ -60,13 +60,17 @@ end
 # `mode` is either :math (default) or :text (inside \text{…}/\mbox{…}).
 # Math-mode character remapping and automatic inter-atom spacing are suppressed
 # in text mode.
+# `font_variant` is :default or the variant name set by an enclosing NKFontSwitch
+# node (e.g. :mathbf, :mathbb).  Propagates through all recursive calls so that
+# \mathbf{x_i} produces bold x and bold subscript i.
 struct _LayoutCtx
     family::FontFamily
     mc::MathConstants
     upm::Float64
     vert_constructions::Dict{String,GlyphConstruction}
     min_connector_overlap::Int
-    mode::Symbol   # :math | :text
+    mode::Symbol          # :math | :text
+    font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
 end
 
 # Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
@@ -476,6 +480,9 @@ function _atom_class(node::Node)::Symbol
     elseif k === NKLimitsOverride
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from wrapped base
+    elseif k === NKFontSwitch
+        isempty(node.children) && return :ord
+        return _atom_class(node.children[1])   # inherit from body (e.g. \mathbf{+} is :bin)
     elseif k === NKSpace
         return :neutral   # explicit spaces reset the spacing context
     else
@@ -525,7 +532,10 @@ end
 function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
     m = glyph_metrics_upright(ctx.family, ch)
     m === nothing && return nothing
-    Glyph(string(ch), m.advance_width, m.left_side_bearing,
+    # Use the actual PS name from the math font so the renderer gets the correct glyph.
+    ps = glyph_name_by_codepoint(ctx.family, UInt32(ch))
+    name = isempty(ps) ? string(ch) : ps
+    Glyph(name, m.advance_width, m.left_side_bearing,
           m.x_min, m.y_min, m.x_max, m.y_max)
 end
 
@@ -538,6 +548,31 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     catch
         return nothing
     end
+end
+
+# Return a Glyph for character `ch` under the given font variant (Option C):
+#   1. Try Unicode math-variant codepoint in the math font (covers mathbf, mathbb, etc.).
+#   2. For :mathrm, fall through to the upright glyph lookup (regular font or math codepoint).
+#   3. Fall through to the default character glyph (italic math form).
+function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph,Nothing}
+    cp_opt = _math_variant_codepoint(variant, ch)
+    if cp_opt !== nothing
+        try
+            cp = cp_opt
+            m  = glyph_metrics_by_codepoint(ctx.family, cp)
+            ps = glyph_name_by_codepoint(ctx.family, cp)
+            return Glyph(isempty(ps) ? string(Char(cp)) : ps,
+                         m.advance_width, m.left_side_bearing,
+                         m.x_min, m.y_min, m.x_max, m.y_max)
+        catch
+        end
+    end
+    # :mathrm (and :boldsymbol for non-latin chars) fall back to upright rendering.
+    if variant === :mathrm
+        g = _upright_glyph(ctx, ch)
+        g !== nothing && return g
+    end
+    return _char_glyph(ctx, ch)
 end
 
 # Maximum y-extent (top of the ink) of all boxes, in em units.
@@ -884,7 +919,10 @@ function _layout_node!(
     upm = ctx.upm
 
     if node.kind === NKChar
-        g = _char_glyph(ctx, only(node.value))
+        ch = only(node.value)
+        g  = ctx.font_variant === :default ?
+             _char_glyph(ctx, ch) :
+             _variant_glyph(ctx, ctx.font_variant, ch)
         g === nothing && return 0.0
         push!(boxes, LayoutBox(g, x0, y0, scale))
         return g.advance_width / upm * scale
@@ -1164,6 +1202,14 @@ function _layout_node!(
 
         return left_w + content_w + right_w
 
+    elseif node.kind === NKFontSwitch
+        # Switch the active font variant for all recursive calls within the body.
+        new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
+                             ctx.min_connector_overlap, ctx.mode,
+                             Symbol(node.value))
+        isempty(node.children) && return 0.0
+        return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
+
     elseif node.kind === NKAccent
         # Lay out the base; the accent mark is not yet implemented.
         isempty(node.children) && return 0.0
@@ -1185,7 +1231,7 @@ Returns a flat list of positioned elements.
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
     ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-                     mt.min_connector_overlap, :math)
+                     mt.min_connector_overlap, :math, :default)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes

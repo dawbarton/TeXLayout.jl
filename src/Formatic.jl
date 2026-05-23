@@ -31,7 +31,8 @@ export TokenKind, TKChar, TKCommand, TKSup, TKSub, TKLBrace, TKRBrace,
        TKMathShift, TKAmpersand, TKSpace, TKEOF, Token, tokenize
 export NodeKind, NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
        NKDecorated, NKFrac, NKSqrt, NKDelimited, NKAccent, NKCommand,
-       NKSpace, NKText, NKOperator, Node, parse_latex
+       NKSpace, NKText, NKOperator, NKLimitsOverride, NKFontSwitch,
+       Node, parse_latex
 export TeXElement, Glyph, HRule, VRule, Space, LayoutBox, layout,
        generate_tex_elements
 

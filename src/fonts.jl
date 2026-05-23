@@ -154,6 +154,137 @@ function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::GlyphMetric
     GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
 end
 
+# ── Unicode math-variant codepoint mapping ────────────────────────────────────
+
+# Exception tables for variants whose Unicode math codepoints are not contiguous
+# with the main Mathematical Alphanumeric Symbols block (U+1D400–U+1D7FF).
+# Sources: Unicode 15 Table 2.8 and the Mathematical Alphanumeric Symbols chart.
+
+# \mathbb exceptions: letters that have dedicated BMP codepoints in addition to
+# (or instead of) their Mathematical Double-Struck equivalents.
+const _MATHBB_EXCEPTIONS = Dict{Char,UInt32}(
+    'C' => 0x2102,  # ℂ  DOUBLE-STRUCK CAPITAL C
+    'H' => 0x210D,  # ℍ  DOUBLE-STRUCK CAPITAL H
+    'N' => 0x2115,  # ℕ  DOUBLE-STRUCK CAPITAL N
+    'P' => 0x2119,  # ℙ  DOUBLE-STRUCK CAPITAL P
+    'Q' => 0x211A,  # ℚ  DOUBLE-STRUCK CAPITAL Q
+    'R' => 0x211D,  # ℝ  DOUBLE-STRUCK CAPITAL R
+    'Z' => 0x2124,  # ℤ  DOUBLE-STRUCK CAPITAL Z
+)
+
+# \mathcal exceptions: uppercase letters with BMP Letterlike Symbols codepoints.
+const _MATHCAL_UC_EXCEPTIONS = Dict{Char,UInt32}(
+    'B' => 0x212C,  # ℬ  SCRIPT CAPITAL B
+    'E' => 0x2130,  # ℰ  SCRIPT CAPITAL E
+    'F' => 0x2131,  # ℱ  SCRIPT CAPITAL F
+    'H' => 0x210B,  # ℋ  SCRIPT CAPITAL H
+    'I' => 0x2110,  # ℐ  SCRIPT CAPITAL I
+    'L' => 0x2112,  # ℒ  SCRIPT CAPITAL L
+    'M' => 0x2133,  # ℳ  SCRIPT CAPITAL M
+    'R' => 0x211B,  # ℛ  SCRIPT CAPITAL R
+)
+
+# \mathcal lowercase exceptions.
+const _MATHCAL_LC_EXCEPTIONS = Dict{Char,UInt32}(
+    'e' => 0x212F,  # ℯ  SCRIPT SMALL E
+    'g' => 0x210A,  # ℊ  SCRIPT SMALL G
+    'o' => 0x2134,  # ℴ  SCRIPT SMALL O
+)
+
+# \mathfrak uppercase exceptions: letters with BMP Letterlike Symbols codepoints.
+const _MATHFRAK_UC_EXCEPTIONS = Dict{Char,UInt32}(
+    'C' => 0x212D,  # ℭ  FRAKTUR CAPITAL C
+    'H' => 0x210C,  # ℌ  FRAKTUR CAPITAL H
+    'I' => 0x2111,  # ℑ  FRAKTUR CAPITAL I (BLACK-LETTER)
+    'R' => 0x211C,  # ℜ  FRAKTUR CAPITAL R (BLACK-LETTER)
+    'Z' => 0x2128,  # ℨ  FRAKTUR CAPITAL Z
+)
+
+# \mathit lowercase exceptions.
+const _MATHIT_LC_EXCEPTIONS = Dict{Char,UInt32}(
+    'h' => 0x210E,  # ℎ  PLANCK CONSTANT (italic h)
+)
+
+"""
+    _math_variant_codepoint(variant, ch) -> Union{UInt32, Nothing}
+
+Return the Unicode codepoint for character `ch` in the requested math font
+variant, or `nothing` if no variant codepoint exists for that character.
+
+Uses the Mathematical Alphanumeric Symbols block (U+1D400–U+1D7FF) for
+continuous ranges, and dedicated BMP Letterlike Symbols for exceptions.
+"""
+function _math_variant_codepoint(variant::Symbol, ch::Char)::Union{UInt32,Nothing}
+    cp = UInt32(ch)
+
+    # ── \mathbf: bold upright Latin and digits ─────────────────────────────────
+    if variant === :mathbf || variant === :boldsymbol
+        'A' <= ch <= 'Z' && return 0x1D400 + (cp - UInt32('A'))  # 𝐀–𝐙
+        'a' <= ch <= 'z' && return 0x1D41A + (cp - UInt32('a'))  # 𝐚–𝐳
+        '0' <= ch <= '9' && return 0x1D7CE + (cp - UInt32('0'))  # 𝟎–𝟗
+        return nothing
+
+    # ── \mathit: italic Latin ──────────────────────────────────────────────────
+    elseif variant === :mathit || variant === :mathnormal
+        'A' <= ch <= 'Z' && return 0x1D434 + (cp - UInt32('A'))  # 𝐴–𝑍
+        'a' <= ch <= 'z' && return get(_MATHIT_LC_EXCEPTIONS, ch,
+                                       0x1D44E + (cp - UInt32('a')))  # 𝑎–𝑧 (ℎ exception)
+        return nothing
+
+    # ── \mathrm: upright via regular font or math-font codepoint ──────────────
+    elseif variant === :mathrm
+        # ASCII letters map directly; the layout engine will use _upright_glyph.
+        # Return nothing here to signal "use upright lookup, not variant codepoint".
+        return nothing
+
+    # ── \mathbb: double-struck ─────────────────────────────────────────────────
+    elseif variant === :mathbb
+        haskey(_MATHBB_EXCEPTIONS, ch) && return _MATHBB_EXCEPTIONS[ch]
+        'A' <= ch <= 'Z' && return 0x1D538 + (cp - UInt32('A'))  # 𝔸–𝕑
+        'a' <= ch <= 'z' && return 0x1D552 + (cp - UInt32('a'))  # 𝕒–𝕫
+        '0' <= ch <= '9' && return 0x1D7D8 + (cp - UInt32('0'))  # 𝟘–𝟡
+        return nothing
+
+    # ── \mathcal / \mathscr: script ───────────────────────────────────────────
+    elseif variant === :mathcal || variant === :mathscr
+        'A' <= ch <= 'Z' && return get(_MATHCAL_UC_EXCEPTIONS, ch,
+                                       0x1D49C + (cp - UInt32('A')))  # 𝒜–𝒵
+        'a' <= ch <= 'z' && return get(_MATHCAL_LC_EXCEPTIONS, ch,
+                                       0x1D4B6 + (cp - UInt32('a')))  # 𝒶–𝓏
+        return nothing
+
+    # ── \mathfrak: fraktur ────────────────────────────────────────────────────
+    elseif variant === :mathfrak
+        'A' <= ch <= 'Z' && return get(_MATHFRAK_UC_EXCEPTIONS, ch,
+                                       0x1D504 + (cp - UInt32('A')))  # 𝔄–𝔷
+        'a' <= ch <= 'z' && return 0x1D51E + (cp - UInt32('a'))       # 𝔞–𝔷
+        return nothing
+
+    # ── \mathsf: sans-serif upright ───────────────────────────────────────────
+    elseif variant === :mathsf
+        'A' <= ch <= 'Z' && return 0x1D5A0 + (cp - UInt32('A'))  # 𝖠–𝖹
+        'a' <= ch <= 'z' && return 0x1D5BA + (cp - UInt32('a'))  # 𝖺–𝗓
+        '0' <= ch <= '9' && return 0x1D7E2 + (cp - UInt32('0'))  # 𝟢–𝟫
+        return nothing
+
+    # ── \mathtt: monospace ────────────────────────────────────────────────────
+    elseif variant === :mathtt
+        'A' <= ch <= 'Z' && return 0x1D670 + (cp - UInt32('A'))  # 𝙰–𝚉
+        'a' <= ch <= 'z' && return 0x1D68A + (cp - UInt32('a'))  # 𝚊–𝚣
+        '0' <= ch <= '9' && return 0x1D7F6 + (cp - UInt32('0'))  # 𝟶–𝟿
+        return nothing
+
+    # ── \mathsfit: sans-serif italic ─────────────────────────────────────────
+    elseif variant === :mathsfit
+        'A' <= ch <= 'Z' && return 0x1D608 + (cp - UInt32('A'))  # 𝘈–𝘡
+        'a' <= ch <= 'z' && return 0x1D622 + (cp - UInt32('a'))  # 𝘢–𝘻
+        return nothing
+
+    else
+        return nothing
+    end
+end
+
 """
     glyph_name_by_codepoint(family, codepoint) -> String
 

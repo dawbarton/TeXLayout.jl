@@ -229,4 +229,66 @@
         @test parts[2] == "braceright"
     end
 
+    # ── Font switching ──────────────────────────────────────────────────────────
+
+    @testset "\\mathbf{x}: NKFontSwitch with variant mathbf" begin
+        tree = parse_latex("\\mathbf{x}")
+        fs = tree.children[1]
+        @test fs.kind  === NKFontSwitch
+        @test fs.value == "mathbf"
+        @test length(fs.children) == 1
+        @test fs.children[1].kind  === NKChar
+        @test fs.children[1].value == "x"
+    end
+
+    @testset "\\mathit, \\mathrm, \\mathbb, \\mathcal, \\mathfrak produce NKFontSwitch" begin
+        for (cmd, variant) in (("\\mathit",  "mathit"),  ("\\mathrm",  "mathrm"),
+                                ("\\mathbb",  "mathbb"),  ("\\mathcal",  "mathcal"),
+                                ("\\mathfrak","mathfrak"), ("\\mathsf",  "mathsf"),
+                                ("\\mathtt",  "mathtt"))
+            node = parse_latex("$(cmd){A}").children[1]
+            @test node.kind  === NKFontSwitch
+            @test node.value == variant
+        end
+    end
+
+    @testset "Aliases: \\Bbb, \\bold, \\frak produce NKFontSwitch" begin
+        @test parse_latex("\\Bbb{A}").children[1].value  == "mathbb"
+        @test parse_latex("\\bold{x}").children[1].value == "mathbf"
+        @test parse_latex("\\frak{A}").children[1].value == "mathfrak"
+        for alias in ("\\Bbb", "\\bold", "\\frak")
+            @test parse_latex("$(alias){x}").children[1].kind === NKFontSwitch
+        end
+    end
+
+    @testset "\\boldsymbol and \\bm are aliases for boldsymbol" begin
+        @test parse_latex("\\boldsymbol{x}").children[1].value == "boldsymbol"
+        @test parse_latex("\\bm{x}").children[1].value         == "boldsymbol"
+    end
+
+    @testset "\\mathbf{x_i}: font switch wraps a subscript" begin
+        # \mathbf{x_i} → NKFontSwitch("mathbf", [NKSubscript([NKChar("x"), NKChar("i")])])
+        tree = parse_latex("\\mathbf{x_i}")
+        fs = tree.children[1]
+        @test fs.kind === NKFontSwitch
+        body = fs.children[1]
+        @test body.kind === NKSubscript
+        @test body.children[1].kind  === NKChar
+        @test body.children[1].value == "x"
+        @test body.children[2].kind  === NKChar
+        @test body.children[2].value == "i"
+    end
+
+    @testset "\\mathbf{abc}: multi-character body is a sequence/group" begin
+        tree = parse_latex("\\mathbf{abc}")
+        fs = tree.children[1]
+        @test fs.kind === NKFontSwitch
+        @test fs.value == "mathbf"
+        # {abc} is parsed as a group containing three NKChar children.
+        body = fs.children[1]
+        @test body.kind === NKGroup || body.kind === NKSequence
+        @test length(body.children) == 3
+        @test all(c.kind === NKChar for c in body.children)
+    end
+
 end

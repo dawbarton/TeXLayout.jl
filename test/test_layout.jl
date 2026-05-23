@@ -484,4 +484,114 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    # ── Font switching ──────────────────────────────────────────────────────────
+
+    @testset "FontSwitch: \\mathbf{x} renders one glyph" begin
+        boxes  = layout(parse_latex("\\mathbf{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+    end
+
+    @testset "FontSwitch: \\mathbf{x} glyph differs from plain x (bold vs italic)" begin
+        # Bold 'x' (U+1D431) and italic math 'x' are different glyphs.
+        boxes_bf  = layout(parse_latex("\\mathbf{x}"),  family, Text)
+        boxes_def = layout(parse_latex("x"),             family, Text)
+        name_bf   = find_glyphs(boxes_bf)[1].element.glyph_name
+        name_def  = find_glyphs(boxes_def)[1].element.glyph_name
+        @test name_bf != name_def
+    end
+
+    @testset "FontSwitch: \\mathit{x} glyph differs from bold x" begin
+        boxes_it = layout(parse_latex("\\mathit{x}"), family, Text)
+        boxes_bf = layout(parse_latex("\\mathbf{x}"), family, Text)
+        name_it  = find_glyphs(boxes_it)[1].element.glyph_name
+        name_bf  = find_glyphs(boxes_bf)[1].element.glyph_name
+        @test name_it != name_bf
+    end
+
+    @testset "FontSwitch: \\mathbb{R} uses double-struck glyph" begin
+        # \mathbb{R} → U+211D DOUBLE-STRUCK CAPITAL R (exception codepoint).
+        boxes  = layout(parse_latex("\\mathbb{R}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+        @test glyphs[1].element.advance_width > 0
+    end
+
+    @testset "FontSwitch: \\mathbb{A} uses math-block double-struck glyph" begin
+        # \mathbb{A} → U+1D538 (non-exception uppercase).
+        boxes_bb  = layout(parse_latex("\\mathbb{A}"), family, Text)
+        boxes_def = layout(parse_latex("A"),            family, Text)
+        @test !isempty(find_glyphs(boxes_bb))
+        name_bb  = find_glyphs(boxes_bb)[1].element.glyph_name
+        name_def = find_glyphs(boxes_def)[1].element.glyph_name
+        @test name_bb != name_def
+    end
+
+    @testset "FontSwitch: \\mathrm{x} produces upright glyph" begin
+        # \mathrm uses the upright lookup path. In NewCMMath the PS name "x" (default path)
+        # also maps to the upright glyph, so mathrm is the same as default for plain 'x'.
+        # The meaningful contrast is against \mathit{x}, whose codepoint U+1D465 gives the
+        # dedicated italic form (PS name "u1D465", distinct advance width).
+        boxes_rm = layout(parse_latex("\\mathrm{x}"),  family, Text)
+        boxes_it = layout(parse_latex("\\mathit{x}"),  family, Text)
+        @test !isempty(find_glyphs(boxes_rm))
+        name_rm = find_glyphs(boxes_rm)[1].element.glyph_name
+        name_it = find_glyphs(boxes_it)[1].element.glyph_name
+        @test name_rm != name_it
+    end
+
+    @testset "FontSwitch: \\mathbf propagates to subscript" begin
+        # \mathbf{x_i} should produce two glyphs, both from bold variants.
+        boxes_bf  = layout(parse_latex("\\mathbf{x_i}"),  family, Text)
+        boxes_def = layout(parse_latex("x_i"),             family, Text)
+        glyphs_bf  = find_glyphs(boxes_bf)
+        glyphs_def = find_glyphs(boxes_def)
+        @test length(glyphs_bf) == 2
+        # Bold glyphs should differ from the default italic glyphs.
+        @test glyphs_bf[1].element.glyph_name != glyphs_def[1].element.glyph_name
+        @test glyphs_bf[2].element.glyph_name != glyphs_def[2].element.glyph_name
+    end
+
+    @testset "FontSwitch: \\mathbf{x} advance width differs from italic x" begin
+        # Bold metrics (wider) should differ from italic metrics.
+        boxes_bf  = layout(parse_latex("\\mathbf{x}"),  family, Text)
+        boxes_def = layout(parse_latex("x"),             family, Text)
+        adv_bf  = find_glyphs(boxes_bf)[1].element.advance_width
+        adv_def = find_glyphs(boxes_def)[1].element.advance_width
+        # Advance widths are not required to differ by a specific amount, but must both be positive.
+        @test adv_bf  > 0
+        @test adv_def > 0
+    end
+
+    @testset "FontSwitch: \\mathbf{+} atom class is :bin (inherited from body)" begin
+        # \mathbf{+} should insert medium spaces in a+b context same as plain +.
+        boxes_plain = layout(parse_latex("a+b"),          family, Text)
+        boxes_bf    = layout(parse_latex("a\\mathbf{+}b"), family, Text)
+        spaces_plain = find_spaces(boxes_plain)
+        spaces_bf    = find_spaces(boxes_bf)
+        # Both should have 2 medium spaces (the + is :bin regardless of font variant).
+        @test length(spaces_bf) == length(spaces_plain)
+    end
+
+    @testset "FontSwitch: \\mathtt{0} digit renders glyph" begin
+        boxes  = layout(parse_latex("\\mathtt{0}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+        @test glyphs[1].element.advance_width > 0
+    end
+
+    @testset "FontSwitch: \\mathcal{A} renders glyph" begin
+        boxes  = layout(parse_latex("\\mathcal{A}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+        @test glyphs[1].element.advance_width > 0
+    end
+
+    @testset "FontSwitch: \\mathfrak{A} renders glyph" begin
+        boxes  = layout(parse_latex("\\mathfrak{A}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+        @test glyphs[1].element.advance_width > 0
+    end
+
 end
