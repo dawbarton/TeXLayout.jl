@@ -68,6 +68,7 @@ struct _LayoutCtx
     mc::MathConstants
     upm::Float64
     vert_constructions::Dict{String,GlyphConstruction}
+    horiz_constructions::Dict{String,GlyphConstruction}  # for \widehat, \widetilde
     top_accent_attachments::Dict{String,Int}  # PS glyph name → x position (design units)
     min_connector_overlap::Int
     mode::Symbol          # :math | :text
@@ -454,6 +455,11 @@ const _LIMITS_OP_COMMANDS = Set{String}([
     "bigwedge", "bigvee",
     "bigoplus", "bigotimes", "bigodot", "biguplus",
 ])
+
+# Accent commands that are horizontally extensible (selected from horiz_constructions).
+# These share codepoints with their fixed-size counterparts but the layout engine
+# selects a glyph variant wide enough to span the base, or assembles one.
+const _WIDE_ACCENT_COMMANDS = Set{String}(["\\widehat", "\\widetilde"])
 
 # Unicode codepoints for symbols whose LaTeX command name differs from the
 # PostScript glyph name used in OpenType math fonts (e.g. \infty → "infinity",
@@ -946,6 +952,78 @@ function _layout_delim!(
     # Fall back to largest variant (or base glyph when no variants exist).
     chosen = isempty(vc.variants) ? glyph_name : last(vc.variants).glyph_name
     return _place_glyph(chosen)
+end
+
+# Place a horizontally extensible accent glyph centred over a base of width
+# `base_w_em` (em units) at vertical position `accent_y`.  Selects the smallest
+# pre-built variant whose advance width covers the base; if none exists, assembles
+# the glyph from parts using the same helpers used for vertical assemblies.
+# Falls back to the largest variant (or the base glyph) if the assembly is empty.
+function _layout_wide_accent!(
+    ctx::_LayoutCtx,
+    accent_ps::String,
+    base_w_em::Float64,
+    accent_y::Float64,
+    x0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Nothing
+    upm      = ctx.upm
+    min_conn = ctx.min_connector_overlap
+    required_du = base_w_em / scale * upm   # convert em to design units
+
+    hc = get(ctx.horiz_constructions, accent_ps, nothing)
+    hc === nothing && return nothing
+
+    # Helper: centre a named glyph over the base and push it to boxes.
+    function _place(name::String)
+        g = _cmd_glyph(ctx, name)
+        g === nothing && return
+        glyph_w = g.advance_width / upm * scale
+        push!(boxes, LayoutBox(g, x0 + (base_w_em - glyph_w) / 2, accent_y, scale))
+    end
+
+    # Try pre-built variants first (smallest that covers the base).
+    for v in hc.variants
+        if Float64(v.advance) >= required_du
+            _place(v.glyph_name)
+            return nothing
+        end
+    end
+
+    # Try extensible assembly.
+    if hc.assembly !== nothing
+        asm   = hc.assembly
+        n     = _min_extender_reps(asm.parts, required_du, min_conn)
+        parts = _expand_assembly_parts(asm.parts, n)
+        if !isempty(parts)
+            # Compute overlap for each adjacent pair.
+            overlaps = [_gap_min_overlap(parts[i], parts[i+1], min_conn)
+                        for i in 1:(length(parts)-1)]
+            # Total width of the assembly in design units.
+            total_du = Float64(parts[1].full_advance) +
+                       sum(Float64(parts[i+1].full_advance) - overlaps[i]
+                           for i in eachindex(overlaps); init=0.0)
+            total_w = total_du / upm * scale
+            # Centre the assembly over the base.
+            ax = x0 + (base_w_em - total_w) / 2
+            cursor_du = 0.0
+            for i in eachindex(parts)
+                p = parts[i]
+                g = _cmd_glyph(ctx, p.glyph_name)
+                g !== nothing &&
+                    push!(boxes, LayoutBox(g, ax + cursor_du / upm * scale, accent_y, scale))
+                if i <= length(overlaps)
+                    cursor_du += Float64(p.full_advance) - overlaps[i]
+                end
+            end
+            return nothing
+        end
+    end
+
+    # Fall back to the largest pre-built variant, or the base glyph.
+    _place(isempty(hc.variants) ? accent_ps : last(hc.variants).glyph_name)
+    return nothing
 end
 
 # ── Limits-placement helpers ─────────────────────────────────────────────────
@@ -1473,8 +1551,8 @@ function _layout_node!(
     elseif node.kind === NKFontSwitch
         # Switch the active font variant for all recursive calls within the body.
         new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
-                             ctx.top_accent_attachments, ctx.min_connector_overlap,
-                             ctx.mode, Symbol(node.value))
+                             ctx.horiz_constructions, ctx.top_accent_attachments,
+                             ctx.min_connector_overlap, ctx.mode, Symbol(node.value))
         isempty(node.children) && return 0.0
         return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 
@@ -1504,6 +1582,13 @@ function _layout_node!(
         # riding higher above ascenders, matching the KaTeX clearance formula.
         accent_base_h = mc.accent_base_height * s / upm
         accent_y = y0 + max(0.0, base_top - accent_base_h)
+
+        # Wide accents (\widehat, \widetilde) are placed using a horizontally
+        # extensible glyph centred over the base; no MathTopAccentAttachment alignment.
+        if node.value ∈ _WIDE_ACCENT_COMMANDS && haskey(ctx.horiz_constructions, accent_ps)
+            _layout_wide_accent!(ctx, accent_ps, base_w, accent_y, x0, s, boxes)
+            return base_w
+        end
 
         # Horizontal placement via MathTopAccentAttachment.
         # If the base is a single glyph with a known attachment point, align the
@@ -1574,7 +1659,8 @@ Returns a flat list of positioned elements.
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
     ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-                     mt.top_accent_attachments, mt.min_connector_overlap, :math, :default)
+                     mt.horiz_constructions, mt.top_accent_attachments,
+                     mt.min_connector_overlap, :math, :default)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes

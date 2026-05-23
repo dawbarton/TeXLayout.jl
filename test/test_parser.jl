@@ -291,4 +291,33 @@
         @test all(c.kind === NKChar for c in body.children)
     end
 
+    @testset "\\widehat{x}: produces NKAccent with value \\widehat" begin
+        tree = parse_latex("\\widehat{x}")
+        acc  = tree.children[1]
+        @test acc.kind  === NKAccent
+        @test acc.value == "\\widehat"
+        @test length(acc.children) == 1
+        @test acc.children[1].kind === NKChar
+    end
+
+    @testset "\\widetilde{x}: produces NKAccent with value \\widetilde" begin
+        tree = parse_latex("\\widetilde{x}")
+        acc  = tree.children[1]
+        @test acc.kind  === NKAccent
+        @test acc.value == "\\widetilde"
+        @test length(acc.children) == 1
+        @test acc.children[1].kind === NKChar
+    end
+
+    @testset "\\widehat{xyz}: wide accent over multi-char base" begin
+        tree = parse_latex("\\widehat{xyz}")
+        acc  = tree.children[1]
+        @test acc.kind  === NKAccent
+        @test acc.value == "\\widehat"
+        # {xyz} becomes a group or sequence with three NKChar children.
+        body = acc.children[1]
+        @test body.kind === NKGroup || body.kind === NKSequence
+        @test length(body.children) == 3
+    end
+
 end

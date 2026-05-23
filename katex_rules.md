@@ -117,8 +117,10 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   `\dot`, `\mathring`, `\vec`. ✓
 - `MathTopAccentAttachment` alignment used when both glyphs have records;
   falls back to centering for complex multi-glyph bases. ✓
-- Wide/stretchy accents (`\widehat`, `\widetilde`) deferred; require
-  `horiz_constructions` from the MATH table (not yet implemented).
+- Wide/stretchy accents (`\widehat`, `\widetilde`) implemented: share codepoints
+  with their fixed-size counterparts; layout dispatches to `_layout_wide_accent!`
+  which selects the smallest pre-built variant from `horiz_constructions` wide
+  enough to cover the base, or assembles one from extensible parts. ✓
 - **Codepoint note:** KaTeX's `symbols.ts` maps `\acute`/`\grave`/`\bar` to
   Modifier Letter codepoints (U+02CA/U+02CB/U+02C9) absent in most OpenType
   math fonts.  Formatic.jl uses Latin-1/ASCII equivalents (U+00B4/U+0060/U+00AF)

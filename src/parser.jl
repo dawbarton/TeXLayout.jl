@@ -85,14 +85,17 @@ const _DELIM_GLYPH_NAMES = Dict{String,String}(
 # Math accent commands mapped to the Unicode codepoint of the accent glyph.
 # Codepoints follow KaTeX's symbols.ts.  The layout engine looks up the PS glyph
 # name via the font's cmap so that the correct variant is used in each math font.
-# Wide/stretchy accents (\widehat, \widetilde) are excluded; they need horizontal
-# extensible constructions and are not yet implemented.
+# \widehat and \widetilde share codepoints with \hat and \tilde; the layout engine
+# distinguishes them via the _WIDE_ACCENT_COMMANDS set and selects a horizontally
+# extensible glyph from horiz_constructions when the base is wide enough to warrant it.
 const _ACCENT_CODEPOINTS = Dict{String,UInt32}(
     "\\hat"      => 0x02C6,   # ˆ MODIFIER LETTER CIRCUMFLEX ACCENT (has MathTopAccentAttachment; U+005E asciicircum does not)
+    "\\widehat"  => 0x02C6,   # ˆ wide/stretchy form; extensible via horiz_constructions
     "\\acute"    => 0x00B4,   # ´ ACUTE ACCENT (Latin-1; U+02CA absent in most math fonts)
     "\\grave"    => 0x0060,   # ` GRAVE ACCENT (ASCII; U+02CB absent in most math fonts)
     "\\ddot"     => 0x00A8,   # ¨ DIAERESIS
     "\\tilde"    => 0x02DC,   # ˜ SMALL TILDE (has MathTopAccentAttachment; U+007E asciitilde does not)
+    "\\widetilde" => 0x02DC,  # ˜ wide/stretchy form; extensible via horiz_constructions
     "\\bar"      => 0x00AF,   # ¯ MACRON (Latin-1; U+02C9 absent in most math fonts)
     "\\breve"    => 0x02D8,   # ˘ BREVE
     "\\check"    => 0x02C7,   # ˇ CARON

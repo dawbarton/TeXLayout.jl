@@ -204,6 +204,9 @@ function main()
         "\\grave{e}"         => "\\grave{e}",
         "\\hat{A}"           => "\\hat{A}  (tall base)",
         "\\hat{\\frac{a}{b}}"=> "\\hat{\\frac{a}{b}}  (fraction base — centering fallback)",
+        "\\widehat{x}"       => "\\widehat{x}  (wide accent, single char)",
+        "\\widehat{xyz}"     => "\\widehat{xyz}  (wide accent, 3 chars — extensible)",
+        "\\widetilde{x+y}"   => "\\widetilde{x+y}  (wide tilde over expression)",
     ]
 
     rows = Matrix{UInt8}[]

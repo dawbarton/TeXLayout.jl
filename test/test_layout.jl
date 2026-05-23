@@ -691,6 +691,43 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Wide accent: \\widehat{x} emits base and accent" begin
+        boxes  = layout(parse_latex("\\widehat{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 2   # base glyph + at least one accent glyph
+    end
+
+    @testset "Wide accent: \\widetilde{x} emits base and accent" begin
+        boxes  = layout(parse_latex("\\widetilde{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 2
+    end
+
+    @testset "Wide accent: \\widehat{xyz} emits accent above multi-char base" begin
+        boxes  = layout(parse_latex("\\widehat{xyz}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        # Three base characters plus at least one accent part.
+        @test length(glyphs) >= 4
+        upm = Float64(mt.upm)
+        # The accent's ink top must exceed the base's ink top.
+        # Base glyphs are the first three pushed; accent glyph(s) follow.
+        base_top   = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs[1:3])
+        accent_top = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs[4:end])
+        @test accent_top > base_top
+    end
+
+    @testset "Wide accent: \\widehat return width equals base width" begin
+        boxes_wide  = layout(parse_latex("\\widehat{xyz}"),  family, Text)
+        boxes_plain = layout(parse_latex("xyz"),             family, Text)
+        upm = Float64(mt.upm)
+        # Total x-advance of the wide-accented expression should equal that of the plain base.
+        adv_wide  = maximum(b.x + b.element.advance_width / upm * b.scale
+                            for b in find_glyphs(boxes_wide))
+        adv_plain = maximum(b.x + b.element.advance_width / upm * b.scale
+                            for b in find_glyphs(boxes_plain))
+        @test adv_wide ≈ adv_plain atol=0.01
+    end
+
     @testset "Accent: cramped style inside accent (superscript in radicand)" begin
         # \hat{x^2}: the base x^2 is laid out cramped; the accent should still appear.
         boxes  = layout(parse_latex("\\hat{x^2}"), family, Text)
