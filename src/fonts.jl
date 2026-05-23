@@ -153,3 +153,21 @@ function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::GlyphMetric
 
     GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
 end
+
+"""
+    glyph_name_by_codepoint(family, codepoint) -> String
+
+Return the PostScript glyph name for the glyph mapped from a Unicode codepoint
+in the math font.  Returns an empty string if the codepoint has no glyph or the
+font carries no glyph-name table.
+"""
+function glyph_name_by_codepoint(family::FontFamily, cp::UInt32)::String
+    face, _ = _load_font(family.math)
+    gid = Int(_FT.FT_Get_Char_Index(face, cp))
+    gid == 0 && return ""
+    buf = zeros(UInt8, 128)
+    ret = _FT.FT_Get_Glyph_Name(face, UInt32(gid), buf, UInt32(length(buf)))
+    ret != 0 && return ""
+    i = findfirst(==(0x00), buf)
+    return i === nothing ? "" : String(buf[1:i-1])
+end

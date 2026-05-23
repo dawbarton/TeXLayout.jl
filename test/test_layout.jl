@@ -121,8 +121,14 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         hrules = find_hrules(boxes)
         glyphs = find_glyphs(boxes)
         @test length(hrules) >= 1
+        @test length(glyphs) >= 2  # at least one radical glyph + one body glyph
+        # The radical glyph(s) are placed to the left of (or at the same x as)
+        # the body; exclude them by keeping only glyphs at x > the minimum x.
+        rad_x = minimum(b.x for b in glyphs)
+        body_glyphs = filter(b -> b.x > rad_x, glyphs)
+        @test !isempty(body_glyphs)
         radicand_y = maximum(b.y + b.element.y_max / FONT_UPM * b.scale
-                             for b in glyphs)
+                             for b in body_glyphs)
         rule_y = hrules[1].y
         @test rule_y >= radicand_y - 1e-6
     end

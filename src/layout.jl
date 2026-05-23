@@ -79,8 +79,11 @@ function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
         end
     end
     try
-        m = glyph_metrics_by_codepoint(ctx.family, UInt32(ch))
-        return Glyph(string(ch), m.advance_width, m.left_side_bearing,
+        cp = UInt32(ch)
+        m  = glyph_metrics_by_codepoint(ctx.family, cp)
+        ps = glyph_name_by_codepoint(ctx.family, cp)
+        return Glyph(isempty(ps) ? string(ch) : ps,
+                     m.advance_width, m.left_side_bearing,
                      m.x_min, m.y_min, m.x_max, m.y_max)
     catch
         return nothing
@@ -246,6 +249,93 @@ function _layout_assembly!(
     end
 
     return max_adv_w / upm * scale
+end
+
+# Lay out a radical glyph assembly so that the TOP of the assembly aligns with
+# `rule_top_em`.  Unlike delimiter assemblies (centred on the math axis),
+# radical assemblies are top-anchored.  Returns horizontal advance.
+function _layout_radical_assembly!(
+    asm::GlyphAssembly,
+    ctx::_LayoutCtx,
+    required_du::Float64,
+    rule_top_em::Float64,
+    x0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    upm      = ctx.upm
+    min_conn = ctx.min_connector_overlap
+
+    n     = _min_extender_reps(asm.parts, required_du, min_conn)
+    parts = _expand_assembly_parts(asm.parts, n)
+    isempty(parts) && return 0.0
+
+    overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
+    for i in eachindex(overlaps)
+        overlaps[i] = _gap_min_overlap(parts[i], parts[i+1], min_conn)
+    end
+
+    total_du = Float64(parts[1].full_advance)
+    for i in eachindex(overlaps)
+        total_du += parts[i+1].full_advance - overlaps[i]
+    end
+
+    # All radical assembly parts have y_min=0, y_max=full_advance.
+    # The top of the top cap is at asm_bot + total_du; pin it to rule_top_em.
+    asm_bot_em = rule_top_em - total_du / upm * scale
+
+    max_adv_w = 0
+    cursor_du = 0.0
+    for i in eachindex(parts)
+        p = parts[i]
+        g = _cmd_glyph(ctx, p.glyph_name)
+        if g !== nothing
+            push!(boxes, LayoutBox(g, x0, asm_bot_em + cursor_du / upm * scale, scale))
+            max_adv_w = max(max_adv_w, g.advance_width)
+        end
+        i <= length(overlaps) && (cursor_du += Float64(p.full_advance) - overlaps[i])
+    end
+
+    return max_adv_w / upm * scale
+end
+
+# Choose and place a radical glyph (or assembly) whose ink top aligns with
+# `rule_top_em`.  `required_du` is the minimum vertical span (design units)
+# the radical must cover — from the body's bottom ink to the rule top.
+# Returns horizontal advance.
+function _layout_radical!(
+    ctx::_LayoutCtx,
+    required_du::Float64,
+    rule_top_em::Float64,
+    x0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    upm = ctx.upm
+
+    function _place_variant(name::String)::Float64
+        g = _cmd_glyph(ctx, name)
+        g === nothing && return 0.0
+        # Place so the glyph's top ink (y_max) aligns with rule_top_em.
+        push!(boxes, LayoutBox(g, x0, rule_top_em - g.y_max / upm * scale, scale))
+        return g.advance_width / upm * scale
+    end
+
+    if !haskey(ctx.vert_constructions, "radical")
+        return _place_variant("radical")
+    end
+
+    vc = ctx.vert_constructions["radical"]
+
+    for v in vc.variants
+        Float64(v.advance) >= required_du && return _place_variant(v.glyph_name)
+    end
+
+    vc.assembly !== nothing && return _layout_radical_assembly!(
+        vc.assembly, ctx, required_du, rule_top_em, x0, scale, boxes)
+
+    chosen = isempty(vc.variants) ? "radical" : last(vc.variants).glyph_name
+    return _place_variant(chosen)
 end
 
 # Lay out one delimiter (left or right) at position (x0, y0), centred on the
@@ -436,17 +526,28 @@ function _layout_node!(
         # \sqrt[degree]{body}: children are [body] or [degree, body].
         body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
         tmp = LayoutBox[]
-        body_w    = _layout_node!(body_node, ctx, style, x0, y0, scale, tmp)
-        body_top  = _boxes_top(tmp, upm)
+        body_w   = _layout_node!(body_node, ctx, style, 0.0, 0.0, scale, tmp)
+        body_top = _boxes_top(tmp, upm)
+        body_bot = _boxes_bottom(tmp, upm)
 
-        gap = is_display(style) ?
+        gap            = is_display(style) ?
             mc.radical_display_style_vertical_gap / upm * scale :
             mc.radical_vertical_gap / upm * scale
         rule_thickness = mc.radical_rule_thickness / upm * scale
+        rule_y_local   = body_top + gap           # bottom of rule bar (em, relative to y0)
+        rule_top_local = rule_y_local + rule_thickness
 
-        for b in tmp; push!(boxes, b); end
-        push!(boxes, LayoutBox(HRule(body_w, rule_thickness), x0, body_top + gap, scale))
-        return body_w
+        # required_du: vertical span from body bottom to rule top, in design
+        # units at scale=1 (matching the vert_constructions advance values).
+        required_du  = (rule_top_local - body_bot) / scale * upm
+        rule_top_em  = y0 + rule_top_local
+        rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
+
+        for b in tmp
+            push!(boxes, LayoutBox(b.element, x0 + rad_adv + b.x, y0 + b.y, b.scale))
+        end
+        push!(boxes, LayoutBox(HRule(body_w, rule_thickness), x0 + rad_adv, y0 + rule_y_local, scale))
+        return rad_adv + body_w
 
     elseif node.kind === NKDelimited
         # \left…\right: size delimiters to the inner content, centred on the math axis.
