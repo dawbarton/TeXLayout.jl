@@ -190,7 +190,8 @@ A summary of major features and their status.
 | Explicit spacing (`\,` `\;` `\quad` `\kern` …) | ✓ | Width in em; negative spaces supported |
 | Inter-atom spacing | ✓ | TeX atom-class table (ord/bin/rel/op/open/close/punct/inner) |
 | Accents (`\hat`, `\bar`, `\vec`, …) | ✓ | Rule 12; `MathTopAccentAttachment` alignment; 11 non-stretchy commands |
-| Horizontal extensibles (`\widehat`, `\widetilde`, `\overline`, `\underline`) | ✗ | Requires `horiz_constructions`; not yet implemented |
+| `\overline`, `\underline` | ✓ | Rules 9 & 10; gap and thickness from MATH table |
+| Horizontal extensibles (`\widehat`, `\widetilde`) | ✗ | Requires `horiz_constructions`; not yet implemented |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Array/matrix environments | ✗ | Not yet parsed |
 | `default_font_family()` | ✗ | Throws "not implemented" |
@@ -201,9 +202,9 @@ A summary of major features and their status.
   emits only the base; the accent mark is not rendered.  The MATH table provides
   `MathTopAccentAttachment` records that give the attachment x-coordinate for both base
   and accent glyphs.
-- **Horizontal extensible assemblies** — `\widehat`, `\widetilde`, `\overline`,
-  `\underline`, and similar wide accents require horizontal `vert_constructions` (actually
-  stored as `horiz_constructions` in the MATH table).  Not yet implemented.
+- **Horizontal extensible assemblies** — `\widehat` and `\widetilde` require
+  horizontal `vert_constructions` (stored as `horiz_constructions` in the MATH table).
+  Not yet implemented.
 - **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
   from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
   yet used; adding them would give better coverage for characters outside the math block

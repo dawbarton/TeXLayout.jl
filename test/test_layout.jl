@@ -653,4 +653,66 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(glyphs) >= 3   # x, superscript 2, accent
     end
 
+    @testset "\\overline emits base glyphs and an HRule above" begin
+        boxes  = layout(parse_latex("\\overline{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        hrules = find_hrules(boxes)
+        @test length(glyphs) >= 1
+        @test length(hrules) == 1
+        upm = Float64(mt.upm)
+        # Rule must be above the base glyph's ink top.
+        base_top = maximum(b.y + b.element.y_max / upm * b.scale for b in glyphs)
+        rule = hrules[1]
+        rule_bottom = rule.y   # HRule.y is the bottom edge
+        @test rule_bottom >= base_top - 1e-10   # rule sits above or at body top
+    end
+
+    @testset "\\underline emits base glyphs and an HRule below" begin
+        boxes  = layout(parse_latex("\\underline{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        hrules = find_hrules(boxes)
+        @test length(glyphs) >= 1
+        @test length(hrules) == 1
+        upm = Float64(mt.upm)
+        # Rule top must be at or below the base glyph's ink bottom.
+        base_bot = minimum(b.y + b.element.y_min / upm * b.scale for b in glyphs)
+        rule = hrules[1]
+        rule_top = rule.y + (rule.element::HRule).thickness
+        @test rule_top <= base_bot + 1e-10   # rule sits below or at body bottom
+    end
+
+    @testset "\\overline width equals body width" begin
+        boxes_over  = layout(parse_latex("\\overline{xy}"),  family, Text)
+        boxes_plain = layout(parse_latex("xy"),               family, Text)
+        hrule = find_hrules(boxes_over)[1]
+        # Width of overline rule should match the body advance.
+        plain_w = maximum(b.x + b.element.advance_width / Float64(mt.upm) * b.scale
+                          for b in find_glyphs(boxes_plain))
+        @test (hrule.element::HRule).width ≈ plain_w atol=0.01
+    end
+
+    @testset "\\overline rule thickness matches MATH table" begin
+        boxes = layout(parse_latex("\\overline{x}"), family, Text)
+        hrule = find_hrules(boxes)[1]
+        upm = Float64(mt.upm)
+        expected_t = mt.constants.overbar_rule_thickness / upm   # scale=1 in Text style
+        @test (hrule.element::HRule).thickness ≈ expected_t atol=1e-10
+    end
+
+    @testset "\\underline rule thickness matches MATH table" begin
+        boxes = layout(parse_latex("\\underline{x}"), family, Text)
+        hrule = find_hrules(boxes)[1]
+        upm = Float64(mt.upm)
+        expected_t = mt.constants.underbar_rule_thickness / upm
+        @test (hrule.element::HRule).thickness ≈ expected_t atol=1e-10
+    end
+
+    @testset "\\overline nested inside \\frac renders" begin
+        boxes = layout(parse_latex("\\frac{\\overline{a}}{b}"), family, Display)
+        glyphs = find_glyphs(boxes)
+        hrules = find_hrules(boxes)
+        @test length(glyphs) >= 2   # a and b
+        @test length(hrules) >= 2   # fraction rule + overline rule
+    end
+
 end

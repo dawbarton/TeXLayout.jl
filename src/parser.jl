@@ -17,6 +17,7 @@
     NKSqrt          # \sqrt[degree]{body}
     NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
     NKAccent        # \hat, \bar, \vec, etc.
+    NKOverUnder     # \overline / \underline; value is "overline" or "underline"
     NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
     NKSpace          # explicit space token (\, \; \quad etc.)
     NKText           # \text{…} — text-mode fragment
@@ -382,6 +383,10 @@ function _parse_command!(p::_Parser)::Node
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
         body = _parse_argument!(p)
         return Node(NKAccent, cmd, [body])
+
+    elseif cmd == "\\overline" || cmd == "\\underline"
+        body = _parse_argument!(p)
+        return Node(NKOverUnder, cmd[2:end], [body])   # value = "overline" or "underline"
 
     elseif haskey(_FONT_SWITCH_COMMANDS, cmd)
         variant = _FONT_SWITCH_COMMANDS[cmd]

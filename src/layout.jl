@@ -557,7 +557,7 @@ function _atom_class(node::Node)::Symbol
         return :op
     elseif k === NKFrac || k === NKDelimited
         return :inner
-    elseif k === NKSqrt || k === NKAccent || k === NKText
+    elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
         return :ord
     elseif k === NKSuperscript || k === NKSubscript || k === NKDecorated
         isempty(node.children) && return :ord
@@ -1484,6 +1484,34 @@ function _layout_node!(
                                      accent_m.x_max, accent_m.y_max),
                                accent_x, accent_y, s))
         return base_w
+
+    elseif node.kind === NKOverUnder
+        # Rules 9 & 10: \overline and \underline.
+        # \overline  (Rule 9): body in cramped style; HRule above with gap from MATH table.
+        # \underline (Rule 10): body in current style; HRule below with gap from MATH table.
+        isempty(node.children) && return 0.0
+        is_over = node.value == "overline"
+        child_style = is_over ? cramp_style(style) : style
+
+        tmp = LayoutBox[]
+        body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, tmp)
+
+        rule_t  = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
+        gap     = (is_over ? mc.overbar_vertical_gap   : mc.underbar_vertical_gap)   / upm * scale
+
+        for b in tmp
+            push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
+        end
+
+        if is_over
+            # Rule bottom sits at body_top + gap; rule top = body_top + gap + rule_t.
+            rule_y = y0 + _boxes_top(tmp, upm) + gap
+        else
+            # Rule top sits at body_bottom − gap; rule.y (bottom edge) = body_bottom − gap − rule_t.
+            rule_y = y0 + _boxes_bottom(tmp, upm) - gap - rule_t
+        end
+        push!(boxes, LayoutBox(HRule(body_w, rule_t), x0, rule_y, scale))
+        return body_w
 
     else
         return 0.0   # NKText and unrecognised nodes: emit nothing

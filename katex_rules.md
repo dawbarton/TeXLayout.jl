@@ -51,9 +51,15 @@ rule height = defaultRuleThickness
 ```
 
 OpenType equivalent: `defaultRuleThickness` ≈ `FractionRuleThickness` from the
-MATH table.
+MATH table.  The OpenType MATH table provides purpose-built constants
+`OverbarVerticalGap` and `OverbarRuleThickness` that supersede the KaTeX
+formula.
 
-**Status:** Not implemented (`\overline` unrecognised).
+**Status — matches KaTeX.**
+- Body built in `cramp_style(style)` as required. ✓
+- Gap and rule thickness read from `OverbarVerticalGap` / `OverbarRuleThickness`
+  rather than the KaTeX `3 × defaultRuleThickness` heuristic. ✓
+- HRule emitted above the body with bottom edge at `body_top + gap`. ✓
 
 ---
 
@@ -68,7 +74,12 @@ gap = 3 × defaultRuleThickness   (between rule top and body bottom)
 rule height = defaultRuleThickness
 ```
 
-**Status:** Not implemented (`\underline` unrecognised).
+OpenType equivalents: `UnderbarVerticalGap` and `UnderbarRuleThickness`.
+
+**Status — matches KaTeX.**
+- Body built in the current (uncramped) style as required. ✓
+- Gap and rule thickness read from `UnderbarVerticalGap` / `UnderbarRuleThickness`. ✓
+- HRule emitted below the body with top edge at `body_bottom − gap`. ✓
 
 ---
 
