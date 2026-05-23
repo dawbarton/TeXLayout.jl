@@ -17,10 +17,11 @@
     NKSqrt          # \sqrt[degree]{body}
     NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
     NKAccent        # \hat, \bar, \vec, etc.
-    NKCommand       # unrecognised command or atom-producing command (\alpha, \int, …)
-    NKSpace         # explicit space token (\, \; \quad etc.)
-    NKText          # \text{…} — text-mode fragment
-    NKOperator      # named math operator rendered upright: \sin, \cos, \operatorname{…}
+    NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
+    NKSpace          # explicit space token (\, \; \quad etc.)
+    NKText           # \text{…} — text-mode fragment
+    NKOperator       # named math operator rendered upright: \sin, \cos, \operatorname{…}
+    NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
 end
 
 """
@@ -84,7 +85,7 @@ const _OPERATOR_NAMES = Set{String}([
     "sin", "cos", "tan", "cot", "sec", "csc",
     "arcsin", "arccos", "arctan",
     "ln", "log", "exp",
-    "lim", "sup", "inf", "max", "min",
+    "lim", "limsup", "liminf", "sup", "inf", "max", "min",
     "det", "dim", "ker", "deg", "gcd", "hom", "Pr", "arg",
 ])
 
@@ -211,6 +212,14 @@ function _parse_atom!(p::_Parser)::Node
     end
 
     base = _parse_primary!(p)
+
+    # Consume an explicit \limits or \nolimits modifier immediately after the primary,
+    # wrapping the base so the script branches can dispatch on it.
+    if _current(p).kind === TKCommand &&
+       (_current(p).value == "\\limits" || _current(p).value == "\\nolimits")
+        flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
+        base = Node(NKLimitsOverride, flag, [base])
+    end
 
     has_sup = false; has_sub = false
     sup_node = base;  sub_node = base  # placeholders

@@ -423,6 +423,33 @@ const _TIGHT_SPACINGS = Dict{Tuple{Symbol,Symbol},Float64}(
     (:inner, :op)  => _THIN,
 )
 
+# NKOperator names that use limits placement in Display style (\lim, \max, etc.).
+const _LIMITS_OPERATORS = Set{String}([
+    "lim", "limsup", "liminf",
+    "det", "gcd", "inf", "sup", "max", "min", "Pr",
+])
+
+# Unicode codepoints for all large-operator symbols rendered via NKCommand.
+# These are looked up by codepoint (not PS name) so the correct glyph is found.
+const _DISPLAY_OP_CODEPOINTS = Dict{String,UInt32}(
+    "sum"       => 0x2211,  "prod"      => 0x220F,  "coprod"    => 0x2210,
+    "int"       => 0x222B,  "iint"      => 0x222C,  "iiint"     => 0x222D,
+    "oint"      => 0x222E,
+    "bigcap"    => 0x22C2,  "bigcup"    => 0x22C3,
+    "bigsqcup"  => 0x2A06,  "bigsqcap"  => 0x2A05,
+    "bigwedge"  => 0x22C0,  "bigvee"    => 0x22C1,
+    "bigoplus"  => 0x2A01,  "bigotimes" => 0x2A02,
+    "bigodot"   => 0x2A00,  "biguplus"  => 0x2A04,
+)
+
+# Subset of _DISPLAY_OP_CODEPOINTS that also use limits placement in Display style.
+const _LIMITS_OP_COMMANDS = Set{String}([
+    "sum", "prod", "coprod",
+    "bigcap", "bigcup", "bigsqcup", "bigsqcap",
+    "bigwedge", "bigvee",
+    "bigoplus", "bigotimes", "bigodot", "biguplus",
+])
+
 # Return the TeX atom class for a given AST node.
 # Scripted nodes (NKSuperscript, NKSubscript, NKDecorated) inherit from their
 # base (first child).  Groups and sequences are treated as ordinary atoms.
@@ -446,6 +473,9 @@ function _atom_class(node::Node)::Symbol
     elseif k === NKSuperscript || k === NKSubscript || k === NKDecorated
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from base
+    elseif k === NKLimitsOverride
+        isempty(node.children) && return :ord
+        return _atom_class(node.children[1])   # inherit from wrapped base
     elseif k === NKSpace
         return :neutral   # explicit spaces reset the spacing context
     else
@@ -784,6 +814,25 @@ function _layout_delim!(
     return _place_glyph(chosen)
 end
 
+# ── Limits-placement helpers ─────────────────────────────────────────────────
+
+# Unwrap NKLimitsOverride to expose the actual operator node for layout.
+_limits_base(node::Node) = node.kind === NKLimitsOverride ? node.children[1] : node
+
+# Return true when the script children of a decorated atom should be placed above
+# and below the base (limits style) rather than beside it (side style).
+function _use_limits(base::Node, style::TexStyle)::Bool
+    base.kind === NKLimitsOverride && return base.value == "limits"
+    if base.kind === NKOperator
+        return base.value ∈ _LIMITS_OPERATORS && is_display(style)
+    end
+    if base.kind === NKCommand
+        name = startswith(base.value, "\\") ? base.value[2:end] : base.value
+        return name ∈ _LIMITS_OP_COMMANDS && is_display(style)
+    end
+    return false
+end
+
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
@@ -843,10 +892,41 @@ function _layout_node!(
     elseif node.kind === NKCommand
         cmd  = node.value   # e.g. "\\alpha"
         name = startswith(cmd, "\\") ? cmd[2:end] : cmd
-        g = _cmd_glyph(ctx, name)
-        g === nothing && return 0.0
-        push!(boxes, LayoutBox(g, x0, y0, scale))
-        return g.advance_width / upm * scale
+        if haskey(_DISPLAY_OP_CODEPOINTS, name)
+            # Large operator: resolve glyph by codepoint so the correct PS name
+            # (e.g. "summation") is used instead of the bare command name ("sum").
+            ps = glyph_name_by_codepoint(ctx.family, _DISPLAY_OP_CODEPOINTS[name])
+            isempty(ps) && return 0.0
+            # In Display style, pick the smallest vert_constructions variant that
+            # meets or exceeds display_operator_min_height (in design units).
+            chosen = ps
+            if is_display(style) && haskey(ctx.vert_constructions, ps)
+                min_h = Float64(mc.display_operator_min_height)
+                for v in ctx.vert_constructions[ps].variants
+                    if Float64(v.advance) >= min_h
+                        chosen = v.glyph_name
+                        break
+                    end
+                end
+            end
+            g = _cmd_glyph(ctx, chosen)
+            g === nothing && return 0.0
+            # Centre large operator on the math axis (same logic as _layout_delim!).
+            glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
+            y_op = y0 + (mc.axis_height / upm - glyph_center) * scale
+            push!(boxes, LayoutBox(g, x0, y_op, scale))
+            return g.advance_width / upm * scale
+        else
+            g = _cmd_glyph(ctx, name)
+            g === nothing && return 0.0
+            push!(boxes, LayoutBox(g, x0, y0, scale))
+            return g.advance_width / upm * scale
+        end
+
+    elseif node.kind === NKLimitsOverride
+        # \limits / \nolimits override node: lay out the wrapped base normally.
+        # The script placement decision (limits vs. side) is made in the script branches.
+        return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
 
     elseif node.kind === NKOperator
         # Render each character of the operator name upright (roman).
@@ -870,35 +950,102 @@ function _layout_node!(
 
     elseif node.kind === NKSuperscript
         base, sup = node.children[1], node.children[2]
-        base_adv  = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
-        sup_s     = sup_style(style)
-        sup_scale = size_scale(sup_s, mc)
-        shift_up  = is_cramped(style) ?
-            mc.superscript_shift_up_cramped / upm * scale :
-            mc.superscript_shift_up / upm * scale
-        sup_adv   = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y0 + shift_up, sup_scale, boxes)
-        return base_adv + sup_adv + mc.space_after_script / upm * scale
+        sup_s     = sup_style(style);  sup_scale = size_scale(sup_s, mc)
+        if _use_limits(base, style)
+            # Limits placement: sup centred above base.
+            tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
+            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+            sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+            base_top = _boxes_top(tmp_base, upm)
+            s = scale / upm
+            y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+                        y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
+            total_w = max(base_w, sup_w)
+            Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
+            for b in tmp_base
+                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
+            end
+            for b in tmp_sup
+                push!(boxes, LayoutBox(b.element, x0 + Δsup + b.x, y_sup + b.y, b.scale))
+            end
+            return total_w
+        else
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            shift_up = is_cramped(style) ?
+                mc.superscript_shift_up_cramped / upm * scale :
+                mc.superscript_shift_up / upm * scale
+            sup_adv  = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y0 + shift_up, sup_scale, boxes)
+            return base_adv + sup_adv + mc.space_after_script / upm * scale
+        end
 
     elseif node.kind === NKSubscript
         base, sub = node.children[1], node.children[2]
-        base_adv  = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
-        sub_s     = sub_style(style)
-        sub_scale = size_scale(sub_s, mc)
-        shift_dn  = mc.subscript_shift_down / upm * scale
-        sub_adv   = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y0 - shift_dn, sub_scale, boxes)
-        return base_adv + sub_adv + mc.space_after_script / upm * scale
+        sub_s     = sub_style(style);  sub_scale = size_scale(sub_s, mc)
+        if _use_limits(base, style)
+            # Limits placement: sub centred below base.
+            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
+            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+            sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+            base_bot = _boxes_bottom(tmp_base, upm)
+            s = scale / upm
+            y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+                        y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+            total_w = max(base_w, sub_w)
+            Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
+            for b in tmp_base
+                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
+            end
+            for b in tmp_sub
+                push!(boxes, LayoutBox(b.element, x0 + Δsub + b.x, y_sub + b.y, b.scale))
+            end
+            return total_w
+        else
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            shift_dn = mc.subscript_shift_down / upm * scale
+            sub_adv  = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y0 - shift_dn, sub_scale, boxes)
+            return base_adv + sub_adv + mc.space_after_script / upm * scale
+        end
 
     elseif node.kind === NKDecorated
         base, sub, sup = node.children[1], node.children[2], node.children[3]
-        base_adv  = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
-        script_x  = x0 + base_adv
         sub_s = sub_style(style);  sub_scale = size_scale(sub_s, mc)
         sup_s = sup_style(style);  sup_scale = size_scale(sup_s, mc)
-        sub_adv = _layout_node!(sub, ctx, sub_s, script_x,
-                                y0 - mc.subscript_shift_down / upm * scale, sub_scale, boxes)
-        sup_adv = _layout_node!(sup, ctx, sup_s, script_x,
-                                y0 + mc.superscript_shift_up / upm * scale, sup_scale, boxes)
-        return base_adv + max(sub_adv, sup_adv) + mc.space_after_script / upm * scale
+        if _use_limits(base, style)
+            # Limits placement: sub centred below, sup centred above.
+            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
+            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+            sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+            sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+            base_top = _boxes_top(tmp_base, upm)
+            base_bot = _boxes_bottom(tmp_base, upm)
+            s = scale / upm
+            y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+                        y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
+            y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+                        y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+            total_w = max(base_w, sub_w, sup_w)
+            Δbase = (total_w - base_w) / 2
+            Δsub  = (total_w - sub_w)  / 2
+            Δsup  = (total_w - sup_w)  / 2
+            for b in tmp_base
+                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
+            end
+            for b in tmp_sub
+                push!(boxes, LayoutBox(b.element, x0 + Δsub + b.x, y_sub + b.y, b.scale))
+            end
+            for b in tmp_sup
+                push!(boxes, LayoutBox(b.element, x0 + Δsup + b.x, y_sup + b.y, b.scale))
+            end
+            return total_w
+        else
+            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+            script_x = x0 + base_adv
+            sub_adv = _layout_node!(sub, ctx, sub_s, script_x,
+                                    y0 - mc.subscript_shift_down / upm * scale, sub_scale, boxes)
+            sup_adv = _layout_node!(sup, ctx, sup_s, script_x,
+                                    y0 + mc.superscript_shift_up / upm * scale, sup_scale, boxes)
+            return base_adv + max(sub_adv, sup_adv) + mc.space_after_script / upm * scale
+        end
 
     elseif node.kind === NKFrac
         num_node, den_node = node.children[1], node.children[2]
