@@ -199,4 +199,34 @@
         @test parse(Float64, sp.value) ≈ 2.0
     end
 
+    @testset "\\left(…\\right) stores glyph names in value" begin
+        node  = parse_latex("\\left( x \\right)")
+        delim = node.children[1]
+        @test delim.kind === NKDelimited
+        parts = split(delim.value, "\x00", limit=2)
+        @test parts[1] == "parenleft"
+        @test parts[2] == "parenright"
+        # \right is consumed — only x remains as an inner child
+        @test all(c.kind !== NKCommand || c.value != "\\right" for c in delim.children)
+        @test any(c -> c.kind === NKChar && c.value == "x", delim.children)
+    end
+
+    @testset "\\left.…\\right) null left delimiter" begin
+        node  = parse_latex("\\left. x \\right)")
+        delim = node.children[1]
+        @test delim.kind === NKDelimited
+        parts = split(delim.value, "\x00", limit=2)
+        @test parts[1] == ""          # null delimiter maps to empty string
+        @test parts[2] == "parenright"
+    end
+
+    @testset "\\left\\{…\\right\\} brace delimiters" begin
+        node  = parse_latex("\\left\\{ x \\right\\}")
+        delim = node.children[1]
+        @test delim.kind === NKDelimited
+        parts = split(delim.value, "\x00", limit=2)
+        @test parts[1] == "braceleft"
+        @test parts[2] == "braceright"
+    end
+
 end

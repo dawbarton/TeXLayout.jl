@@ -201,4 +201,48 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test b_x_spaced > b_x_plain
     end
 
+    @testset "\\left(x\\right): three glyphs, left delim at x=0" begin
+        # \left( x \right) should produce: parenleft, x, parenright (3 glyphs).
+        boxes  = layout(parse_latex("\\left( x \\right)"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 3
+        # Left delimiter is placed at x=0 (the formula origin).
+        @test glyphs[1].x ≈ 0.0
+        # Glyphs are ordered left to right.
+        @test glyphs[1].x < glyphs[2].x < glyphs[3].x
+    end
+
+    @testset "\\left( x \\right): delimiters centred on math axis" begin
+        # Delimiter ink centre (y_min+y_max)/2 should equal the math axis height.
+        boxes  = layout(parse_latex("\\left( x \\right)"), family, Text)
+        glyphs = find_glyphs(boxes)
+        axis_em = mt.constants.axis_height / FONT_UPM
+        for i in [1, 3]   # left and right delimiter glyphs
+            g = glyphs[i].element
+            glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * glyphs[i].scale
+            delim_center = glyphs[i].y + glyph_center
+            @test delim_center ≈ axis_em  atol=1e-6
+        end
+    end
+
+    @testset "\\left( \\frac{a}{b} \\right): delimiter larger than plain parens" begin
+        # Fractions are taller than a single character, so \left( should scale up.
+        boxes_frac  = layout(parse_latex("\\left( \\frac{a}{b} \\right)"), family, Text)
+        boxes_plain = layout(parse_latex("\\left( x \\right)"), family, Text)
+        glyphs_frac  = find_glyphs(boxes_frac)
+        glyphs_plain = find_glyphs(boxes_plain)
+        # The glyph height (y_max - y_min) of the left delimiter in the frac case
+        # must be strictly greater than in the plain case.
+        height(b) = b.element.y_max - b.element.y_min
+        @test height(glyphs_frac[1]) > height(glyphs_plain[1])
+    end
+
+    @testset "\\left. (null delimiter) places no glyph on the left" begin
+        # Null delimiter "." produces no rendered glyph on the left.
+        boxes_null  = layout(parse_latex("\\left. x \\right)"), family, Text)
+        boxes_paren = layout(parse_latex("\\left( x \\right)"), family, Text)
+        # null version has one fewer glyph (no left delimiter)
+        @test length(find_glyphs(boxes_null)) == length(find_glyphs(boxes_paren)) - 1
+    end
+
 end

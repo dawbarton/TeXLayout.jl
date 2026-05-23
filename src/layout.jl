@@ -61,6 +61,7 @@ struct _LayoutCtx
     family::FontFamily
     mc::MathConstants
     upm::Float64
+    vert_constructions::Dict{String,GlyphConstruction}
 end
 
 # Return a Glyph for a Unicode character.
@@ -114,6 +115,36 @@ function _boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64
         end
     end
     return top
+end
+
+# Minimum y-extent (bottom of the ink) of all Glyph boxes, in em units.
+function _boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64
+    bot = 0.0
+    for b in boxes
+        if b.element isa Glyph
+            bot = min(bot, b.y + b.element.y_min / upm * b.scale)
+        end
+    end
+    return bot
+end
+
+# Return the PS glyph name of the smallest size variant whose vertical advance
+# (in design units) is at least `required_du`.  Falls back to the largest
+# variant if none is large enough.  Returns `glyph_name` unchanged when there
+# is no construction entry for it (i.e. use the base glyph as-is).
+function _pick_delim_variant(
+    ctx::_LayoutCtx,
+    glyph_name::String,
+    required_du::Float64,
+)::String
+    isempty(glyph_name) && return ""
+    haskey(ctx.vert_constructions, glyph_name) || return glyph_name
+    variants = ctx.vert_constructions[glyph_name].variants
+    isempty(variants) && return glyph_name
+    for v in variants
+        Float64(v.advance) >= required_du && return v.glyph_name
+    end
+    return last(variants).glyph_name   # largest available
 end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
@@ -254,12 +285,72 @@ function _layout_node!(
         return body_w
 
     elseif node.kind === NKDelimited
-        # \left…\right: lay out the inner sequence (delimiters not yet sized).
+        # \left…\right: size delimiters to the inner content, centred on the math axis.
+        # node.value encodes "left_ps_name\x00right_ps_name".
+        sep        = findfirst('\x00', node.value)
+        left_name  = sep === nothing ? node.value : node.value[1:sep-1]
+        right_name = sep === nothing ? ""          : node.value[sep+1:end]
+
+        # Lay out inner content in a scratch buffer to measure its vertical extent.
+        tmp    = LayoutBox[]
         cursor = x0
         for child in node.children
-            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, boxes)
+            cursor += _layout_node!(child, ctx, style, cursor, y0, scale, tmp)
         end
-        return cursor - x0
+        content_w = cursor - x0
+
+        # Vertical extent of the inner content (in em units relative to y0).
+        content_top = _boxes_top(tmp, upm)
+        content_bot = _boxes_bottom(tmp, upm)
+        # Ensure a sensible non-zero span when content has no glyph ink.
+        content_top = max(content_top, y0 + mc.axis_height / upm * scale)
+        content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
+
+        # Required delimiter advance: sized so the delimiter covers the content
+        # symmetrically around the math axis.
+        axis_em     = y0 + mc.axis_height / upm * scale
+        h_above     = max(0.0, content_top - axis_em)
+        h_below     = max(0.0, axis_em - content_bot)
+        required_em = 2.0 * max(h_above, h_below)
+        # Convert to design units (the GlyphVariant advance is in unscaled design units).
+        required_du = required_em / scale * upm
+
+        # Select the appropriate size variant for each delimiter.
+        left_variant  = _pick_delim_variant(ctx, left_name,  required_du)
+        right_variant = _pick_delim_variant(ctx, right_name, required_du)
+
+        # Place left delimiter centred on math axis.
+        left_w = 0.0
+        if !isempty(left_variant)
+            g = _cmd_glyph(ctx, left_variant)
+            if g !== nothing
+                # Shift glyph baseline so its ink centre aligns with the math axis.
+                glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
+                y_del = y0 + (mc.axis_height / upm - glyph_center) * scale
+                push!(boxes, LayoutBox(g, x0, y_del, scale))
+                left_w = g.advance_width / upm * scale
+            end
+        end
+
+        # Shift inner content to sit after the left delimiter.
+        inner_x = x0 + left_w
+        for b in tmp
+            push!(boxes, LayoutBox(b.element, inner_x + (b.x - x0), b.y, b.scale))
+        end
+
+        # Place right delimiter centred on math axis.
+        right_w = 0.0
+        if !isempty(right_variant)
+            g = _cmd_glyph(ctx, right_variant)
+            if g !== nothing
+                glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
+                y_del = y0 + (mc.axis_height / upm - glyph_center) * scale
+                push!(boxes, LayoutBox(g, inner_x + content_w, y_del, scale))
+                right_w = g.advance_width / upm * scale
+            end
+        end
+
+        return left_w + content_w + right_w
 
     elseif node.kind === NKAccent
         # Lay out the base; the accent mark is not yet implemented.
@@ -281,7 +372,7 @@ Returns a flat list of positioned elements.
 """
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
-    ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm))
+    ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes

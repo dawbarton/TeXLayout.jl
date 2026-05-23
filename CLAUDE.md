@@ -93,8 +93,11 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     source order).
   - `NKFrac` — children `[numerator, denominator]`.
   - `NKSqrt` — children `[body]` or `[degree, body]`.
-  - `NKDelimited` — children are the interior sequence; `\right` is currently consumed as
-    an `NKCommand` child (known limitation — delimiter auto-sizing not yet implemented).
+  - `NKDelimited` — children are the interior sequence (no `\right` node); `value` encodes
+    the PostScript glyph names of the left and right delimiters separated by `\x00`
+    (e.g. `"parenleft\x00parenright"`).  An empty substring means a null delimiter (no glyph
+    rendered).  The layout engine looks up `vert_constructions` from the MATH table to pick
+    the smallest variant tall enough to cover the inner content, centred on the math axis.
 
 ### `TexStyle` (`style.jl`)
 Eight styles: `Display`, `CrampedDisplay`, `Text`, `CrampedText`, `Script`,
@@ -123,6 +126,8 @@ driven by `MathConstants.script_percent_scale_down` and
   formula baseline.
 - Element subtypes: `Glyph` (name + cached metrics), `HRule` (width + thickness),
   `VRule`, `Space`.
+- `_LayoutCtx` carries `family`, `mc` (MathConstants), `upm`, and `vert_constructions`
+  (from the MATH table) so the `NKDelimited` branch can look up delimiter variants.
 
 ### `MathConstants` (`math_table.jl`)
 Parsed directly from the font's OpenType MATH table.  All constants are in design units;
@@ -168,9 +173,10 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
   (op/ord/bin/rel/…).  Requires classifying each node and looking up the spacing table.
   Explicit spacing commands (`\,` `\:` `\;` `\!` `\quad` `\qquad` `\kern` etc.) are
   already implemented; only the *automatic* inter-atom spacing remains.
-- **Delimiter sizing** — `\left`/`\right` delimiters are not yet scaled to the height of
-  the enclosed content.  The MATH table `GlyphConstruction` records provide the variant
-  glyph sequences needed.
+- **Delimiter sizing** — implemented: `\left`/`\right` delimiters are auto-sized using the
+  `vert_constructions` records from the OpenType MATH table and centred on the math axis.
+  Extensible assemblies (for very large delimiters exceeding the largest pre-built variant)
+  are not yet used.
 - **Accents** — `NKAccent` is parsed and represented in the AST but the layout engine
   emits only the base (accent mark not rendered).
 - **Font switching** — `\mathbf`, `\mathrm`, `\mathbb`, `\mathit`, `\mathcal` etc. are

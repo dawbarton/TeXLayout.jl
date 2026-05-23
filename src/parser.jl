@@ -15,7 +15,7 @@
     NKDecorated     # base with both sub and sup: x_i^2
     NKFrac          # \frac{num}{den}
     NKSqrt          # \sqrt[degree]{body}
-    NKDelimited     # \left…\right pair
+    NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
     NKAccent        # \hat, \bar, \vec, etc.
     NKCommand       # unrecognised command or atom-producing command (\alpha, \int, …)
     NKSpace         # explicit space token (\, \; \quad etc.)
@@ -55,6 +55,28 @@ const _SPACE_WIDTHS = Dict{String,Float64}(
     "\\enspace"       =>  0.5,
     "\\quad"          =>  1.0,
     "\\qquad"         =>  2.0,
+)
+
+# Mapping from delimiter token text to OpenType PostScript glyph name.
+# The "." null delimiter (e.g. \left. or \right.) maps to an empty string.
+const _DELIM_GLYPH_NAMES = Dict{String,String}(
+    "("          => "parenleft",
+    ")"          => "parenright",
+    "["          => "bracketleft",
+    "]"          => "bracketright",
+    "\\{"        => "braceleft",
+    "\\}"        => "braceright",
+    "|"          => "bar",
+    "\\|"        => "dblverticalbar",
+    "/"          => "slash",
+    "\\backslash" => "backslash",
+    "\\langle"   => "angleleft",
+    "\\rangle"   => "angleright",
+    "\\lfloor"   => "uni230A",
+    "\\rfloor"   => "uni230B",
+    "\\lceil"    => "uni2308",
+    "\\rceil"    => "uni2309",
+    "."          => "",   # null delimiter — renders nothing
 )
 
 # Standard named math operators rendered as upright multi-character strings.
@@ -124,6 +146,27 @@ end
 
 @inline _current(p::_Parser) = p.tokens[p.pos]
 @inline _advance!(p::_Parser) = (t = p.tokens[p.pos]; p.pos += 1; t)
+
+# Consume the delimiter token following \left or \right and return its PS glyph
+# name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
+function _parse_delim_name!(p::_Parser)::String
+    _current(p).kind === TKEOF && return ""
+    tok = _advance!(p)
+    return get(_DELIM_GLYPH_NAMES, tok.value, "")
+end
+
+# Parse atoms until \right, '}' or EOF.  The \right token is left unconsumed so
+# that the caller can record the right-delimiter glyph name.
+function _parse_delimited_children!(p::_Parser)::Vector{Node}
+    children = Node[]
+    while true
+        k = _current(p).kind
+        (k === TKEOF || k === TKRBrace) && break
+        k === TKCommand && _current(p).value == "\\right" && break
+        push!(children, _parse_atom!(p))
+    end
+    return children
+end
 
 # Consume one argument for a command (e.g. \frac numerator).
 # A braced group is parsed as its interior sequence; single elements are
@@ -270,14 +313,16 @@ function _parse_command!(p::_Parser)::Node
 
     elseif cmd == "\\left"
         # \left<delim> … \right<delim>
-        _current(p).kind !== TKEOF && _advance!(p)  # delimiter token
-        inner = _parse_sequence_children!(p)
-        # Consume \right and its delimiter.
+        # Consume left delimiter and record its PS glyph name.
+        left_name = _parse_delim_name!(p)
+        inner = _parse_delimited_children!(p)
+        # Consume \right and record the right delimiter's PS glyph name.
+        right_name = ""
         if _current(p).kind === TKCommand && _current(p).value == "\\right"
             _advance!(p)
-            _current(p).kind !== TKEOF && _advance!(p)
+            right_name = _parse_delim_name!(p)
         end
-        return Node(NKDelimited, inner)
+        return Node(NKDelimited, "$(left_name)\x00$(right_name)", inner)
 
     elseif cmd == "\\operatorname"
         arg = _parse_argument!(p)

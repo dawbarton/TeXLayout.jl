@@ -226,14 +226,16 @@ end
     end
 
     @testset "left-right produces NKDelimited" begin
-        # \left( x \right): top-level child is NKDelimited containing at least
-        # an NKChar("x").  (\right and ) appear in inner children in the current
-        # implementation because _parse_sequence_children! does not stop at
-        # \right; this is a known limitation.)
+        # \left( x \right): top-level child is NKDelimited.  The value field
+        # encodes the delimiter glyph names; inner children contain only the
+        # interior content (no \right command node).
         node  = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NKDelimited
         @test any(c -> c.kind === NKChar && c.value == "x", delim.children)
+        parts = split(delim.value, "\x00", limit=2)
+        @test parts[1] == "parenleft"
+        @test parts[2] == "parenright"
     end
 
 end
