@@ -57,19 +57,35 @@ end
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 # Immutable context shared across all recursive layout calls.
+# `mode` is either :math (default) or :text (inside \text{…}/\mbox{…}).
+# Math-mode character remapping and automatic inter-atom spacing are suppressed
+# in text mode.
 struct _LayoutCtx
     family::FontFamily
     mc::MathConstants
     upm::Float64
     vert_constructions::Dict{String,GlyphConstruction}
     min_connector_overlap::Int
+    mode::Symbol   # :math | :text
 end
 
+# Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
+# glyph.  Applied only in :math mode; text mode uses the literal codepoint.
+const _MATH_CHAR_REMAP = Dict{Char,Char}(
+    '-' => '−',   # U+002D HYPHEN-MINUS  → U+2212 MINUS SIGN
+    '*' => '∗',   # U+002A ASTERISK      → U+2217 ASTERISK OPERATOR
+)
+
 # Return a Glyph for a Unicode character.
-# For ASCII letters, prefer the PostScript name lookup (more reliable in math
-# fonts where the italic variant carries the same single-letter name).  Fall
-# back to codepoint lookup for digits and other characters.
+# In math mode, certain ASCII characters are remapped to their correct math
+# Unicode equivalents before the glyph lookup (e.g. '-' → U+2212).
+# For letters, prefer the PostScript name lookup (more reliable in math fonts
+# where the italic variant carries the same single-letter name).  Fall back to
+# codepoint lookup for digits and other characters.
 function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
+    if ctx.mode === :math
+        ch = get(_MATH_CHAR_REMAP, ch, ch)
+    end
     if isletter(ch)
         try
             m = glyph_metrics(ctx.family, string(ch))
@@ -612,7 +628,7 @@ Returns a flat list of positioned elements.
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
     mt  = load_math_table(family.math)
     ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-                     mt.min_connector_overlap)
+                     mt.min_connector_overlap, :math)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes
