@@ -29,3 +29,6 @@ JuliaLocalPreferences.toml
 
 # External references
 external/
+
+# Render artefacts
+*.png
