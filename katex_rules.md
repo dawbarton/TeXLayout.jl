@@ -91,13 +91,12 @@ rule height = defaultRuleThickness
    than leaving it all below, preventing an oversized hook for small radicands.
 5. Position the radical so its rule arm aligns with `body.top + lineClearance`.
 
-**Status — partial deviation.**
-- Gap adjustment (step 4) implemented in commit `8d9ac39`. ✓
+**Status — matches KaTeX.**
+- Gap adjustment (step 4) implemented. ✓
 - Step 2 uses `radical_vertical_gap` / `radical_display_style_vertical_gap` from
   the OpenType MATH table instead of the KaTeX formula; these are purpose-built
   constants that subsume the `ruleThickness + phi/4` calculation. ✓
-- **Bug:** body is rendered in the current style, not the cramped style (step 1).
-  Should call `_layout_node!(body_node, ctx, cramp_style(style), …)`.
+- Body is built in `cramp_style(style)` as required. ✓
 
 ---
 
@@ -170,9 +169,11 @@ subShift = base.depth  + subDrop × script_size_multiplier
 `supDrop` (σ₁₈) and `subDrop` (σ₁₉) are the OpenType constants
 `SuperscriptBaselineDropMax` and `SubscriptBaselineDropMin`.
 
-**Status — partial deviation.**  Formatic.jl applies the supDrop/subDrop clamp
-only for `_is_large_op` bases in Display style.  KaTeX applies it to any
-non-character box (fractions, grouped expressions, etc.).
+**Status — matches KaTeX.**  The `_is_char_box` helper mirrors KaTeX's
+`isCharacterBox`: true for `NKChar`, for `NKCommand` nodes that are not large
+operators (Greek letters, etc.), and recursively for `NKFontSwitch` wrapping a
+single character.  Large operators (`\int`, `\sum`, …), named operators (`\sin`,
+…), fractions, and groups all return false, triggering the supDrop/subDrop clamp.
 
 ### 18b — Subscript only
 
@@ -182,9 +183,8 @@ subShift = max(subShift, sub1, subm.height − 0.8 × xHeight)
 
 `sub1` → `SubscriptShiftDown`.
 
-**Status — deviation.**  Formatic.jl uses only `max(subShift, subscript_shift_down)`;
-the third term `subm.height − 0.8 × xHeight` (which prevents the subscript top
-from rising too far above the x-height) is missing.
+**Status — matches KaTeX.**  All three terms are applied using the OpenType
+constant `SubscriptTopMax` in place of `0.8 × xHeight`. ✓
 
 ### 18c — Superscript only
 
@@ -197,13 +197,14 @@ supShift = max(supShift, minSupShift, supm.depth + 0.25 × xHeight)
 - Cramped style: `sup3` (`SuperscriptShiftUpCramped`)
 - Otherwise: `sup2` (`SuperscriptShiftUp`)
 
-**Status — two deviations.**
-1. The `supm.depth + 0.25 × xHeight` clamp (preventing the superscript bottom
-   from sinking too close to the baseline) is missing.
+**Status — one deviation (structural).**
+1. The `supm.depth + 0.25 × xHeight` clamp is implemented using the OpenType
+   constant `SuperscriptBottomMin`. ✓
 2. KaTeX uses three minSupShift cases; Formatic.jl uses two (cramped vs
    not-cramped), matching the two OpenType constants available.  The Display
    case (`sup1`) has no OpenType equivalent — the font designer is expected to
-   encode the appropriate value in `SuperscriptShiftUp`.
+   encode the appropriate value in `SuperscriptShiftUp`.  This structural
+   difference is intentional and not treated as a bug.
 
 ### 18d — Superscript only (covered by 18c in KaTeX)
 
@@ -225,10 +226,9 @@ if (supShift − supm.depth) − (subm.height − subShift) < maxWidth:
         subShift -= psi
 ```
 
-**Status — not implemented.**  The `NKDecorated` branch in Formatic.jl applies
-the 18a supDrop/subDrop clamp for large operators but does not enforce the
-minimum gap between the superscript bottom and the subscript top, nor the psi
-redistribution.
+**Status — matches KaTeX.**  The gap clamp and psi redistribution are
+implemented using OpenType constants `SubSuperscriptGapMin` (min gap) and
+`SuperscriptBottomMaxWithSubscript` (psi threshold). ✓
 
 ---
 

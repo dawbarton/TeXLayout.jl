@@ -976,6 +976,20 @@ function _is_large_op(node::Node)::Bool
     return haskey(_DISPLAY_OP_CODEPOINTS, name)
 end
 
+# Return true when `node` renders as a single character glyph (KaTeX isCharacterBox).
+# TeX Rules 18a–e apply supDrop/subDrop clamps only to non-character bases such as
+# fractions, delimited expressions, and multi-child groups.
+function _is_char_box(node::Node)::Bool
+    n = node.kind === NKLimitsOverride ? node.children[1] : node
+    n.kind === NKChar && return true
+    n.kind === NKOperator && return false  # named operators (e.g. \sin) are not char boxes
+    n.kind === NKCommand && return !_is_large_op(n)  # large ops are not char boxes
+    if n.kind === NKFontSwitch && length(n.children) == 1
+        return _is_char_box(n.children[1])
+    end
+    return false
+end
+
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
@@ -1138,19 +1152,24 @@ function _layout_node!(
             end
             return total_w
         else
-            tmp_base = LayoutBox[]
+            tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
             base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
             append!(boxes, tmp_base)
-            shift_up = is_cramped(style) ?
-                mc.superscript_shift_up_cramped / upm * scale :
-                mc.superscript_shift_up / upm * scale
-            # For large operators (e.g. \int) in Display style, apply TeX Rule 18:
-            # the superscript baseline must not drop below base_top − supDrop, where
-            # supDrop = SuperscriptBaselineDropMax (OpenType equivalent of σ₁₈).
-            y_sup = _is_large_op(base) && is_display(style) ?
-                max(y0 + shift_up, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max / upm * scale) : y0 + shift_up
-            sup_adv  = _layout_node!(sup, ctx, sup_s, x0 + base_adv, y_sup, sup_scale, boxes)
-            return base_adv + sup_adv + mc.space_after_script / upm * scale
+            s = scale / upm
+            min_sup = is_cramped(style) ?
+                mc.superscript_shift_up_cramped * s :
+                mc.superscript_shift_up * s
+            # Rule 18a: for non-character bases (fractions, groups, …) the superscript
+            # baseline must not drop below base_top − supDrop (SuperscriptBaselineDropMax).
+            y_sup = _is_char_box(base) ? y0 + min_sup :
+                max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
+            # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
+            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
+            for b in tmp_sup
+                push!(boxes, LayoutBox(b.element, x0 + base_adv + b.x, y_sup + b.y, b.scale))
+            end
+            return base_adv + sup_adv + mc.space_after_script * s
         end
 
     elseif node.kind === NKSubscript
@@ -1175,17 +1194,22 @@ function _layout_node!(
             end
             return total_w
         else
-            tmp_base = LayoutBox[]
+            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
             base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
             append!(boxes, tmp_base)
-            shift_dn = mc.subscript_shift_down / upm * scale
-            # For large operators in Display style, apply TeX Rule 18: the subscript
-            # baseline must not rise above base_bottom + subDrop, where subDrop =
-            # SubscriptBaselineDropMin (OpenType equivalent of σ₁₉).
-            y_sub = _is_large_op(base) && is_display(style) ?
-                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm) + mc.subscript_baseline_drop_min / upm * scale) : y0 - shift_dn
-            sub_adv  = _layout_node!(sub, ctx, sub_s, x0 + base_adv, y_sub, sub_scale, boxes)
-            return base_adv + sub_adv + mc.space_after_script / upm * scale
+            s = scale / upm
+            min_sub = mc.subscript_shift_down * s
+            # Rule 18a: for non-character bases the subscript baseline must be placed
+            # no higher than base_bottom − subDrop (SubscriptBaselineDropMin, σ₁₉).
+            y_sub = _is_char_box(base) ? y0 - min_sub :
+                min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
+            # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
+            y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
+            for b in tmp_sub
+                push!(boxes, LayoutBox(b.element, x0 + base_adv + b.x, y_sub + b.y, b.scale))
+            end
+            return base_adv + sub_adv + mc.space_after_script * s
         end
 
     elseif node.kind === NKDecorated
@@ -1220,25 +1244,48 @@ function _layout_node!(
             end
             return total_w
         else
-            tmp_base = LayoutBox[]
+            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
             base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+            sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+            sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
             append!(boxes, tmp_base)
             script_x = x0 + base_adv
-            shift_up = is_cramped(style) ?
-                mc.superscript_shift_up_cramped / upm * scale :
-                mc.superscript_shift_up / upm * scale
-            shift_dn = mc.subscript_shift_down / upm * scale
-            # For large operators in Display style, apply TeX Rule 18 (σ₁₈/σ₁₉):
-            # scripts may not fall within base_top − supDrop .. base_bottom + subDrop.
-            y_sup, y_sub = if _is_large_op(base) && is_display(style)
-                max(y0 + shift_up, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max / upm * scale),
-                min(y0 - shift_dn, _boxes_bottom(tmp_base, upm) + mc.subscript_baseline_drop_min / upm * scale)
-            else
-                y0 + shift_up, y0 - shift_dn
+            s = scale / upm
+            min_sup = is_cramped(style) ?
+                mc.superscript_shift_up_cramped * s :
+                mc.superscript_shift_up * s
+            min_sub = mc.subscript_shift_down * s
+            # Rule 18a: for non-character bases apply supDrop/subDrop clamps (σ₁₈/σ₁₉).
+            y_sup = _is_char_box(base) ? y0 + min_sup :
+                max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
+            y_sub = _is_char_box(base) ? y0 - min_sub :
+                min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
+            # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
+            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
+            # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
+            y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
+            # Rule 18e: enforce minimum gap between superscript bottom and subscript top.
+            sup_bot = y_sup + _boxes_bottom(tmp_sup, upm)
+            sub_top = y_sub + _boxes_top(tmp_sub, upm)
+            min_gap = mc.sub_superscript_gap_min * s
+            if sup_bot - sub_top < min_gap
+                y_sub = sup_bot - min_gap - _boxes_top(tmp_sub, upm)
+                # Psi redistribution: if the superscript bottom falls below
+                # SuperscriptBottomMaxWithSubscript, shift both scripts upward together
+                # so that it reaches exactly that threshold (gap remains min_gap).
+                psi = mc.superscript_bottom_max_with_subscript * s - sup_bot
+                if psi > 0.0
+                    y_sup += psi
+                    y_sub += psi
+                end
             end
-            sub_adv = _layout_node!(sub, ctx, sub_s, script_x, y_sub, sub_scale, boxes)
-            sup_adv = _layout_node!(sup, ctx, sup_s, script_x, y_sup, sup_scale, boxes)
-            return base_adv + max(sub_adv, sup_adv) + mc.space_after_script / upm * scale
+            for b in tmp_sub
+                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sub + b.y, b.scale))
+            end
+            for b in tmp_sup
+                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sup + b.y, b.scale))
+            end
+            return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
         end
 
     elseif node.kind === NKFrac
@@ -1297,7 +1344,9 @@ function _layout_node!(
         # \sqrt[degree]{body}: children are [body] or [degree, body].
         body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
         tmp = LayoutBox[]
-        body_w   = _layout_node!(body_node, ctx, style, 0.0, 0.0, scale, tmp)
+        # Rule 11: body is built in the cramped style (prevents superscripts inside
+        # the radicand from protruding above the rule bar).
+        body_w   = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
         body_top = _boxes_top(tmp, upm)
         body_bot = _boxes_bottom(tmp, upm)
 
