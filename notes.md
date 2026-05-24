@@ -151,3 +151,50 @@
   - Remaining PS-name use: `_construction_key` (bridging canonical AGL names to font-own MATH-table PS names for `vert_constructions`/`horiz_constructions`) — cannot be eliminated because the MATH table itself uses PS names.
 - **Multi-codepoint issue**: ~10 negated/variant commands (`\nleqslant`, `\lvertneqq`, `\varsubsetneq`, etc.) have no single Unicode codepoint — they're defined as base + U+0338 (COMBINING SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR). Math fonts don't encode these at a consistent single codepoint. Current state: produce blank space. Fix requires two-glyph overlay (base + combining stroke). Documented in CLAUDE.md Known Limitations.
 - **Next step**: bulk-expand `_SYMBOL_CODEPOINTS` (~140 clean additions), simplify `_char_glyph` and `_cmd_glyph` to codepoint-only paths.
+
+## 2026-05-24T18:36+00:00 Codepoint-only glyph resolution implemented
+
+- Completed the codepoint-only strategy (continued from earlier session):
+  - `_DISPLAY_OP_CODEPOINTS`: added `iiiint` (U+2A0C), `oiint` (U+222F), `oiiint` (U+2230).
+  - `_SYMBOL_CODEPOINTS`: added ~85 new entries — AMS binary operators (`\boxplus`, `\ltimes`, `\curlywedge`, etc.), extended relations (`\leqslant`, `\lesssim`, `\bowtie`, `\doteqdot`, `\Subset`, `\preccurlyeq`, etc.), negated relations with single codepoints (`\nleq`, `\nprec`, `\subsetneq`, etc.), ordinary symbols (`\measuredangle`, `\imath`, `\triangle`, `\checkmark`, `\mho`, `\Finv`, etc.), delimiter aliases (`\lvert`, `\lVert`, `\llbracket`, `\lgroup`, `\lmoustache`), and punctuation (`\colon`, `\cdotp`, `\ldotp`).
+  - `_char_glyph`: removed `isletter` PS-name-first block; now always resolves by codepoint. Fixes math-italic letter rendering (PS name "x" → upright roman; cmap U+0078 → italic by font design).
+  - `_layout_node!` NKCommand else-branch: replaced `_cmd_glyph` fallback with `nothing`; commands not in `_SYMBOL_CODEPOINTS` silently produce no glyph.
+  - `_cmd_glyph`: updated comment to document it is now used exclusively for MATH table font-internal names (size variants, assembly parts).
+- All 789 tests pass. Committed as `ddad75e`.
+- Remaining open items: two-glyph overlay for multi-codepoint negated relations; Makie integration; Schola/Termes/Bonum artifacts.
+
+## 2026-05-24T20:50+00:00 Three visual bug fixes: widehat centering, vmatrix bar, sqrt body position
+
+### Bug 1: Widehat/accent horizontal centering (two sites in `src/layout.jl`)
+
+- **Root cause**: `_layout_wide_accent!`'s `_place()` helper centred glyphs by `advance_width/2`. For zero-advance combining characters (e.g. New CM `circumflexcmb`: adv_w=0, x_min=-446, x_max=-82; STIX Two `uni0302`: adv_w=0, x_min=-371, x_max=-89), this placed the glyph at `x0 + base_w_em/2` but the ink lay entirely to the left of that position.
+- Same bug in the NKAccent fixed-size fallback (`accent_w = advance_width * s / upm`).
+- **Fix**: replace `advance_width/2` with ink midpoint `(x_min + x_max)/(2*upm)*scale`. For standard positive-advance glyphs (x_min≈0, x_max≈advance_width), the result is numerically identical to the old formula.
+- **FiraMath limitation**: FiraMath has no widehat/widetilde in `horiz_constructions` (only has entries for `uni23B4/B5` and `uni23DC–DF`). Falls back to a single fixed-size combining circumflex, now correctly centred.
+
+### Bug 2: Delimiter assembly vertical centering (`_layout_assembly!`)
+
+- **Root cause**: `_layout_assembly!` centred the stacked assembly on the math axis using `total_du/2` (half the sum of cursor advances). For STIX Two `bar` (y_min=−234, y_max=706, full_advance=941), the ink centre is at 0.236 em, not at 0.258 em (axis). The resulting bar was centred 0.23 em below the axis, making vmatrix bars appear too low relative to enclosed digits.
+- **Fix**: look up actual glyph metrics of the first and last assembly parts; compute actual ink bounds (`ink_top_du = cursor_last + g_last.y_max`, `ink_bot_du = g_first.y_min`); centre on `(ink_top_du + ink_bot_du)/2`. For fonts where y_min=0, y_max=full_advance (e.g. New CM), reduces to the old formula identically.
+- Note: STIX Two `bar` *does* have an assembly (1 extender + 1 end piece, both `full_advance=941`, min_overlap=100). For a 2×2 digit matrix the assembly uses n=2 extenders producing ~2523 du for a ~2216 du required span — adequate coverage.
+
+### Bug 3: Sqrt body vertical position (KaTeX Rule 11 body shift)
+
+- **Root cause**: when a pre-built radical variant is larger than the minimum required span, the body was placed at `y0` with all excess space appearing below it. This made `\sqrt{\pi}` show π crammed at the top of an oversized hook (visible in FiraMath demo).
+- **Fix**: after `_layout_radical!` selects the glyph, peek again with `_peek_radical_glyph(ctx, required_du)` to determine actual ink span `g.y_max - g.y_min`. Compute `body_shift = max(0, actual_span_du - required_du) / (2*upm) * scale`. Shift body boxes DOWN by `body_shift`. Rule bar and radical placement unchanged.
+- Result: excess space is split equally — `body_shift` extra clearance above body (between body top and rule bar) and `body_shift` space below body (between body bottom and hook tip). For assemblies, peek returns the last variant which has advance < required_du, so body_shift = 0 (no shift for assemblies). For the base glyph fallback, peek also returns without a matching variant, giving body_shift = 0.
+- All 789 tests pass. Committed as `24f2e7a`.
+
+## 2026-05-24T21:15+00:00 Widehat diagnosis and demo expression fix
+
+### Root cause of persisting "centering/width" complaint
+
+- **Centering was already correct** after the previous session's fix: numerical check shows `hat_center - base_center = 0.0` for all fonts and all tested expressions. The ink-midpoint formula `(x_min + x_max) / (2*upm) * scale` is exact for sized variants (x_min=0) and also correctly handles the zero-advance combining base glyph.
+- **Width was the real issue**: the demo expression `\widehat{f(x+y)}` has a base of ~3.5em, but the largest pre-built hat variants are: NewCM 1.897em, Pagella 1.499em, STIX Two 2.385em, Luciole 3.001em. **None of these fonts have a hat assembly** (horiz_constructions has `assembly=nothing` for all). The fallback to the largest variant produces a hat that covers only 53%–82% of the base, which is visually wrong.
+- **Fix**: changed demo expression from `\widehat{f(x+y)}` to `\widehat{xyz} + \widetilde{xyz}`. `xyz` has a base ~1.4–1.6em which fits within all fonts' hat variant sizes (ratios: NewCM 1.04, Pagella 1.04, STIX Two 1.24, Luciole 1.00). STIX Two has coarser variant spacing so the hat is 24% wider than the base — a font property, not a code bug.
+
+### Fira Math clarification
+
+- Fira Math has a **full Fira Sans companion** (regular, italic, bold, bold-italic all present in artifact). The font family IS complete.
+- Fira Math **lacks widehat/widetilde** in its MATH table horiz_constructions (only has overbrace/underbrace variants). `\widehat` always falls back to the fixed-size combining circumflex (uni0302, adv=0), correctly centred by the ink-midpoint formula.
+- Fira Math also **lacks calligraphic and fraktur** Unicode math alphabets — `\mathcal{H}` renders as upright H, `\mathfrak{g}` as regular g. Code is correct; this is a Fira Math v0.3.4 font limitation.

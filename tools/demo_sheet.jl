@@ -249,7 +249,7 @@ const DEMO_SECTIONS = [
     ],
     "ACCENTS & EXTENSIBLES" => [
         raw"\hat{x} + \vec{v} + \bar{y} + \dot{q}",
-        raw"\widehat{f(x+y)}",
+        raw"\widehat{xyz} + \widetilde{xyz}",
         raw"\overbrace{a_1+a_2+\cdots+a_n}^{n\text{ terms}}",
     ],
     "FONT VARIANTS" => [
