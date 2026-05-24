@@ -32,3 +32,6 @@ external/
 
 # Render artefacts
 *.png
+
+# macOS AppleDouble resource fork files
+._*

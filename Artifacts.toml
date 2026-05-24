@@ -11,6 +11,9 @@
 #   bolditalic.otf/.ttf
 #   LICENSE / OFL.txt / README.md  — font license files
 #
+# To add a new family: run tools/make_font_artifact.jl to build the tarball,
+# then add the git-tree-sha1 and sha256 values printed by that script here.
+#
 # Font family summary and licenses:
 #   NewCMMath — New Computer Modern (default; Computer-Modern style)
 #               GUST Font License (LPPL 1.3c)
@@ -22,6 +25,12 @@
 #               SIL OFL 1.1 (Reserved Font Name "TM Math")
 #   FiraMath  — Fira Math v0.3.4 + Fira Sans (sans-serif)
 #               SIL OFL 1.1 (both components)
+#   Schola    — TeX Gyre Schola Math (Century Schoolbook style)
+#               GUST Font License (LPPL 1.3c)
+#   Termes    — TeX Gyre Termes Math (Times New Roman style)
+#               GUST Font License (LPPL 1.3c)
+#   Bonum     — TeX Gyre Bonum Math (ITC Bookman style)
+#               GUST Font License (LPPL 1.3c)
 
 [NewCMMath]
 lazy = true

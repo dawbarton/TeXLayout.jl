@@ -28,7 +28,7 @@ units relative to the formula baseline, and a scale factor.
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
-- Five bundled font families, downloaded lazily via Julia Artifacts on first use.
+- Five bundled font families, downloaded lazily via Julia Artifacts on first use (three further TeX Gyre families pending artifact publication).
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NKCommand` leaf nodes that are silently skipped by the layout engine.
 
@@ -87,8 +87,7 @@ TeXLayout.jl draws heavily on the following prior work:
 
 ### Bundled fonts
 
-The five font families available via `font_family(:symbol)` are redistributed under their
-respective open licences.  Each tarball includes the relevant licence file.
+The five currently published font families (plus three pending; see `tools/prepare_font_artifacts.jl`) are redistributed under their respective open licences.  Each tarball includes the relevant licence file.
 
 | Symbol | Font | Authors | Licence |
 |:-------|:-----|:--------|:--------|
@@ -97,3 +96,6 @@ respective open licences.  Each tarball includes the relevant licence file.
 | `:luciole` | [Luciole](https://luciole-vision.com/) | Daniel Flipo and [typographies.fr](https://typographies.fr/), in collaboration with [Centre de Ressources Handicap Visuel](https://crhv.fr/) de Lyon; with support from DIPHE/Université Lumière Lyon 2, GUTenberg, Swiss Ceres Foundation, PEP69 | Math font: [SIL OFL 1.1](https://openfontlicense.org); text fonts: [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `:stix_two` | [STIX Two Math](https://github.com/stipub/stixfonts) v2.0.2 | The STIX Fonts Project Authors; STIX Fonts™ is a trademark of the [Institute of Electrical and Electronics Engineers](https://www.ieee.org/) | [SIL OFL 1.1](https://openfontlicense.org) (Reserved Font Name "TM Math") |
 | `:fira_math` | [Fira Math](https://github.com/firamath/firamath) v0.3.4 + [Fira Sans](https://github.com/mozilla/Fira) | Fira Math: Xiangdong Zeng; Fira Sans: Mozilla and Telefonica S.A. | [SIL OFL 1.1](https://openfontlicense.org) |
+| `:schola` *(pending)* | [TeX Gyre Schola Math](https://ctan.org/pkg/tex-gyre-math-schola) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:termes` *(pending)* | [TeX Gyre Termes Math](https://ctan.org/pkg/tex-gyre-math-termes) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:bonum` *(pending)* | [TeX Gyre Bonum Math](https://ctan.org/pkg/tex-gyre-math-bonum) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |

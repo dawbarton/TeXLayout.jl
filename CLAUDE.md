@@ -38,10 +38,12 @@ TeXLayout.jl/
 │   ├── test_layout.jl     # Tests for layout engine invariants
 │   └── test_katex.jl      # KaTeX-derived test suite (smoke, malformed, nested)
 ├── tools/
-│   ├── visualise_bitmap.jl  # Render one expression to PNG via FreeType (usage: julia tools/visualise_bitmap.jl "expr" out.png)
-│   ├── visualise_svg.jl     # Render bounding-box diagram to SVG (glyph boxes + reference lines; good for debugging metrics)
-│   ├── visualise_spacing.jl # Grid of expressions showing inter-atom spacing
-│   └── demo_features.jl     # Generate accents.png / overunder.png / binary_reclass.png feature panels
+│   ├── visualise_bitmap.jl       # Render one expression to PNG via FreeType (usage: julia tools/visualise_bitmap.jl "expr" out.png)
+│   ├── visualise_svg.jl          # Render bounding-box diagram to SVG (glyph boxes + reference lines; good for debugging metrics)
+│   ├── visualise_spacing.jl      # Grid of expressions showing inter-atom spacing
+│   ├── demo_features.jl          # Generate accents.png / overunder.png / binary_reclass.png feature panels
+│   ├── demo_sheet.jl             # Comprehensive single-page PNG demo for a font family (julia tools/demo_sheet.jl [:symbol|/path] [out.png])
+│   └── prepare_font_artifacts.jl # Build artifact tarballs + draft Artifacts.toml for all 8 font families
 ├── external/              # Source references (read-only; not part of the package)
 │   ├── KaTeX/             # Original KaTeX JS implementation
 │   ├── Makie.jl/          # Makie ecosystem packages
@@ -60,6 +62,8 @@ All tools in `tools/` activate the package's own project environment and require
 | `visualise_svg.jl` | Bounding-box diagram: each `LayoutBox` drawn as a coloured rectangle with glyph-name label, baseline and math-axis reference lines.  Best for debugging metric or positioning bugs. | `julia tools/visualise_svg.jl "expr" out.svg` |
 | `visualise_spacing.jl` | Multi-row grid of spacing test expressions with inter-atom gaps highlighted. | `julia tools/visualise_spacing.jl` |
 | `demo_features.jl` | Renders panels for accents, `\overline`/`\underline`, and binary reclassification (one PNG per feature) into a specified output directory. | `julia tools/demo_features.jl /path/to/output/` |
+| `demo_sheet.jl` | Comprehensive single-page PNG demo sheet showing all major layout features for a given font family. | `julia tools/demo_sheet.jl [:symbol\|/path/to/math.otf] [out.png]` |
+| `prepare_font_artifacts.jl` | Downloads fonts from CTAN/GitHub, builds Julia artifact tarballs and draft `Artifacts.toml` stanzas for all 8 font families.  Run once when adding new fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
 
 ---
 

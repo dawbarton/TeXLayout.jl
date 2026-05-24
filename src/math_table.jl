@@ -290,7 +290,8 @@ function _cff_top_dict_charset_offset(dict_bytes::Vector{UInt8})::Int
         elseif b == 29                 # int32
             v = (Int(dict_bytes[i+1]) << 24) | (Int(dict_bytes[i+2]) << 16) |
                 (Int(dict_bytes[i+3]) << 8)  |  Int(dict_bytes[i+4])
-            v >= 0x80000000 && (v -= 0x100000000)
+            # 0x100000000 is UInt64; subtract as Int to avoid UInt64 promotion.
+            v >= 0x80000000 && (v -= Int(0x100000000))
             push!(operands, v);  i += 5
         elseif b == 30                 # real — skip to 0xF end nibble
             i += 1
