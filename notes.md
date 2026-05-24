@@ -207,3 +207,10 @@
 - **Fix**: Added `_horiz_construction_key(ctx, uni_name)` — mirrors `_construction_key` for horiz_constructions. Resolves `"uni{HHHH}"` to font's actual PS name via `glyph_name_by_codepoint`; covers all six brace commands simultaneously.
 - **Defensive fix**: Extended `_cmd_glyph` with a second fallback path: if the name looks like `"uni{HHHH}"`, parse the codepoint and resolve via `glyph_name_by_codepoint`. This handles the symmetric case where future code might pass a Unicode-style name to a font using AGL naming.
 - **Audit result**: No other unhandled PS name vs codepoint gaps in current code paths. All other callsites either use font-native construction table names, properly-resolved `glyph_name_by_codepoint` results, or the existing `_CANONICAL_CODEPOINTS` mechanism.
+
+## 2026-05-24T22:03+00:00 Italic correction for limits-style script placement
+
+- **Investigation**: KaTeX applies italic correction to limit placement for slanted operators (e.g. `\int`). In `op.ts`, `slant = base.italic ?? 0` (the MATH table italic correction). In `assembleSupSub.ts`, subscripts get `marginLeft: -slant` and superscripts get `marginLeft: +slant`. KaTeX's comment notes the *intent* is ±½ slant, with the CSS centering making a full-margin shift achieve that half-shift.
+- **Scale of effect**: NewCMMath's `integral.v1` (display-size `\int`) has IC = 459 design units = 0.459 em — nearly half an em. This produces a very visible shift at display size. Symmetric operators (`\sum`, `\prod`) have IC = 0, so they are unaffected.
+- **Fix**: Added `italic_corrections::Dict{String,Int}` to `_LayoutCtx` (already parsed from the MATH table — no new parsing needed). Added `_base_italic_correction_em` helper that reads the first glyph's IC from a box list. Applied `±IC/2` to all three limits branches (NKSuperscript, NKSubscript, NKDecorated): subscripts shift left, superscripts shift right.
+- **OpenType MATH spec basis**: Offset limits by ±½ italic correction to track the slanted stroke.
