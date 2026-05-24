@@ -1303,29 +1303,31 @@ end
 # _MATRIX_COLSEP is the margin added on each side of a column (total gap between
 # adjacent cells = 2 × _MATRIX_COLSEP), matching LaTeX's \arraycolsep ≈ 5 mu.
 # _MATRIX_ROWGAP is extra baseline-to-baseline clearance added between rows.
-const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
-const _MATRIX_ROWGAP  = 3 / 18   # extra row gap in em
+const _MATRIX_COLSEP       = 5 / 18   # 5 mu per side, matches LaTeX \arraycolsep
+const _MATRIX_ROWGAP        = 3 / 18   # extra row gap in em
+const _MATRIX_DOUBLERULESEP = 2 / 18   # gap between two adjacent rules (≈ TeX \doublerulesep = 2pt)
 
-# Parse a column-spec string (e.g. "|l|c|r|") into per-column alignment symbols
-# and a vertical-rule presence vector.
+# Parse a column-spec string (e.g. "|l||c|r|") into per-column alignment symbols
+# and a vertical-rule count vector.
 # col_aligns[c] ∈ {:l, :c, :r} for each column c = 1..ncol.
-# vrule[c] = true if a vertical rule appears immediately before column c (c=1..ncol),
-# vrule[ncol+1] = true if a rule appears after the last column.
+# vrule[c] = number of rules immediately before column c (c=1..ncol),
+# vrule[ncol+1] = number of rules after the last column.
+# '||' → vrule count 2 (double rule with _MATRIX_DOUBLERULESEP gap).
 # Unknown tokens (e.g. @{}, p{width}) are silently ignored.
-function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Bool}}
-    col_aligns  = Symbol[]
-    vrule       = Bool[]
-    pending_rule = false
+function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Int}}
+    col_aligns   = Symbol[]
+    vrule        = Int[]
+    pending_rule = 0
     for ch in spec
         if ch === 'l' || ch === 'c' || ch === 'r'
             push!(vrule, pending_rule)
             push!(col_aligns, ch === 'l' ? :l : ch === 'c' ? :c : :r)
-            pending_rule = false
+            pending_rule = 0
         elseif ch === '|'
-            pending_rule = true
+            pending_rule += 1
         end
     end
-    push!(vrule, pending_rule)   # possible rule after the last column
+    push!(vrule, pending_rule)   # possible rule(s) after the last column
     return col_aligns, vrule
 end
 
@@ -1442,18 +1444,25 @@ function _layout_matrix!(
     # ── Emit vertical rules from colspec ──
     vrule_bot    = y_shift + grid_bot
     vrule_height = grid_top - grid_bot
-    # x positions of vertical rules within the content area (relative to x0+left_w).
+    # Base x positions of rule groups within the content area (relative to x0+left_w).
     # vrule[1]: before col 1; vrule[c+1]: between col c and c+1; vrule[ncol+1]: after last.
-    vrule_x = Float64[]
-    vrule[1] && push!(vrule_x, 0.0)
+    # Multiple rules per slot (vrule[i] > 1) are emitted with _MATRIX_DOUBLERULESEP gaps.
+    rule_sep = (vrule_thick + _MATRIX_DOUBLERULESEP * cell_scale)
+    function emit_vrules!(base_x::Float64, n::Int)
+        n == 0 && return
+        # Centre the rule group around base_x.
+        group_w = n * vrule_thick + (n - 1) * _MATRIX_DOUBLERULESEP * cell_scale
+        x_start = base_x - group_w / 2
+        for k in 0:n-1
+            push!(boxes, LayoutBox(VRule(vrule_height, vrule_thick),
+                                   x0 + left_w + x_start + k * rule_sep, vrule_bot, scale))
+        end
+    end
+    emit_vrules!(0.0,                                                  vrule[1])
     for c in 1:ncol-1
-        vrule[c+1] && push!(vrule_x, x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale)
+        emit_vrules!(x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale, vrule[c+1])
     end
-    vrule[ncol+1] && push!(vrule_x, content_w)
-    for vx in vrule_x
-        push!(boxes, LayoutBox(VRule(vrule_height, vrule_thick),
-                               x0 + left_w + vx - vrule_thick / 2, vrule_bot, scale))
-    end
+    emit_vrules!(content_w,                                            vrule[ncol+1])
 
     return left_w + content_w + right_w
 end
