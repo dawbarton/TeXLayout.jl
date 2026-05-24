@@ -944,9 +944,18 @@ function _layout_assembly!(
         total_du += parts[i+1].full_advance - overlaps[i]
     end
 
-    # Place the assembly so its ink centre aligns with the math axis.
-    axis_em     = y0 + mc.axis_height / upm * scale
-    asm_bot_em  = axis_em - (total_du / upm * scale) / 2.0
+    # Derive ink bounds from first/last glyph metrics.  When assembly parts have
+    # y_min ≠ 0 (e.g. STIX Two bar: y_min=-234, y_max=706, full_advance=941),
+    # centering by total_du/2 misplaces the stack.  Using actual ink bounds
+    # centres correctly on the math axis regardless of font design conventions.
+    g_first       = _cmd_glyph(ctx, parts[1].glyph_name)
+    g_last        = _cmd_glyph(ctx, parts[end].glyph_name)
+    ink_bot_du    = (g_first !== nothing) ? Float64(g_first.y_min)  : 0.0
+    cursor_last   = total_du - Float64(parts[end].full_advance)
+    ink_top_du    = cursor_last + ((g_last !== nothing) ? Float64(g_last.y_max) : Float64(parts[end].full_advance))
+    ink_center_du = (ink_bot_du + ink_top_du) / 2.0
+    axis_em       = y0 + mc.axis_height / upm * scale
+    asm_bot_em    = axis_em - ink_center_du / upm * scale
 
     max_adv_w = 0
     cursor_du = 0.0
@@ -1139,11 +1148,14 @@ function _layout_wide_accent!(
     hc === nothing && return nothing
 
     # Helper: centre a named glyph over the base and push it to boxes.
+    # Uses ink midpoint (x_min+x_max)/2 rather than advance_width/2: this correctly
+    # handles zero-advance combining characters (e.g. circumflexcmb, adv_w=0) whose
+    # ink lies at negative x values rather than spanning [0, advance_width].
     function _place(name::String)
         g = _cmd_glyph(ctx, name)
         g === nothing && return
-        glyph_w = g.advance_width / upm * scale
-        push!(boxes, LayoutBox(g, x0 + (base_w_em - glyph_w) / 2, accent_y, scale))
+        ink_center = (g.x_min + g.x_max) / (2.0 * upm) * scale
+        push!(boxes, LayoutBox(g, x0 + base_w_em / 2 - ink_center, accent_y, scale))
     end
 
     # Try pre-built variants first (smallest that covers the base).
@@ -1977,8 +1989,21 @@ function _layout_node!(
         rule_top_em  = y0 + rule_top_local
         rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
 
+        # When the selected radical variant is larger than the minimum required
+        # span, distribute the excess equally: shift the body DOWN by half the
+        # excess so it appears vertically centred in the hook area rather than
+        # crowded against the top bar.  The rule bar and radical stay in place.
+        body_shift = let g = _peek_radical_glyph(ctx, required_du)
+            if g !== nothing
+                excess = max(0.0, Float64(g.y_max - g.y_min) - required_du)
+                excess / (2.0 * upm) * scale
+            else
+                0.0
+            end
+        end
+
         for b in tmp
-            push!(boxes, LayoutBox(b.element, x0 + rad_adv + b.x, y0 + b.y, b.scale))
+            push!(boxes, LayoutBox(b.element, x0 + rad_adv + b.x, y0 - body_shift + b.y, b.scale))
         end
         push!(boxes, LayoutBox(HRule(body_w, rule_thickness), x0 + rad_adv, y0 + rule_y_local, scale))
         return rad_adv + body_w
@@ -2077,8 +2102,9 @@ function _layout_node!(
         accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
             x0 + (base_attach_du - accent_attach_du) * s / upm
         else
-            accent_w = accent_m.advance_width * s / upm
-            x0 + base_w / 2 - accent_w / 2
+            # Centre by ink midpoint rather than advance_width/2: handles
+            # zero-advance combining characters (adv_w=0, x_min/x_max negative).
+            x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * s / (2.0 * upm)
         end
 
         push!(boxes, LayoutBox(Glyph(accent_ps, accent_m.advance_width,
