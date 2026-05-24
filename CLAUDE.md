@@ -215,6 +215,20 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
    then obtains the correct PS name.  The display-size variant is selected from
    `vert_constructions` using the `display_operator_min_height` MATH constant.
 
+6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.**
+   PS glyph naming conventions differ across fonts: NewCMMath/Pagella/STIXTwo use standard
+   AGL names (`"parenleft"`, `"ltimes"`, `"alpha"`), while FiraMath uses uni-style names
+   (`"uni0028"`, `"uni22C9"`, `"uni03B1"`) and Luciole uses its own convention (`"lparen"`,
+   `"muppi"`, etc.).  Resolving by codepoint via `glyph_metrics_by_codepoint` is the only
+   path that is portable across all fonts.  `_SYMBOL_CODEPOINTS` in `layout.jl` is the
+   authoritative map from bare command name → Unicode codepoint for all ordinary symbols.
+   Additionally, `glyph_metrics(family, "x")` returns the *upright* roman form in NewCMMath
+   (the glyph named "x" is the regular-weight slot), whereas the cmap at U+0078 correctly
+   yields the math-italic form — so codepoint resolution is also more correct for letters.
+   The only necessary use of PS names is in `_construction_key`, which translates canonical
+   AGL names to the font's own names when looking up `vert_constructions`/`horiz_constructions`
+   (those dicts are keyed by the font's MATH table PS names and cannot be changed).
+
 6. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
    removes or modifies existing entries.  Temporary `LayoutBox` vectors (used for
    centering fractions and limits) are merged in with adjusted coordinates.
@@ -246,6 +260,21 @@ A summary of major features and their status.
 | `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
 
 ## Known limitations / future work
+- **Multi-codepoint Unicode symbols** — a subset of negated and variant relations
+  (`\nleqslant`, `\ngeqslant`, `\nleqq`, `\ngeqq`, `\lvertneqq`, `\gvertneqq`,
+  `\varsubsetneq`, `\varsupsetneq`, `\npreceq`, `\nsucceq`, and similar) lack single
+  Unicode codepoints.  Unicode defines them as a base character + U+0338 (COMBINING
+  SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR-1), but OpenType math fonts do not
+  consistently encode them as single glyphs at any codepoint.  These commands currently
+  produce blank space.  Correct support would require two-glyph overlay (base + combining
+  stroke at x offset) — analogous to how TeX builds `\not\leq` — or per-font codepoint
+  investigation.  Do not add combining-sequence "codepoints" to `_SYMBOL_CODEPOINTS`; they
+  will not work with `glyph_metrics_by_codepoint`.
+- **Extended AMS symbols not yet in `_SYMBOL_CODEPOINTS`** — ~150 commands in
+  `_CMD_ATOM_CLASS` (box operators, extended geometry, rare relations, etc.) currently fall
+  back to PS-name lookup, which works on NewCM/Pagella/STIXTwo but silently produces blanks
+  on FiraMath and Luciole.  The fix is to bulk-add their Unicode codepoints to
+  `_SYMBOL_CODEPOINTS`; see the analysis in `notes.md` (2026-05-24 session).
 - **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
   from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
   yet used; adding them would give better coverage for characters outside the math block

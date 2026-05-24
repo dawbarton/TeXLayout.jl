@@ -128,3 +128,26 @@
 - **`tools/prepare_font_artifacts.jl`**: downloads fonts from CTAN/GitHub, creates Julia artifact tarballs and a draft `Artifacts.toml`. Covers all 8 families (5 existing + Schola/Termes/Bonum). CTAN paths for TeX Gyre Schola/Termes/Bonum: `mirrors.ctan.org/fonts/tex-gyre-math/{schola,termes,bonum}/texgyre{schola,termes,bonum}-math.otf` + text OTFs from `mirrors.ctan.org/fonts/tex-gyre/fonts/opentype/public/tex-gyre/`.
 - **`src/fonts.jl` scaffolding**: `_NAMED_ARTIFACTS` and `_ARTIFACT_LOADERS` have placeholder comments for Schola/Termes/Bonum; the `@artifact_str` loader functions are intentionally absent until artifacts are published (they break precompilation if the Artifacts.toml entries don't exist). Re-add when artifacts are uploaded.
 - Open question: CTAN URLs for TeX Gyre text fonts — the exact filenames follow `texgyre{name}-{weight}.otf` convention but should be verified before running `prepare_font_artifacts.jl`.
+
+## 2026-05-24T15:41+00:00 Fix FiraMath missing glyphs (Unicode-style PS names)
+
+- **Root cause**: FiraMath uses Unicode-style PostScript names ("uni03C0", "uni0028", "uni221A") instead of traditional Adobe Glyph List names ("pi", "parenleft", "radical"). Three symptoms:
+  1. Greek letters (`\alpha`, `\pi`, etc.) rendered nothing — `_cmd_glyph("pi")` calls `FT_Get_Name_Index("pi")` → GID 0 in FiraMath
+  2. Square root hook missing — `vert_constructions["radical"]` not found (key is "uni221A")
+  3. pmatrix/bmatrix brackets missing — `vert_constructions["parenleft"]` not found (key is "uni0028")
+- **Fix 1 — Greek letters** (`_SYMBOL_CODEPOINTS`): Added all 36 Greek letter commands (α–ω + variants + uppercase). The existing codepoint-lookup path (`glyph_metrics_by_codepoint` + `glyph_name_by_codepoint`) already returns the font's actual PS name, so NewCM gets "alpha" and FiraMath gets "uni03B1" — both correct for their respective renderers. Note: `\epsilon` → U+03F5 (Greek Lunate Epsilon Symbol), `\varepsilon` → U+03B5; `\phi` → U+03D5 (Greek Phi Symbol), `\varphi` → U+03C6.
+- **Fix 2 — construction key translation** (`_construction_key`, `_CANONICAL_CODEPOINTS`): Added a helper that, given a canonical PS name ("parenleft"), looks it up in `vert_constructions`; if absent, resolves the codepoint via `_CANONICAL_CODEPOINTS` and calls `glyph_name_by_codepoint` to get the font's actual PS name, then looks that up. This is called in `_layout_radical!`, `_peek_radical_glyph`, and `_layout_delim!`.
+- **Fix 3 — `_cmd_glyph` fallback**: Added a codepoint fallback for canonical PS names that fail the primary `FT_Get_Name_Index` lookup (used when no construction variants exist and the base glyph must be placed by name).
+- **Key design decision**: kept `vert_constructions` keyed by the font's own PS names (not normalised at parse time). The alternative — normalising "uni0028" → "parenleft" at construction time — would break the large-operator path which uses `glyph_name_by_codepoint` to derive the key dynamically.
+- All 789 tests pass. FiraMath demo regenerated with sqrt, pi, and brackets all rendering correctly.
+
+## 2026-05-24T18:24+00:00 Glyph resolution audit — codepoint-only strategy
+
+- **Audit result**: 156 commands in `_CMD_ATOM_CLASS` have no codepoint entry in `_SYMBOL_CODEPOINTS` or `_DISPLAY_OP_CODEPOINTS`. These include extended AMS binary operators (`\boxplus`, `\ltimes`, `\intercal`, …), extended relations (`\leqslant`, `\bowtie`, `\therefore`, `\because`, all negated relations), extended geometry and misc ordinary symbols (`\measuredangle`, `\triangle`, `\square`, `\checkmark`, `\S`, `\P`, `\yen`, …), and rare delimiter aliases (`\lgroup`, `\llbracket`, `\lvert`, `\lVert`, …).
+- **Practical impact**: standard fonts (NewCM, Pagella, STIXTwo) work because they use AGL PS names matching the command names. FiraMath and Luciole silently produce blanks for all 156.
+- **Strategy decision**: remove PS-name lookup from `_cmd_glyph` and `_char_glyph` entirely; use codepoints exclusively.
+  - Reason 1 (correctness): `glyph_metrics(family, "x")` in NewCMMath returns the *upright* roman form, not math-italic. The cmap (used by `glyph_metrics_by_codepoint`) correctly gives math-italic 'x' because math fonts map U+0078 → italic glyph by design.
+  - Reason 2 (portability): eliminates the naming divergence problem across all current and future fonts.
+  - Remaining PS-name use: `_construction_key` (bridging canonical AGL names to font-own MATH-table PS names for `vert_constructions`/`horiz_constructions`) — cannot be eliminated because the MATH table itself uses PS names.
+- **Multi-codepoint issue**: ~10 negated/variant commands (`\nleqslant`, `\lvertneqq`, `\varsubsetneq`, etc.) have no single Unicode codepoint — they're defined as base + U+0338 (COMBINING SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR). Math fonts don't encode these at a consistent single codepoint. Current state: produce blank space. Fix requires two-glyph overlay (base + combining stroke). Documented in CLAUDE.md Known Limitations.
+- **Next step**: bulk-expand `_SYMBOL_CODEPOINTS` (~140 clean additions), simplify `_char_glyph` and `_cmd_glyph` to codepoint-only paths.
