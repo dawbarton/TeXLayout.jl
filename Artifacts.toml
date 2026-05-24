@@ -28,37 +28,33 @@ lazy = true
 git-tree-sha1 = "0ef7324748294dd1c9648cf190f3f0d7688e5d2f"
 
     [[NewCMMath.download]]
-    url = "https://github.com/DavidBarton/TeXLayout.jl/releases/download/v0.1-fonts/NewCMMath.tar.gz"
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/NewCMMath.tar.gz"
     sha256 = "43d343c9e17ba002c34333fe6eabeb49a84ad192d0b648d6c5ec4d813df3e196"
-
 [Pagella]
 lazy = true
 git-tree-sha1 = "0662dd77e974392b23ee8a402425cbaa4522493c"
 
     [[Pagella.download]]
-    url = "https://github.com/DavidBarton/TeXLayout.jl/releases/download/v0.1-fonts/Pagella.tar.gz"
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Pagella.tar.gz"
     sha256 = "62d31efc7425b76d052b0d6d8dc7a54f0affb081f3c5b5d99a454387a53c4b2f"
-
 [Luciole]
 lazy = true
 git-tree-sha1 = "4548239626d4097cafa35c8160098bf7248f9e4e"
 
     [[Luciole.download]]
-    url = "https://github.com/DavidBarton/TeXLayout.jl/releases/download/v0.1-fonts/Luciole.tar.gz"
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Luciole.tar.gz"
     sha256 = "1d5543b010b5c8589b8bc6abb5a92bcfc2ca692aaf5e181e077aa60a92fbb3bf"
-
 [STIXTwo]
 lazy = true
 git-tree-sha1 = "d26da8680b7db6f29c17d7e5425560244608cf9c"
 
     [[STIXTwo.download]]
-    url = "https://github.com/DavidBarton/TeXLayout.jl/releases/download/v0.1-fonts/STIXTwo.tar.gz"
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/STIXTwo.tar.gz"
     sha256 = "2a9519ba24e4d250b85fd113e64858bc031b33ca4e814e111d68c900243bf838"
-
 [FiraMath]
 lazy = true
 git-tree-sha1 = "638126165b8e0c1e90ae78e776c588648c2fd8d7"
 
     [[FiraMath.download]]
-    url = "https://github.com/DavidBarton/TeXLayout.jl/releases/download/v0.1-fonts/FiraMath.tar.gz"
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/FiraMath.tar.gz"
     sha256 = "372611b395f7e900589eab2708af20b9bf2fffc0b908e0f19b1e960616406108"
