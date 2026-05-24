@@ -210,7 +210,7 @@ A summary of major features and their status.
 | Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
-| Array/matrix environments | ✗ | Not yet parsed |
+| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments (matrix, pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix, smallmatrix, cases); two-pass grid layout centred on math axis |
 | `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
 
 ## Known limitations / future work
@@ -218,8 +218,6 @@ A summary of major features and their status.
   from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
   yet used; adding them would give better coverage for characters outside the math block
   (e.g., Greek bold letters) and is deferred to steps 5–6.
-- **Array/matrix environments** — `\begin{array}…\end{array}`, `pmatrix`, `cases`, etc.
-  Not yet parsed; requires extending the parser and adding a two-dimensional layout branch.
 - **`default_font_family()`** — now implemented; returns NewCMMath via the Julia
   Artifacts system.  The five font tarballs in `shared/font_archives/` must be
   uploaded to a GitHub Release and the URLs in `Artifacts.toml` updated before

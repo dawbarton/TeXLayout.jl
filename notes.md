@@ -103,3 +103,18 @@
 - `NKAccent` branch now dispatches wide accents to `_layout_wide_accent!` immediately after computing `accent_y`; fixed-size path unchanged.
 - 666 tests passing (added 3 parser tests + 4 layout tests for wide accents).
 - Updated `CLAUDE.md` feature table, `katex_rules.md` Rule 12 status, and `demo_features.jl` accent panel.
+
+## 2026-05-24T13:52+00:00 Implement \begin/\end environment parsing and matrix/array layout
+
+- Added `NKMatrix` node kind; value encodes `"env\x00nrow\x00ncol"`, children are flat row-major cells (each an `NKGroup`).
+- `_MATRIX_ENVS` constant maps 8 environment names to delimiter glyph names, alignment symbol, and scale factor. Bare `matrix` and `smallmatrix` have no delimiters.
+- `_read_brace_word!(p)` helper reads a brace-delimited name token for `\begin`/`\end`.
+- `_parse_matrix_body!` handles `&` column separators, `\\` row breaks (with optional `[dim]` skip), `\end` stop, and lenient EOF. Uses `copy(current_cell)` to avoid Julia mutable aliasing pitfall — forgetting this made all cells empty.
+- `\begin` dispatches to `_parse_matrix_body!` for known environments; unknown environments produce `NKCommand`. Stray `\end` produces `NKSpace`.
+- `_layout_matrix!` two-pass algorithm: first pass lays out all cells at origin to measure widths/heights/depths; second pass positions cells using computed column/row extents.
+- Grid centred on math axis via `y_shift`; cells always use Text style (not Display), matching TeX array rules.
+- Column separation `5/18 em` per side; extra row gap `3/18 em`.
+- Delimiter wrapping via `_layout_delim!`; left delimiter width applied as offset before emitting content boxes (not via retroactive splicing).
+- Key bugs fixed during implementation: (1) Julia mutable aliasing bug with `current_cell` reference, (2) wrong `y0` argument to `_layout_delim!` (should not pre-add axis height — the function does this internally), (3) sort direction bug in layout test (negating y, not reversing both keys).
+- 761 tests passing (25 new parser + 14 new layout + 5 new katex smoke tests).
+- Updated `CLAUDE.md` feature table (Array/matrix environments: ✗ → ✓).
