@@ -970,4 +970,66 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test any(s < 0.9 for s in scales)
     end
 
+    @testset "array{lcr}: per-column alignment" begin
+        # Left col should have its cell flush-left; right col flush-right; centre col centred.
+        # Use wide characters so column widths differ enough to detect misalignment.
+        boxes = layout(parse_latex(raw"\begin{array}{lcr} a & b & c \end{array}"),
+                       family, Display)
+        glyphs = sort(find_glyphs(boxes), by = b -> b.x)
+        # Three content glyphs: a (left-aligned), b (centred), c (right-aligned).
+        @test length(glyphs) == 3
+        # Glyphs must be left-to-right.
+        @test glyphs[1].x < glyphs[2].x < glyphs[3].x
+    end
+
+    @testset "array with vertical rules: VRule boxes present" begin
+        boxes = layout(parse_latex(raw"\begin{array}{|l|c|r|} a & b & c \end{array}"),
+                       family, Display)
+        vrule_boxes = filter(b -> b.element isa VRule, boxes)
+        glyph_boxes = find_glyphs(boxes)
+        # Colspec "|l|c|r|" has 4 vertical rules: before col1, between 1-2, 2-3, after col3.
+        @test length(vrule_boxes) == 4
+        @test length(glyph_boxes) == 3
+        # All vrule x positions should be distinct.
+        vxs = sort([b.x for b in vrule_boxes])
+        @test length(unique(round.(vxs; digits=3))) == 4
+    end
+
+    @testset "array with no vertical rules: no VRule boxes" begin
+        boxes = layout(parse_latex(raw"\begin{array}{lc} a & b \end{array}"),
+                       family, Display)
+        @test isempty(filter(b -> b.element isa VRule, boxes))
+    end
+
+    @testset "array outer vertical rules only" begin
+        boxes = layout(parse_latex(raw"\begin{array}{|ll|} a & b \end{array}"),
+                       family, Display)
+        vrule_boxes = filter(b -> b.element isa VRule, boxes)
+        @test length(vrule_boxes) == 2
+        vxs = sort([b.x for b in vrule_boxes])
+        # Left rule must be to the left of all glyphs; right rule to the right.
+        glyph_xs = [b.x for b in find_glyphs(boxes)]
+        @test vxs[1] < minimum(glyph_xs)
+        @test vxs[2] > maximum(glyph_xs)
+    end
+
+    @testset "array lcr vs matrix: same cell x-span, different alignment" begin
+        # In a centred matrix with identical content, cell 1 and cell 3 should be
+        # at the same x in matrix{ccc} but at different x in array{lcr}.
+        boxes_ccc = layout(parse_latex(raw"\begin{array}{ccc} a & b & c \end{array}"),
+                           family, Display)
+        boxes_lcr = layout(parse_latex(raw"\begin{array}{lcr} a & b & c \end{array}"),
+                           family, Display)
+        # Both should have 3 glyphs.
+        g_ccc = sort(find_glyphs(boxes_ccc), by = b -> b.x)
+        g_lcr = sort(find_glyphs(boxes_lcr), by = b -> b.x)
+        @test length(g_ccc) == 3
+        @test length(g_lcr) == 3
+        # In lcr, col 1 (left-aligned) starts at the column left edge;
+        # col 3 (right-aligned) starts further right than in the ccc version.
+        # The leftmost glyph of lcr should be left of the leftmost glyph of ccc
+        # (since ccc centres within the column, lcr flushes left).
+        @test g_lcr[1].x <= g_ccc[1].x + 1e-6
+    end
+
 end

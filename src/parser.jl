@@ -25,7 +25,7 @@
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
     NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
-    NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00ncol"; children = flat row-major cells
+    NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00colspec"; children = flat row-major cells
 end
 
 """
@@ -155,7 +155,12 @@ const _MATRIX_ENVS = Dict{String,_MatrixEnvInfo}(
     "Vmatrix"     => (left="dblverticalbar", right="dblverticalbar", align=:center, scale=1.0),
     "smallmatrix" => (left="",               right="",               align=:center, scale=0.9),
     "cases"       => (left="braceleft",      right="",               align=:left,   scale=1.0),
+    # \begin{array}{colspec} — explicit per-column alignment and vertical rules.
+    "array"       => (left="",               right="",               align=:center, scale=1.0),
 )
+
+# Environments that require an explicit column-spec argument after the env name.
+const _COLSPEC_ENVS = Set{String}(["array"])
 
 # Standard named math operators rendered as upright multi-character strings.
 const _OPERATOR_NAMES = Set{String}([
@@ -373,9 +378,12 @@ function _read_brace_word!(p::_Parser)::String
 end
 
 # Parse the body of a matrix environment up to the matching \end{env_name}.
-# Returns an NKMatrix node with value "env_name\x00nrow\x00ncol" and a flat
+# Returns an NKMatrix node with value "env_name\x00nrow\x00colspec" and a flat
 # row-major list of NKGroup children (one per cell).
-function _parse_matrix_body!(p::_Parser, env_name::String)::Node
+# colspec: explicit column-spec string (e.g. "|l|c|r|") for \begin{array};
+#          empty for shorthand environments (pmatrix, cases, etc.) — derived
+#          automatically from info.align and the observed column count.
+function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String="")::Node
     cells  = Node[]   # flat row-major list of completed cells
     row_lengths = Int[]   # number of cells in each row
     current_cell = Node[]
@@ -443,7 +451,14 @@ function _parse_matrix_body!(p::_Parser, env_name::String)::Node
         end
     end
 
-    return Node(NKMatrix, "$(env_name)\x00$(nrow)\x00$(ncol)", cells)
+    # Derive colspec from env alignment if not explicitly provided.
+    if isempty(colspec)
+        info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
+        align_ch = info.align === :left ? 'l' : 'c'
+        colspec = repeat(align_ch, ncol)
+    end
+
+    return Node(NKMatrix, "$(env_name)\x00$(nrow)\x00$(colspec)", cells)
 end
 
 # Parse a command token and return the appropriate node.
@@ -522,7 +537,9 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\begin"
         env_name = _read_brace_word!(p)
         if haskey(_MATRIX_ENVS, env_name)
-            return _parse_matrix_body!(p, env_name)
+            # Environments in _COLSPEC_ENVS require an explicit column-spec argument.
+            colspec = env_name ∈ _COLSPEC_ENVS ? _read_brace_word!(p) : ""
+            return _parse_matrix_body!(p, env_name, colspec)
         else
             # Unknown environment: emit a sentinel so the layout engine can skip it gracefully.
             return Node(NKCommand, "\\begin{$(env_name)}")

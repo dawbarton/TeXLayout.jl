@@ -173,6 +173,13 @@ function main()
             r1 = em_to_px_y(box.y + el.thickness)
             r2 = em_to_px_y(box.y)
             fill_rect!(canvas, r1, c1, r2, c2, 0x00)
+        elseif el isa VRule
+            # VRule positions in em: x ∈ [box.x, box.x+el.thickness], y ∈ [box.y, box.y+el.height]
+            c1 = em_to_px_x(box.x)
+            c2 = em_to_px_x(box.x + el.thickness)
+            r1 = em_to_px_y(box.y + el.height)
+            r2 = em_to_px_y(box.y)
+            fill_rect!(canvas, r1, c1, r2, c2, 0x00)
         end
         # Space elements have no visual representation in the bitmap
     end

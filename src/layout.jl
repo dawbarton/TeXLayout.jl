@@ -1306,6 +1306,29 @@ end
 const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
 const _MATRIX_ROWGAP  = 3 / 18   # extra row gap in em
 
+# Parse a column-spec string (e.g. "|l|c|r|") into per-column alignment symbols
+# and a vertical-rule presence vector.
+# col_aligns[c] ∈ {:l, :c, :r} for each column c = 1..ncol.
+# vrule[c] = true if a vertical rule appears immediately before column c (c=1..ncol),
+# vrule[ncol+1] = true if a rule appears after the last column.
+# Unknown tokens (e.g. @{}, p{width}) are silently ignored.
+function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Bool}}
+    col_aligns  = Symbol[]
+    vrule       = Bool[]
+    pending_rule = false
+    for ch in spec
+        if ch === 'l' || ch === 'c' || ch === 'r'
+            push!(vrule, pending_rule)
+            push!(col_aligns, ch === 'l' ? :l : ch === 'c' ? :c : :r)
+            pending_rule = false
+        elseif ch === '|'
+            pending_rule = true
+        end
+    end
+    push!(vrule, pending_rule)   # possible rule after the last column
+    return col_aligns, vrule
+end
+
 # Lay out a matrix/array environment (NKMatrix node).
 # Two-pass algorithm: measure all cells first, then place on a rectangular grid.
 # Cells are laid out in Text style (even in Display), centred on the math axis.
@@ -1319,12 +1342,13 @@ function _layout_matrix!(
     scale::Float64,
     boxes::Vector{LayoutBox},
 )::Float64
-    # Decode value = "env_name\x00nrow\x00ncol".
+    # Decode value = "env_name\x00nrow\x00colspec".
     parts = split(node.value, '\x00'; limit=3)
     length(parts) < 3 && return 0.0
     env_name = parts[1]
-    nrow = parse(Int, parts[2])
-    ncol = parse(Int, parts[3])
+    nrow     = parse(Int, parts[2])
+    col_aligns, vrule = _parse_colspec(parts[3])
+    ncol = length(col_aligns)
     (nrow == 0 || ncol == 0) && return 0.0
 
     info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
@@ -1374,6 +1398,8 @@ function _layout_matrix!(
     y_shift  = y0 + axis_em - (grid_top + grid_bot) / 2
 
     # Column left-edge positions (relative to content origin, before adding left delimiter).
+    # Vertical rules occupy space within the column separations.
+    vrule_thick = mc.fraction_rule_thickness / upm * cell_scale
     x_col    = zeros(Float64, ncol)
     x_col[1] = _MATRIX_COLSEP * cell_scale
     for c in 2:ncol
@@ -1402,12 +1428,31 @@ function _layout_matrix!(
         tmp = cell_boxes[r, c]
         isempty(tmp) && continue
 
-        x_cell = x0 + left_w + x_col[c] + (info.align === :left ? 0.0 :
-                                             (col_widths[c] - cell_widths[r, c]) / 2)
+        # Per-column alignment: :l = flush left, :r = flush right, :c = centred.
+        offset = col_aligns[c] === :l ? 0.0 :
+                 col_aligns[c] === :r ? col_widths[c] - cell_widths[r, c] :
+                                        (col_widths[c] - cell_widths[r, c]) / 2
+        x_cell = x0 + left_w + x_col[c] + offset
         y_cell = y_shift + row_y[r]
         for b in tmp
             push!(boxes, LayoutBox(b.element, x_cell + b.x, y_cell + b.y, b.scale))
         end
+    end
+
+    # ── Emit vertical rules from colspec ──
+    vrule_bot    = y_shift + grid_bot
+    vrule_height = grid_top - grid_bot
+    # x positions of vertical rules within the content area (relative to x0+left_w).
+    # vrule[1]: before col 1; vrule[c+1]: between col c and c+1; vrule[ncol+1]: after last.
+    vrule_x = Float64[]
+    vrule[1] && push!(vrule_x, 0.0)
+    for c in 1:ncol-1
+        vrule[c+1] && push!(vrule_x, x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale)
+    end
+    vrule[ncol+1] && push!(vrule_x, content_w)
+    for vx in vrule_x
+        push!(boxes, LayoutBox(VRule(vrule_height, vrule_thick),
+                               x0 + left_w + vx - vrule_thick / 2, vrule_bot, scale))
     end
 
     return left_w + content_w + right_w

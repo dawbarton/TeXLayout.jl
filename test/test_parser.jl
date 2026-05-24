@@ -382,7 +382,7 @@
         @test length(tree.children) == 1
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        @test mat.value == "pmatrix\x002\x002"
+        @test mat.value == "pmatrix\x002\x00cc"
         @test length(mat.children) == 4
         # Each child is a group; check cell content
         @test mat.children[1].kind === NKGroup
@@ -396,7 +396,7 @@
         tree = parse_latex(raw"\begin{matrix} x \end{matrix}")
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        @test mat.value == "matrix\x001\x001"
+        @test mat.value == "matrix\x001\x00c"
         @test length(mat.children) == 1
         @test mat.children[1].children[1].value == "x"
     end
@@ -405,7 +405,7 @@
         tree = parse_latex(raw"\begin{cases} f & x > 0 \\ 0 & \text{otherwise}\end{cases}")
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        @test mat.value == "cases\x002\x002"
+        @test mat.value == "cases\x002\x00ll"
         @test length(mat.children) == 4
     end
 
@@ -413,7 +413,7 @@
         tree = parse_latex(raw"\begin{pmatrix} a & b")
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        @test mat.value == "pmatrix\x001\x002"
+        @test mat.value == "pmatrix\x001\x00cc"
         @test length(mat.children) == 2
     end
 
@@ -427,11 +427,46 @@
         # Row 1 has 3 cells, row 2 has 1: should produce a 2x3 matrix with 6 cells.
         tree = parse_latex(raw"\begin{matrix} a & b & c \\ x \end{matrix}")
         mat = tree.children[1]
-        @test mat.value == "matrix\x002\x003"
+        @test mat.value == "matrix\x002\x00ccc"
         @test length(mat.children) == 6
         # Last two cells of row 2 should be empty groups
         @test isempty(mat.children[5].children)
         @test isempty(mat.children[6].children)
+    end
+
+    @testset "\\begin{array}{lcr}: explicit colspec stored verbatim" begin
+        tree = parse_latex(raw"\begin{array}{lcr} a & b & c \\ d & e & f \end{array}")
+        @test length(tree.children) == 1
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        # value encodes env, nrow, and the raw colspec
+        parts = split(mat.value, "\x00"; limit=3)
+        @test parts[1] == "array"
+        @test parts[2] == "2"
+        @test parts[3] == "lcr"
+        @test length(mat.children) == 6
+        @test mat.children[1].children[1].value == "a"
+        @test mat.children[2].children[1].value == "b"
+        @test mat.children[3].children[1].value == "c"
+    end
+
+    @testset "\\begin{array}{|l|c|r|}: vertical rules in colspec" begin
+        tree = parse_latex(raw"\begin{array}{|l|c|r|} x & y & z \end{array}")
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        parts = split(mat.value, "\x00"; limit=3)
+        @test parts[1] == "array"
+        @test parts[3] == "|l|c|r|"
+        @test length(mat.children) == 3
+    end
+
+    @testset "\\begin{array}{ll}: cases-style two-column left-aligned" begin
+        tree = parse_latex(raw"\begin{array}{ll} f(x) & x > 0 \\ 0 & \text{else}\end{array}")
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        parts = split(mat.value, "\x00"; limit=3)
+        @test parts[3] == "ll"
+        @test length(mat.children) == 4
     end
 
 end
