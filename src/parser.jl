@@ -128,16 +128,14 @@ const _FONT_SWITCH_COMMANDS = Dict{String,String}(
     "\\frak"        => "mathfrak",  # KaTeX alias for \mathfrak
 )
 
-# Horizontal brace/bracket/paren commands that stretch over a body.
-# Maps command name → PS glyph name in horiz_constructions.
-const _HORIZ_BRACE_COMMANDS = Dict{String,String}(
-    "\\overbrace"   => "uni23DE",   # ⏞ TOP CURLY BRACKET
-    "\\underbrace"  => "uni23DF",   # ⏟ BOTTOM CURLY BRACKET
-    "\\overbracket" => "uni23B4",   # ⎴ TOP SQUARE BRACKET
-    "\\underbracket"=> "uni23B5",   # ⎵ BOTTOM SQUARE BRACKET
-    "\\overparen"   => "uni23DC",   # ⏜ TOP PARENTHESIS
-    "\\underparen"  => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
-)
+# Set of horizontal brace/bracket/paren commands that stretch over a body.
+# The matching command → PS-glyph-name map lives in layout.jl as
+# `_HORIZ_BRACE_GLYPHS`; the parser only needs to recognise the command names.
+const _HORIZ_BRACE_COMMANDS = Set{String}([
+    "\\overbrace", "\\underbrace",
+    "\\overbracket", "\\underbracket",
+    "\\overparen", "\\underparen",
+])
 
 # Matrix/array-like environments introduced by \begin{name}.
 # Each entry specifies the PostScript glyph names of the auto-sized left and right
@@ -530,7 +528,7 @@ function _parse_command!(p::_Parser)::Node
         body    = _parse_argument!(p)
         return Node(NKFontSwitch, variant, [body])
 
-    elseif haskey(_HORIZ_BRACE_COMMANDS, cmd)
+    elseif cmd ∈ _HORIZ_BRACE_COMMANDS
         body = _parse_argument!(p)
         return Node(NKHorizBrace, cmd, [body])
 
