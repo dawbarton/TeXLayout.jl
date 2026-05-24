@@ -1842,7 +1842,3 @@ function generate_tex_elements(
     layout(node, family, Display)
 end
 
-"""Return the globally-configured default font family."""
-function default_font_family()::FontFamily
-    error("not implemented: default_font_family")
-end

@@ -211,7 +211,7 @@ A summary of major features and their status.
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
 | Array/matrix environments | ✗ | Not yet parsed |
-| `default_font_family()` | ✗ | Throws "not implemented" |
+| `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
 
 ## Known limitations / future work
 - **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
@@ -220,8 +220,10 @@ A summary of major features and their status.
   (e.g., Greek bold letters) and is deferred to steps 5–6.
 - **Array/matrix environments** — `\begin{array}…\end{array}`, `pmatrix`, `cases`, etc.
   Not yet parsed; requires extending the parser and adding a two-dimensional layout branch.
-- **`default_font_family()`** — throws "not implemented"; must be configured before
-  the zero-argument form of `generate_tex_elements` can be used from Makie.
+- **`default_font_family()`** — now implemented; returns NewCMMath via the Julia
+  Artifacts system.  The five font tarballs in `shared/font_archives/` must be
+  uploaded to a GitHub Release and the URLs in `Artifacts.toml` updated before
+  the package is usable by other users.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.
 

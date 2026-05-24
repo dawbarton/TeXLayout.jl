@@ -5,8 +5,13 @@
 # widths and left side bearings are read directly from the binary hmtx table
 # (matching the font designer's nominal values); ink bounding boxes are
 # obtained via FreeTypeAbstraction.
+#
+# `font_family(::Symbol)` provides lazy-download access to the five bundled
+# font families (NewCMMath, Pagella, Luciole, STIXTwo, FiraMath) via Julia
+# Artifacts.  `font_family(path; ...)` constructs a family from user paths.
 
 using FreeTypeAbstraction
+using LazyArtifacts
 const _FT = FreeTypeAbstraction.FreeType
 
 """
@@ -301,4 +306,98 @@ function glyph_name_by_codepoint(family::FontFamily, cp::UInt32)::String
     ret != 0 && return ""
     i = findfirst(==(0x00), buf)
     return i === nothing ? "" : String(buf[1:i-1])
+end
+
+# ── Named font families via Artifacts ────────────────────────────────────────
+
+# Maps user-facing Symbol names to artifact names in Artifacts.toml.
+const _NAMED_ARTIFACTS = Dict{Symbol,String}(
+    :new_cm    => "NewCMMath",
+    :pagella   => "Pagella",
+    :luciole   => "Luciole",
+    :stix_two  => "STIXTwo",
+    :fira_math => "FiraMath",
+)
+
+# Build a FontFamily from an artifact directory.  Tries .otf first, then .ttf
+# for the text slots (Luciole ships TTF text fonts).
+function _family_from_artifact(dir::AbstractString)::FontFamily
+    math = joinpath(dir, "math.otf")
+    isfile(math) || error("artifact at $dir is missing math.otf")
+
+    function find_slot(base)
+        for ext in (".otf", ".ttf")
+            p = joinpath(dir, base * ext)
+            isfile(p) && return p
+        end
+        return nothing
+    end
+
+    FontFamily(math,
+               find_slot("regular"),
+               find_slot("italic"),
+               find_slot("bold"),
+               find_slot("bolditalic"))
+end
+
+# One small function per artifact name so that the @artifact_str macro receives
+# a string literal (required — the macro cannot accept a variable).
+_artifact_dir_new_cm()    = @artifact_str("NewCMMath")
+_artifact_dir_pagella()   = @artifact_str("Pagella")
+_artifact_dir_luciole()   = @artifact_str("Luciole")
+_artifact_dir_stix_two()  = @artifact_str("STIXTwo")
+_artifact_dir_fira_math() = @artifact_str("FiraMath")
+
+const _ARTIFACT_LOADERS = Dict{Symbol, Function}(
+    :new_cm    => _artifact_dir_new_cm,
+    :pagella   => _artifact_dir_pagella,
+    :luciole   => _artifact_dir_luciole,
+    :stix_two  => _artifact_dir_stix_two,
+    :fira_math => _artifact_dir_fira_math,
+)
+
+"""
+    font_family(name::Symbol) -> FontFamily
+
+Load a named built-in font family.  The artifact tarball is downloaded lazily
+on first use and cached in Julia's artifact store.
+
+| Symbol       | Font                          | Style         |
+|:-------------|:------------------------------|:--------------|
+| `:new_cm`    | New Computer Modern Math      | CM / serif    |
+| `:pagella`   | TeX Gyre Pagella Math         | Palatino      |
+| `:luciole`   | Luciole Math                  | Humanist sans |
+| `:stix_two`  | STIX Two Math v2.0.2          | Times         |
+| `:fira_math` | Fira Math + Fira Sans v0.3.4  | Geometric sans|
+"""
+function font_family(name::Symbol)::FontFamily
+    loader = get(_ARTIFACT_LOADERS, name, nothing)
+    loader === nothing &&
+        error("unknown font family :$name — choose from: $(join(sort(string.(keys(_ARTIFACT_LOADERS))), ", "))")
+    _family_from_artifact(loader())
+end
+
+"""
+    font_family(math_path; regular, bold, italic, bolditalic) -> FontFamily
+
+Construct a `FontFamily` from user-supplied file paths.  Only `math_path` is
+required; text slots default to `nothing` (math-only mode).
+"""
+function font_family(math_path::AbstractString;
+                     regular::Union{AbstractString,Nothing}    = nothing,
+                     bold::Union{AbstractString,Nothing}        = nothing,
+                     italic::Union{AbstractString,Nothing}      = nothing,
+                     bolditalic::Union{AbstractString,Nothing}  = nothing)::FontFamily
+    isfile(math_path) || error("math font not found: $math_path")
+    FontFamily(math_path, regular, italic, bold, bolditalic)
+end
+
+"""
+    default_font_family() -> FontFamily
+
+Return the default `FontFamily` (New Computer Modern Math).  Downloads the
+artifact on first call if not already cached.
+"""
+function default_font_family()::FontFamily
+    font_family(:new_cm)
 end

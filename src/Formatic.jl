@@ -21,7 +21,8 @@ include("layout.jl")
 # MathConstants deliberately not exported (conflicts with Base.MathConstants module).
 export MathTable, GlyphConstruction, GlyphAssembly, GlyphAssemblyPart,
        GlyphVariant, load_math_table
-export FontFamily, GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint, glyph_metrics_upright
+export FontFamily, GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint, glyph_metrics_upright,
+       font_family, default_font_family
 # TexStyle enum values deliberately not exported at top level to avoid
 # conflicts with Base.Text and Base.Display.  Access as Formatic.Display etc.
 export TexStyle,
