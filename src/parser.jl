@@ -25,6 +25,7 @@
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
     NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
+    NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00ncol"; children = flat row-major cells
 end
 
 """
@@ -136,6 +137,24 @@ const _HORIZ_BRACE_COMMANDS = Dict{String,String}(
     "\\underbracket"=> "uni23B5",   # ⎵ BOTTOM SQUARE BRACKET
     "\\overparen"   => "uni23DC",   # ⏜ TOP PARENTHESIS
     "\\underparen"  => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
+)
+
+# Matrix/array-like environments introduced by \begin{name}.
+# Each entry specifies the PostScript glyph names of the auto-sized left and right
+# delimiters (empty string = no delimiter), the column alignment (:center or :left),
+# and a scale factor relative to the surrounding text (1.0 for all except smallmatrix).
+# "dblverticalbar" is the NewCMMath PS name for U+2016 ‖; other fonts may differ, but
+# glyph_name_by_codepoint fallback is used if the literal name is absent.
+const _MatrixEnvInfo = @NamedTuple{left::String, right::String, align::Symbol, scale::Float64}
+const _MATRIX_ENVS = Dict{String,_MatrixEnvInfo}(
+    "matrix"      => (left="",               right="",               align=:center, scale=1.0),
+    "pmatrix"     => (left="parenleft",      right="parenright",     align=:center, scale=1.0),
+    "bmatrix"     => (left="bracketleft",    right="bracketright",   align=:center, scale=1.0),
+    "Bmatrix"     => (left="braceleft",      right="braceright",     align=:center, scale=1.0),
+    "vmatrix"     => (left="bar",            right="bar",            align=:center, scale=1.0),
+    "Vmatrix"     => (left="dblverticalbar", right="dblverticalbar", align=:center, scale=1.0),
+    "smallmatrix" => (left="",               right="",               align=:center, scale=0.9),
+    "cases"       => (left="braceleft",      right="",               align=:left,   scale=1.0),
 )
 
 # Standard named math operators rendered as upright multi-character strings.
@@ -339,6 +358,94 @@ function _parse_primary!(p::_Parser)::Node
     end
 end
 
+# Read a mandatory braced word argument {name} and return the text content.
+# Consumes '{', all TKChar/TKCommand tokens, and '}' (lenient: stops at EOF).
+# Used to extract the environment name from \begin{pmatrix} and \end{pmatrix}.
+function _read_brace_word!(p::_Parser)::String
+    _current(p).kind === TKLBrace && _advance!(p)   # consume '{'
+    buf = Char[]
+    while _current(p).kind !== TKEOF && _current(p).kind !== TKRBrace
+        tok = _advance!(p)
+        append!(buf, tok.value)
+    end
+    _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    return String(buf)
+end
+
+# Parse the body of a matrix environment up to the matching \end{env_name}.
+# Returns an NKMatrix node with value "env_name\x00nrow\x00ncol" and a flat
+# row-major list of NKGroup children (one per cell).
+function _parse_matrix_body!(p::_Parser, env_name::String)::Node
+    cells  = Node[]   # flat row-major list of completed cells
+    row_lengths = Int[]   # number of cells in each row
+    current_cell = Node[]
+    ncol_current = 0   # cells completed in the current row (0-based)
+
+    function finish_cell!()
+        push!(cells, Node(NKGroup, copy(current_cell)))
+        empty!(current_cell)
+        ncol_current += 1
+    end
+
+    function finish_row!()
+        finish_cell!()
+        push!(row_lengths, ncol_current)
+        ncol_current = 0
+    end
+
+    while true
+        tok = _current(p)
+
+        if tok.kind === TKEOF
+            break   # unclosed environment: lenient, keep what we have
+
+        elseif tok.kind === TKCommand && tok.value == "\\end"
+            _advance!(p)
+            _read_brace_word!(p)   # consume {env_name}; we don't check it matches
+            break
+
+        elseif tok.kind === TKAmpersand
+            _advance!(p)
+            finish_cell!()
+
+        elseif tok.kind === TKCommand && tok.value == "\\\\"
+            _advance!(p)
+            # Skip optional row-spacing argument \\[dim]
+            if _current(p).kind === TKChar && _current(p).value == "["
+                _advance!(p)   # consume '['
+                while _current(p).kind !== TKEOF && _current(p).value != "]"
+                    _advance!(p)
+                end
+                _current(p).kind !== TKEOF && _advance!(p)   # consume ']'
+            end
+            finish_row!()
+
+        else
+            push!(current_cell, _parse_atom!(p))
+        end
+    end
+
+    # Commit the last (possibly incomplete) row if non-empty.
+    if !isempty(current_cell) || ncol_current > 0
+        finish_row!()
+    end
+
+    nrow = length(row_lengths)
+    ncol = nrow == 0 ? 0 : maximum(row_lengths)
+
+    # Pad short rows with empty cells so the grid is rectangular.
+    insert_idx = 0
+    for (r, rlen) in enumerate(row_lengths)
+        insert_idx += rlen
+        for _ in 1:(ncol - rlen)
+            insert!(cells, insert_idx + 1, Node(NKGroup, Node[]))
+            insert_idx += 1
+        end
+    end
+
+    return Node(NKMatrix, "$(env_name)\x00$(nrow)\x00$(ncol)", cells)
+end
+
 # Parse a command token and return the appropriate node.
 function _parse_command!(p::_Parser)::Node
     tok = _advance!(p)
@@ -411,6 +518,20 @@ function _parse_command!(p::_Parser)::Node
     elseif haskey(_HORIZ_BRACE_COMMANDS, cmd)
         body = _parse_argument!(p)
         return Node(NKHorizBrace, cmd, [body])
+
+    elseif cmd == "\\begin"
+        env_name = _read_brace_word!(p)
+        if haskey(_MATRIX_ENVS, env_name)
+            return _parse_matrix_body!(p, env_name)
+        else
+            # Unknown environment: emit a sentinel so the layout engine can skip it gracefully.
+            return Node(NKCommand, "\\begin{$(env_name)}")
+        end
+
+    elseif cmd == "\\end"
+        # \end encountered outside a \begin context (malformed input): consume and ignore.
+        _read_brace_word!(p)
+        return Node(NKSpace, "0.0")
 
     else
         bare = cmd[2:end]   # strip leading '\'

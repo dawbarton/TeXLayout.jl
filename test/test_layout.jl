@@ -884,4 +884,90 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test note_top <= base_bot + 1e-10
     end
 
+    # ── Matrix environments ───────────────────────────────────────────────────
+
+    @testset "pmatrix 2×2: structure and centering" begin
+        upm   = Float64(mt.upm)
+        boxes = layout(parse_latex(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}"),
+                       family, Display)
+        glyphs = find_glyphs(boxes)
+        # 4 letter glyphs + 2 parenthesis glyphs (left and right)
+        @test length(glyphs) >= 6
+
+        # Matrix must have positive total width and non-zero vertical extent.
+        xs = [b.x for b in glyphs]
+        @test maximum(xs) > minimum(xs)
+        ys = [b.y for b in glyphs]
+        @test maximum(ys) > minimum(ys)
+
+        # Matrix should be vertically centred on the math axis.
+        # The four content glyphs form two rows; top of upper row and bottom of
+        # lower row should be roughly equidistant from the axis.
+        axis_em = mt.constants.axis_height / upm
+        letter_glyphs = filter(b -> !contains(b.element.glyph_name, "paren"), glyphs)
+        top_y  = maximum(b.y + b.element.y_max / upm * b.scale for b in letter_glyphs)
+        bot_y  = minimum(b.y + b.element.y_min / upm * b.scale for b in letter_glyphs)
+        center = (top_y + bot_y) / 2
+        @test abs(center - axis_em) < 0.15   # within 0.15 em of axis
+    end
+
+    @testset "pmatrix 2×2: columns and rows correctly separated" begin
+        upm   = Float64(mt.upm)
+        boxes = layout(parse_latex(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}"),
+                       family, Display)
+        glyphs = find_glyphs(boxes)
+        letter_glyphs = sort(filter(b -> !contains(b.element.glyph_name, "paren"), glyphs),
+                             by = b -> (-round(b.y; digits=2), b.x))
+        @test length(letter_glyphs) == 4
+        # Row 0 (a, b) should be above row 1 (c, d).
+        row0 = letter_glyphs[1:2]
+        row1 = letter_glyphs[3:4]
+        @test minimum(b.y for b in row0) > maximum(b.y for b in row1) - 1e-6
+        # Column 0 (a, c) should be to the left of column 1 (b, d).
+        @test row0[1].x < row0[2].x
+        @test row1[1].x < row1[2].x
+    end
+
+    @testset "matrix (no delimiters): no parenthesis glyphs" begin
+        boxes = layout(parse_latex(raw"\begin{matrix} a & b \\ c & d \end{matrix}"),
+                       family, Display)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 4
+        paren_boxes = filter(b -> contains(b.element.glyph_name, "paren"), glyphs)
+        @test isempty(paren_boxes)
+    end
+
+    @testset "cases: left brace present, no right brace" begin
+        boxes = layout(parse_latex(raw"\begin{cases} f & x > 0 \\ 0 & \text{otherwise}\end{cases}"),
+                       family, Display)
+        glyphs = find_glyphs(boxes)
+        brace_boxes = filter(b -> contains(b.element.glyph_name, "brace"), glyphs)
+        @test length(brace_boxes) >= 1
+        # All braces should be on the left side.
+        @test all(b.x < 0.5 for b in brace_boxes)
+    end
+
+    @testset "1×1 matrix: single cell" begin
+        boxes = layout(parse_latex(raw"\begin{matrix} x \end{matrix}"), family, Display)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) == 1
+    end
+
+    @testset "matrix in Display style uses Text style for cells" begin
+        # In Display style, a standalone \frac shows the full-size fraction.
+        # Inside a matrix (which uses Text style), the \frac numerator/denominator
+        # should be at Script size, not Text size.
+        upm         = Float64(mt.upm)
+        script_pct  = mt.constants.script_percent_scale_down / 100.0
+        boxes_plain = layout(parse_latex(raw"\frac{1}{2}"), family, Display)
+        boxes_mat   = layout(parse_latex(raw"\begin{matrix}\frac{1}{2}\end{matrix}"),
+                             family, Display)
+        # Count distinct scales in the matrix fraction — should include script scale
+        mat_glyphs  = find_glyphs(boxes_mat)
+        scales      = unique(round.(b.scale for b in mat_glyphs; digits=4))
+        # Text-style \frac: numerator and denominator at ScriptScript ≈ 0.5
+        # We just check that a sub-1.0 scale is present.
+        @test any(s < 0.9 for s in scales)
+    end
+
 end

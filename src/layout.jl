@@ -573,7 +573,7 @@ function _atom_class(node::Node)::Symbol
         return get(_CMD_ATOM_CLASS, name, :ord)
     elseif k === NKOperator
         return :op
-    elseif k === NKFrac || k === NKDelimited || k === NKHorizBrace
+    elseif k === NKFrac || k === NKDelimited || k === NKHorizBrace || k === NKMatrix
         return :inner
     elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
         return :ord
@@ -1299,6 +1299,120 @@ function _layout_children!(
     return cursor - x0
 end
 
+# Inter-column and inter-row spacing constants for matrix environments.
+# _MATRIX_COLSEP is the margin added on each side of a column (total gap between
+# adjacent cells = 2 × _MATRIX_COLSEP), matching LaTeX's \arraycolsep ≈ 5 mu.
+# _MATRIX_ROWGAP is extra baseline-to-baseline clearance added between rows.
+const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
+const _MATRIX_ROWGAP  = 3 / 18   # extra row gap in em
+
+# Lay out a matrix/array environment (NKMatrix node).
+# Two-pass algorithm: measure all cells first, then place on a rectangular grid.
+# Cells are laid out in Text style (even in Display), centred on the math axis.
+# Returns the total horizontal advance in em units.
+function _layout_matrix!(
+    node::Node,
+    ctx::_LayoutCtx,
+    style::TexStyle,
+    x0::Float64,
+    y0::Float64,
+    scale::Float64,
+    boxes::Vector{LayoutBox},
+)::Float64
+    # Decode value = "env_name\x00nrow\x00ncol".
+    parts = split(node.value, '\x00'; limit=3)
+    length(parts) < 3 && return 0.0
+    env_name = parts[1]
+    nrow = parse(Int, parts[2])
+    ncol = parse(Int, parts[3])
+    (nrow == 0 || ncol == 0) && return 0.0
+
+    info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
+    upm  = ctx.upm
+    mc   = ctx.mc
+
+    # Cells are typeset in Text style (following TeX's rule for array environments).
+    cell_style = is_cramped(style) ? CrampedText : Text
+
+    # Scale factor for this environment (smallmatrix uses 0.9).
+    cell_scale = scale * info.scale
+
+    # ── First pass: lay out each cell into a scratch buffer, record metrics ──
+    cell_boxes   = [LayoutBox[] for _ in 1:nrow, _ in 1:ncol]
+    cell_widths  = zeros(Float64, nrow, ncol)
+    cell_heights = zeros(Float64, nrow, ncol)   # max ink above baseline
+    cell_depths  = zeros(Float64, nrow, ncol)   # max ink below baseline (positive)
+
+    for r in 1:nrow, c in 1:ncol
+        ci = (r - 1) * ncol + c
+        ci > length(node.children) && continue
+        tmp = LayoutBox[]
+        w = _layout_node!(node.children[ci], ctx, cell_style, 0.0, 0.0, cell_scale, tmp)
+        cell_boxes[r, c]   = tmp
+        cell_widths[r, c]  = w
+        cell_heights[r, c] = max(0.0,  _boxes_top(tmp, upm))
+        cell_depths[r, c]  = max(0.0, -_boxes_bottom(tmp, upm))
+    end
+
+    # ── Compute per-column widths and per-row extents ──
+    col_widths  = [maximum(cell_widths[:, c];  init=0.0) for c in 1:ncol]
+    row_heights = [maximum(cell_heights[r, :]; init=0.0) for r in 1:nrow]
+    row_depths  = [maximum(cell_depths[r, :];  init=0.0) for r in 1:nrow]
+
+    # Provisional baseline y for each row (row 1 at y = 0).
+    row_y = zeros(Float64, nrow)
+    for r in 2:nrow
+        row_y[r] = row_y[r-1] - (row_depths[r-1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
+    end
+
+    # Vertical extent of the provisional grid.
+    grid_top = row_y[1] + row_heights[1]
+    grid_bot = row_y[nrow] - row_depths[nrow]
+
+    # Centre grid on the math axis.
+    axis_em  = mc.axis_height / upm * scale
+    y_shift  = y0 + axis_em - (grid_top + grid_bot) / 2
+
+    # Column left-edge positions (relative to content origin, before adding left delimiter).
+    x_col    = zeros(Float64, ncol)
+    x_col[1] = _MATRIX_COLSEP * cell_scale
+    for c in 2:ncol
+        x_col[c] = x_col[c-1] + col_widths[c-1] + 2 * _MATRIX_COLSEP * cell_scale
+    end
+    content_w = x_col[ncol] + col_widths[ncol] + _MATRIX_COLSEP * cell_scale
+
+    # ── Delimiter sizing (if required) ──
+    left_w = 0.0; right_w = 0.0
+    if !isempty(info.left) || !isempty(info.right)
+        actual_top  = y_shift + grid_top - y0
+        actual_bot  = y_shift + grid_bot - y0
+        h_above     = max(0.0, actual_top - axis_em)
+        h_below     = max(0.0, axis_em   - actual_bot)
+        required_em = 2.0 * max(h_above, h_below)
+        required_du = required_em / scale * upm
+        left_w  = _layout_delim!(ctx, info.left,  required_du, x0, y0, scale, boxes)
+        right_w = _layout_delim!(ctx, info.right, required_du,
+                                 x0 + left_w + content_w, y0, scale, boxes)
+    end
+
+    # ── Second pass: emit all cells with correct offsets ──
+    for r in 1:nrow, c in 1:ncol
+        ci = (r - 1) * ncol + c
+        ci > length(node.children) && continue
+        tmp = cell_boxes[r, c]
+        isempty(tmp) && continue
+
+        x_cell = x0 + left_w + x_col[c] + (info.align === :left ? 0.0 :
+                                             (col_widths[c] - cell_widths[r, c]) / 2)
+        y_cell = y_shift + row_y[r]
+        for b in tmp
+            push!(boxes, LayoutBox(b.element, x_cell + b.x, y_cell + b.y, b.scale))
+        end
+    end
+
+    return left_w + content_w + right_w
+end
+
 # Lay out `node` into `boxes`, with the left-baseline anchor at (x0, y0) and
 # the given scale.  Returns the horizontal advance of the node in em units.
 function _layout_node!(
@@ -1801,6 +1915,9 @@ function _layout_node!(
     elseif node.kind === NKHorizBrace
         # Standalone brace with no script: body + brace only, no note.
         return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
+
+    elseif node.kind === NKMatrix
+        return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
 
     else
         return 0.0   # NKText and unrecognised nodes: emit nothing

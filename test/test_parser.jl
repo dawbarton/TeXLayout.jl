@@ -375,4 +375,63 @@
         @test dec.children[3].kind === NKChar   # n (sup)
     end
 
+    # ── Matrix environments ───────────────────────────────────────────────────
+
+    @testset "\\begin{pmatrix} 2x2: NKMatrix with correct shape" begin
+        tree = parse_latex(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}")
+        @test length(tree.children) == 1
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        @test mat.value == "pmatrix\x002\x002"
+        @test length(mat.children) == 4
+        # Each child is a group; check cell content
+        @test mat.children[1].kind === NKGroup
+        @test mat.children[1].children[1].value == "a"
+        @test mat.children[2].children[1].value == "b"
+        @test mat.children[3].children[1].value == "c"
+        @test mat.children[4].children[1].value == "d"
+    end
+
+    @testset "\\begin{matrix} 1x1: single cell, no delimiters" begin
+        tree = parse_latex(raw"\begin{matrix} x \end{matrix}")
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        @test mat.value == "matrix\x001\x001"
+        @test length(mat.children) == 1
+        @test mat.children[1].children[1].value == "x"
+    end
+
+    @testset "\\begin{cases}: 2x2 with braceleft delimiter" begin
+        tree = parse_latex(raw"\begin{cases} f & x > 0 \\ 0 & \text{otherwise}\end{cases}")
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        @test mat.value == "cases\x002\x002"
+        @test length(mat.children) == 4
+    end
+
+    @testset "Unclosed matrix environment: lenient parse" begin
+        tree = parse_latex(raw"\begin{pmatrix} a & b")
+        mat = tree.children[1]
+        @test mat.kind === NKMatrix
+        @test mat.value == "pmatrix\x001\x002"
+        @test length(mat.children) == 2
+    end
+
+    @testset "Unknown environment: falls through to NKCommand" begin
+        tree = parse_latex(raw"\begin{myenv} x \end{myenv}")
+        @test tree.children[1].kind === NKCommand
+        @test tree.children[1].value == "\\begin{myenv}"
+    end
+
+    @testset "Mismatched row lengths: short rows padded" begin
+        # Row 1 has 3 cells, row 2 has 1: should produce a 2x3 matrix with 6 cells.
+        tree = parse_latex(raw"\begin{matrix} a & b & c \\ x \end{matrix}")
+        mat = tree.children[1]
+        @test mat.value == "matrix\x002\x003"
+        @test length(mat.children) == 6
+        # Last two cells of row 2 should be empty groups
+        @test isempty(mat.children[5].children)
+        @test isempty(mat.children[6].children)
+    end
+
 end

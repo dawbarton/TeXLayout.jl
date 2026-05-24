@@ -127,6 +127,36 @@
         @test !isempty(smoke(expr))
     end
 
+    @testset "pmatrix 2×2" begin
+        expr = raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "bmatrix identity" begin
+        expr = raw"\begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "cases environment" begin
+        expr = raw"\begin{cases} x & x > 0 \\ 0 & \text{otherwise} \end{cases}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "matrix (no delimiters)" begin
+        expr = raw"\begin{matrix} \alpha & \beta \\ \gamma & \delta \end{matrix}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "pmatrix nested in frac" begin
+        expr = raw"\frac{1}{\begin{pmatrix}a\\b\end{pmatrix}}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
 end
 
 @testset "KaTeX malformed-input" begin
