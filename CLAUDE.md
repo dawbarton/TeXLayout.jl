@@ -119,6 +119,14 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
   - `NKLimitsOverride` — produced by `\limits` or `\nolimits`; wraps the preceding base
     node as its sole child; `value` is `"limits"` or `"nolimits"`.  The layout engine
     checks this before dispatching the script placement algorithm.
+  - `NKMatrix` — produced by `\begin{env}…\end{env}`; `value` encodes
+    `"env\x00nrow\x00colspec"` where `colspec` is either the verbatim column-spec
+    string from `\begin{array}{…}` (e.g. `"|l|c|r|"`) or a derived string of
+    `'c'`/`'l'` characters for shorthand environments.  Children are a flat row-major
+    list of `NKGroup` cells (one per cell, padded to a rectangular grid).  The layout
+    engine calls `_parse_colspec` to recover per-column alignments and vertical-rule
+    positions; `\begin{array}` is the only environment in `_COLSPEC_ENVS` (reads a
+    mandatory `{colspec}` argument); all others derive the colspec automatically.
 
 ### `TexStyle` (`style.jl`)
 Eight styles: `Display`, `CrampedDisplay`, `Text`, `CrampedText`, `Script`,
@@ -210,7 +218,7 @@ A summary of major features and their status.
 | Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
-| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments (matrix, pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix, smallmatrix, cases); two-pass grid layout centred on math axis |
+| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; vertical rules from `\|` in colspec; two-pass grid layout centred on math axis |
 | `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
 
 ## Known limitations / future work
