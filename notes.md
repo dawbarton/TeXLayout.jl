@@ -214,3 +214,15 @@
 - **Scale of effect**: NewCMMath's `integral.v1` (display-size `\int`) has IC = 459 design units = 0.459 em — nearly half an em. This produces a very visible shift at display size. Symmetric operators (`\sum`, `\prod`) have IC = 0, so they are unaffected.
 - **Fix**: Added `italic_corrections::Dict{String,Int}` to `_LayoutCtx` (already parsed from the MATH table — no new parsing needed). Added `_base_italic_correction_em` helper that reads the first glyph's IC from a box list. Applied `±IC/2` to all three limits branches (NKSuperscript, NKSubscript, NKDecorated): subscripts shift left, superscripts shift right.
 - **OpenType MATH spec basis**: Offset limits by ±½ italic correction to track the slanted stroke.
+
+## 2026-05-24T22:21+00:00 Italic correction for side-placement subscripts (integral limits)
+
+- **Bug**: `\int_0^\infty` showed subscript and superscript horizontally aligned — no italic correction effect visible. Root cause: `\int` uses **side placement** (sub/sup to the right), not limits placement, so the limits-branch IC fix from the previous session had no effect.
+- **Key distinction**: `_use_limits` returns `false` for `\int` — integrals always use side placement in standard TeX. The limits-placement IC fix (±½IC applied above/below) was correct but irrelevant for integrals.
+- **KaTeX rule for side placement** (`supsub.ts` lines 117–131): for single-symbol bases, `marginLeft = makeEm(-italic_correction)` is applied **only to the subscript**. Superscripts are not shifted. This moves the subscript left by the full IC so it sits under the stroke bottom rather than the advance width.
+- **Fix**: Applied `ic_em = _base_italic_correction_em(tmp_base, ctx, scale)` in both side-placement branches:
+  - `NKSubscript`: `x0 + base_adv - ic_em + b.x`
+  - `NKDecorated` (sub+sup together): subscript at `script_x - ic_em`, superscript at `script_x` unchanged
+- **Verification**: For `\int_0^\infty` with NewCMMath, subscript (`zero`) lands at x=0.5400, superscript (`infinity`) at x=0.9990. Difference = 0.459 em = IC of `integral.v1` (459/1000 du). Correct.
+- **No effect on symmetric operators**: `\sum`, `\prod` etc. have IC = 0, so they are unaffected.
+- All 789 tests pass. Demo sheets regenerated.
