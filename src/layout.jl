@@ -1307,9 +1307,12 @@ function _layout_horiz_brace!(
         brace_top = brace_y + Float64(g_ref.y_max) / upm * scale
         brace_bot = brace_y + Float64(g_ref.y_min) / upm * scale
     else
+        # No glyph metrics available: assume the brace's baseline coincides with
+        # the body-side ink edge (y_min=0 for over, y_max=0 for under) and pad by
+        # 0.25 em on the opposite side as a placeholder for the missing glyph.
         brace_y   = is_over ? y0 + body_top + body_gap : y0 + body_bot - body_gap
-        brace_top = is_over ? brace_y + 0.25 * scale : y0 + body_top
-        brace_bot = is_over ? y0 + body_bot          : brace_y - 0.25 * scale
+        brace_top = is_over ? brace_y + 0.25 * scale : brace_y
+        brace_bot = is_over ? brace_y                : brace_y - 0.25 * scale
     end
 
     # Place body (centred over total_w at y0).
