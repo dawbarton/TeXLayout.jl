@@ -440,7 +440,8 @@ const _LIMITS_OPERATORS = Set{String}([
 const _DISPLAY_OP_CODEPOINTS = Dict{String,UInt32}(
     "sum"       => 0x2211,  "prod"      => 0x220F,  "coprod"    => 0x2210,
     "int"       => 0x222B,  "iint"      => 0x222C,  "iiint"     => 0x222D,
-    "oint"      => 0x222E,
+    "oint"      => 0x222E,  "oiint"     => 0x222F,  "oiiint"    => 0x2230,
+    "iiiint"    => 0x2A0C,
     "bigcap"    => 0x22C2,  "bigcup"    => 0x22C3,
     "bigsqcup"  => 0x2A06,  "bigsqcap"  => 0x2A05,
     "bigwedge"  => 0x22C0,  "bigvee"    => 0x22C1,
@@ -596,11 +597,89 @@ const _SYMBOL_CODEPOINTS = Dict{String,UInt32}(
     # Musical / misc
     "sharp"          => 0x266F,  "flat"           => 0x266D,
     "natural"        => 0x266E,
+    # Extended binary operators (AMS)
+    "boxplus"        => 0x229E,  "boxminus"       => 0x229F,
+    "boxtimes"       => 0x22A0,  "boxdot"         => 0x22A1,
+    "ltimes"         => 0x22C9,  "rtimes"         => 0x22CA,
+    "leftthreetimes" => 0x22CB,  "rightthreetimes"=> 0x22CC,
+    "curlywedge"     => 0x22CF,  "curlyvee"       => 0x22CE,
+    "barwedge"       => 0x22BC,  "intercal"       => 0x22BA,
+    "dotplus"        => 0x2214,  "doublebarwedge" => 0x2A5E,
+    "divideontimes"  => 0x22C7,  "triangleleft"   => 0x25C3,
+    "triangleright"  => 0x25B9,
+    # Extended relations (AMS)
+    "bowtie"         => 0x22C8,  "lll"            => 0x22D8,
+    "ggg"            => 0x22D9,  "leqq"           => 0x2266,
+    "geqq"           => 0x2267,  "leqslant"       => 0x2A7D,
+    "geqslant"       => 0x2A7E,  "eqslantless"    => 0x2A95,
+    "eqslantgtr"     => 0x2A96,  "lesssim"        => 0x2272,
+    "gtrsim"         => 0x2273,  "lessapprox"     => 0x2A85,
+    "gtrapprox"      => 0x2A86,  "approxeq"       => 0x224A,
+    "lessdot"        => 0x22D6,  "gtrdot"         => 0x22D7,
+    "lessgtr"        => 0x2276,  "gtrless"        => 0x2277,
+    "lesseqgtr"      => 0x22DA,  "gtreqless"      => 0x22DB,
+    "lesseqqgtr"     => 0x2A8B,  "gtreqqless"     => 0x2A8C,
+    "doteqdot"       => 0x2251,  "risingdotseq"   => 0x2253,
+    "fallingdotseq"  => 0x2252,  "backsim"        => 0x223D,
+    "backsimeq"      => 0x22CD,  "eqcirc"         => 0x2256,
+    "circeq"         => 0x2257,  "triangleq"      => 0x225C,
+    "bumpeq"         => 0x224F,  "Bumpeq"         => 0x224E,
+    "thicksim"       => 0x223C,  "thickapprox"    => 0x2248,
+    "subseteqq"      => 0x2AC5,  "supseteqq"      => 0x2AC6,
+    "Subset"         => 0x22D0,  "Supset"         => 0x22D1,
+    "sqsubset"       => 0x228F,  "sqsupset"       => 0x2290,
+    "preccurlyeq"    => 0x227C,  "succcurlyeq"    => 0x227D,
+    "curlyeqprec"    => 0x22DE,  "curlyeqsucc"    => 0x22DF,
+    "trianglelefteq" => 0x22B4,  "trianglerighteq"=> 0x22B5,
+    "vartriangleleft"=> 0x22B2,  "vartriangleright"=>0x22B3,
+    "blacktriangleleft"=>0x25C0, "blacktriangleright"=>0x25B6,
+    "between"        => 0x226C,  "pitchfork"      => 0x22D4,
+    "therefore"      => 0x2234,  "because"        => 0x2235,
+    "shortmid"       => 0x2223,  "shortparallel"  => 0x2225,
+    "backepsilon"    => 0x220D,  "varpropto"      => 0x221D,
+    "longleftrightarrow" => 0x27F7, "Longleftrightarrow" => 0x27FA,
+    # Negated relations with single codepoints
+    "nleq"           => 0x2270,  "ngeq"           => 0x2271,
+    "nless"          => 0x226E,  "ngtr"           => 0x226F,
+    "nsim"           => 0x2241,  "nparallel"      => 0x2226,
+    "nsubseteq"      => 0x2288,  "nsupseteq"      => 0x2289,
+    "subsetneq"      => 0x228A,  "supsetneq"      => 0x228B,
+    "lneq"           => 0x2A87,  "gneq"           => 0x2A88,
+    "lnsim"          => 0x22E6,  "gnsim"          => 0x22E7,
+    "nprec"          => 0x2280,  "nsucc"          => 0x2281,
+    "npreceq"        => 0x22E0,  "nsucceq"        => 0x22E1,
+    # Ordinary symbols (AMS)
+    "measuredangle"  => 0x2221,  "sphericalangle" => 0x2222,
+    "imath"          => 0x0131,  "jmath"          => 0x0237,
+    "hslash"         => 0x210F,  "triangle"       => 0x25B3,
+    "triangledown"   => 0x25BD,  "square"         => 0x25A1,
+    "blacksquare"    => 0x25A0,  "lozenge"        => 0x25CA,
+    "blacklozenge"   => 0x29EB,  "bigstar"        => 0x2605,
+    "clubsuit"       => 0x2663,  "diamondsuit"    => 0x2662,
+    "heartsuit"      => 0x2661,  "spadesuit"      => 0x2660,
+    "checkmark"      => 0x2713,  "S"              => 0x00A7,
+    "P"              => 0x00B6,  "copyright"      => 0x00A9,
+    "circledR"       => 0x00AE,  "circledS"       => 0x24C8,
+    "maltese"        => 0x2720,  "yen"            => 0x00A5,
+    "pounds"         => 0x00A3,  "mho"            => 0x2127,
+    "Angstrom"       => 0x212B,  "digamma"        => 0x03DD,
+    "Finv"           => 0x2132,  "Game"           => 0x2141,
+    "degree"         => 0x00B0,  "textdollar"     => 0x0024,
+    "diagup"         => 0x2571,  "diagdown"       => 0x2572,
+    # Delimiter aliases
+    "lvert"          => 0x007C,  "rvert"          => 0x007C,
+    "lVert"          => 0x2016,  "rVert"          => 0x2016,
+    "lgroup"         => 0x27EE,  "rgroup"         => 0x27EF,
+    "lmoustache"     => 0x23B0,  "rmoustache"     => 0x23B1,
+    "llbracket"      => 0x27E6,  "rrbracket"      => 0x27E7,
     # Delimiters (used in \big* manual sizing, where the name is the bare symbol)
     "langle"         => 0x27E8,  "rangle"         => 0x27E9,
     "lfloor"         => 0x230A,  "rfloor"         => 0x230B,
     "lceil"          => 0x2308,  "rceil"          => 0x2309,
     "vert"           => 0x007C,  "Vert"           => 0x2016,
+    # Punctuation
+    "colon"          => 0x003A,  "cdotp"          => 0x22C5,
+    "ldotp"          => 0x002E,
 )
 
 # Return the TeX atom class for a given AST node.
@@ -649,20 +728,11 @@ end
 # Return a Glyph for a Unicode character.
 # In math mode, certain ASCII characters are remapped to their correct math
 # Unicode equivalents before the glyph lookup (e.g. '-' → U+2212).
-# For letters, prefer the PostScript name lookup (more reliable in math fonts
-# where the italic variant carries the same single-letter name).  Fall back to
-# codepoint lookup for digits and other characters.
+# Always resolve by codepoint: the Unicode cmap yields the math-italic form for
+# letters, whereas glyph_metrics(family, "x") returns the upright roman slot.
 function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
     if ctx.mode === :math
         ch = get(_MATH_CHAR_REMAP, ch, ch)
-    end
-    if isletter(ch)
-        try
-            m = glyph_metrics(ctx.family, string(ch))
-            return Glyph(string(ch), m.advance_width, m.left_side_bearing,
-                         m.x_min, m.y_min, m.x_max, m.y_max)
-        catch
-        end
     end
     try
         cp = UInt32(ch)
@@ -689,8 +759,10 @@ function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
 end
 
 # Return a Glyph for a PostScript glyph name, or nothing if not in the font.
-# Falls back to a codepoint lookup for canonical AGL names that fail in fonts
-# which use Unicode-style PS names (e.g. FiraMath uses "uni0028" not "parenleft").
+# Used exclusively for font-internal names from the MATH table (size variants,
+# assembly parts, radical/delimiter base glyphs) — not for TeX command names.
+# Falls back via _CANONICAL_CODEPOINTS for AGL names that fail in fonts using
+# Unicode-style PS names (e.g. FiraMath "uni0028" vs AGL "parenleft").
 # The returned Glyph carries the font's own PS name so renderers can locate it.
 function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     try
@@ -1603,9 +1675,8 @@ function _layout_node!(
             push!(boxes, LayoutBox(g, x0, y_op, scale))
             return g.advance_width / upm * scale
         else
-            # Try the symbol codepoint table first so that commands whose PS
-            # glyph name differs from the command name (e.g. \infty → "infinity")
-            # are resolved correctly regardless of font-specific naming.
+            # All ordinary symbols are resolved by codepoint via _SYMBOL_CODEPOINTS
+            # so the correct glyph is found regardless of font-specific PS naming.
             g = if haskey(_SYMBOL_CODEPOINTS, name)
                     cp = _SYMBOL_CODEPOINTS[name]
                     try
@@ -1615,10 +1686,10 @@ function _layout_node!(
                               m.advance_width, m.left_side_bearing,
                               m.x_min, m.y_min, m.x_max, m.y_max)
                     catch
-                        _cmd_glyph(ctx, name)
+                        nothing
                     end
                 else
-                    _cmd_glyph(ctx, name)
+                    nothing
                 end
             g === nothing && return 0.0
             push!(boxes, LayoutBox(g, x0, y0, scale))
