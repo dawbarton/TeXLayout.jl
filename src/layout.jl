@@ -494,6 +494,10 @@ const _CANONICAL_CODEPOINTS = Dict{String, UInt32}(
     "dblverticalbar" => 0x2016,
     "angleleft"      => 0x27E8,
     "angleright"     => 0x27E9,
+    "lfloor"         => 0x230A,
+    "rfloor"         => 0x230B,
+    "lceil"          => 0x2308,
+    "rceil"          => 0x2309,
 )
 
 # Unicode codepoints for symbol commands, resolved by codepoint so the correct

@@ -77,10 +77,10 @@ const _DELIM_GLYPH_NAMES = Dict{String,String}(
     "\\backslash" => "backslash",
     "\\langle"   => "angleleft",
     "\\rangle"   => "angleright",
-    "\\lfloor"   => "uni230A",
-    "\\rfloor"   => "uni230B",
-    "\\lceil"    => "uni2308",
-    "\\rceil"    => "uni2309",
+    "\\lfloor"   => "lfloor",
+    "\\rfloor"   => "rfloor",
+    "\\lceil"    => "lceil",
+    "\\rceil"    => "rceil",
     "."          => "",   # null delimiter — renders nothing
 )
 
