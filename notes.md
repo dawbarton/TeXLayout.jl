@@ -118,3 +118,13 @@
 - Key bugs fixed during implementation: (1) Julia mutable aliasing bug with `current_cell` reference, (2) wrong `y0` argument to `_layout_delim!` (should not pre-add axis height — the function does this internally), (3) sort direction bug in layout test (negating y, not reversing both keys).
 - 761 tests passing (25 new parser + 14 new layout + 5 new katex smoke tests).
 - Updated `CLAUDE.md` feature table (Array/matrix environments: ✗ → ✓).
+
+## 2026-05-24T15:15+00:00 Demo sheets, CFF fix, and TeX Gyre font family scaffolding
+
+- Updated `README.md`: added matrix/array environments to key features; added Schola/Termes/Bonum pending entries to acknowledgements table.
+- **Bug fixed in `math_table.jl`** (`_cff_top_dict_charset_offset`): `0x100000000` is a `UInt64` literal; `Int64 - UInt64` promotes to `UInt64`, causing an `InexactError` when trying to push to `Vector{Int}`. Fixed by `v -= Int(0x100000000)`. Symptom: STIX Two Math crashed on load; all other fonts (NewCMMath, Pagella, Luciole, FiraMath) worked because their CFF Top DICT only uses b==28 (int16) offsets.
+- **New `tools/demo_sheet.jl`**: generates a comprehensive single-page greyscale PNG demo sheet for any font family. Sections: fractions/roots, scripts/large ops, integrals, delimiters, accents/extensibles, font variants, matrices, array colspec. Headers rendered dark-on-light/white-on-dark via two separate composite functions. Accepts `:symbol` or `/path/to/math.otf`; default output `demo_{symbol}.png`.
+- **Demo PNGs generated** for all 5 published families: NewCMMath (2047×2300), Pagella, Luciole, FiraMath, STIXTwo (1991×2334). All in `shared/`. STIX Two required the CFF fix.
+- **`tools/prepare_font_artifacts.jl`**: downloads fonts from CTAN/GitHub, creates Julia artifact tarballs and a draft `Artifacts.toml`. Covers all 8 families (5 existing + Schola/Termes/Bonum). CTAN paths for TeX Gyre Schola/Termes/Bonum: `mirrors.ctan.org/fonts/tex-gyre-math/{schola,termes,bonum}/texgyre{schola,termes,bonum}-math.otf` + text OTFs from `mirrors.ctan.org/fonts/tex-gyre/fonts/opentype/public/tex-gyre/`.
+- **`src/fonts.jl` scaffolding**: `_NAMED_ARTIFACTS` and `_ARTIFACT_LOADERS` have placeholder comments for Schola/Termes/Bonum; the `@artifact_str` loader functions are intentionally absent until artifacts are published (they break precompilation if the Artifacts.toml entries don't exist). Re-add when artifacts are uploaded.
+- Open question: CTAN URLs for TeX Gyre text fonts — the exact filenames follow `texgyre{name}-{weight}.otf` convention but should be verified before running `prepare_font_artifacts.jl`.
