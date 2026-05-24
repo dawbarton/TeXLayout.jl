@@ -1,4 +1,4 @@
-name = "Formatic"
+name = "TeXLayout"
 uuid = "2da61a13-e1b6-4a6f-954d-3ae4b998419f"
 authors = ["Claude (David A W Barton) <david.barton@bristol.ac.uk>"]
 version = "0.1.0"

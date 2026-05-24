@@ -4,7 +4,7 @@
 # Regeneration command (from workspace root):
 #   uv run python3 utils/extract_math_fixture.py \
 #       external/MathTeXEngine.jl/assets/fonts/NewComputerModern/NewCMMath-Regular.otf \
-#       Formatic.jl/test/fixtures/newcm_math.jl
+#       TeXLayout.jl/test/fixtures/newcm_math.jl
 
 const FIXTURE_FONT_PATH = joinpath(
     @__DIR__, "..", "..", "..", "external",

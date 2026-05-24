@@ -7,7 +7,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
-using Formatic
+using TeXLayout
 using FreeTypeAbstraction
 
 const FONT_PATH = joinpath(@__DIR__, "..", "..", "external",
@@ -21,19 +21,19 @@ const LABEL_W  = 0      # no labels — expressions are self-explanatory
 
 # Expressions to render (label, latex, style)
 const EXPRS = [
-    ("a b",             "ab",                         Formatic.Text),
-    ("a + b",           "a+b",                        Formatic.Text),
-    ("a - b",           "a-b",                        Formatic.Text),
-    ("a = b",           "a=b",                        Formatic.Text),
-    ("a < b",           "a<b",                        Formatic.Text),
-    ("a , b",           "a,b",                        Formatic.Text),
-    ("\\sin x",         "\\sin x",                    Formatic.Text),
-    ("\\sin^2 x",       "\\sin^2 x",                  Formatic.Text),
-    ("a + b (script)",  "a+b",                        Formatic.Script),
-    ("a \\quad b",      "a\\quad b",                  Formatic.Text),
-    ("x^2 + y^2",       "x^2+y^2",                    Formatic.Text),
-    ("\\frac{a+b}{c}",  "\\frac{a+b}{c}",             Formatic.Display),
-    ("\\left(a+b\\right)", "\\left(a+b\\right)",      Formatic.Text),
+    ("a b",             "ab",                         TeXLayout.Text),
+    ("a + b",           "a+b",                        TeXLayout.Text),
+    ("a - b",           "a-b",                        TeXLayout.Text),
+    ("a = b",           "a=b",                        TeXLayout.Text),
+    ("a < b",           "a<b",                        TeXLayout.Text),
+    ("a , b",           "a,b",                        TeXLayout.Text),
+    ("\\sin x",         "\\sin x",                    TeXLayout.Text),
+    ("\\sin^2 x",       "\\sin^2 x",                  TeXLayout.Text),
+    ("a + b (script)",  "a+b",                        TeXLayout.Script),
+    ("a \\quad b",      "a\\quad b",                  TeXLayout.Text),
+    ("x^2 + y^2",       "x^2+y^2",                    TeXLayout.Text),
+    ("\\frac{a+b}{c}",  "\\frac{a+b}{c}",             TeXLayout.Display),
+    ("\\left(a+b\\right)", "\\left(a+b\\right)",      TeXLayout.Text),
 ]
 
 # ── Canvas helpers ─────────────────────────────────────────────────────────────

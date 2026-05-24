@@ -1,4 +1,4 @@
-# Formatic.jl test suite.
+# TeXLayout.jl test suite.
 #
 # Tests are organised in six levels mirroring the implementation pipeline:
 #   1. MATH table parser   — OpenType binary parsing
@@ -12,19 +12,19 @@
 # parsed independently by fonttools/ttx (see test/fixtures/newcm_math.jl).
 
 using Test
-using Formatic
+using TeXLayout
 
 # Resolve conflicts with Base exports (Base.Text, Base.Display, Base.MathConstants).
 # These constants are used throughout the included test files.
-const Display             = Formatic.Display
-const CrampedDisplay      = Formatic.CrampedDisplay
-const Text                = Formatic.Text
-const CrampedText         = Formatic.CrampedText
-const Script              = Formatic.Script
-const CrampedScript       = Formatic.CrampedScript
-const ScriptScript        = Formatic.ScriptScript
-const CrampedScriptScript = Formatic.CrampedScriptScript
-const MathConstants       = Formatic.MathConstants
+const Display             = TeXLayout.Display
+const CrampedDisplay      = TeXLayout.CrampedDisplay
+const Text                = TeXLayout.Text
+const CrampedText         = TeXLayout.CrampedText
+const Script              = TeXLayout.Script
+const CrampedScript       = TeXLayout.CrampedScript
+const ScriptScript        = TeXLayout.ScriptScript
+const CrampedScriptScript = TeXLayout.CrampedScriptScript
+const MathConstants       = TeXLayout.MathConstants
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and
@@ -35,7 +35,7 @@ include("fixtures/newcm_math.jl")
 # in one file (e.g., a stub throwing "not implemented") does not abort the run for
 # subsequent files.  The top-level testset collects all results and throws once at
 # the very end.
-@testset "Formatic.jl" begin
+@testset "TeXLayout.jl" begin
     include("test_math_table.jl")
     include("test_metrics.jl")
     include("test_style.jl")

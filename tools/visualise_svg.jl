@@ -1,4 +1,4 @@
-# Visualise Formatic.jl layout output as an SVG bounding-box diagram.
+# Visualise TeXLayout.jl layout output as an SVG bounding-box diagram.
 #
 # Each LayoutBox is drawn as a coloured rectangle showing its ink extent:
 #   - Glyph:  light-blue fill, PS glyph name label
@@ -11,7 +11,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
-using Formatic
+using TeXLayout
 
 const PXEM   = 150    # SVG user units per em
 const MARGIN = 60     # border around the content (SVG user units)
@@ -77,7 +77,7 @@ svg_text(io, x, y, s; size=10, fill="#333") = println(io,
 function main()
     expr  = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
     outf  = length(ARGS) >= 2 ? ARGS[2] : "output.svg"
-    style = Formatic.Display
+    style = TeXLayout.Display
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
     family = FontFamily(FONT_PATH)

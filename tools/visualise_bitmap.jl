@@ -10,7 +10,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
-using Formatic
+using TeXLayout
 using FreeTypeAbstraction
 
 const BASE_PX  = 100   # pixels per em at Text scale (box.scale = 1.0)
@@ -99,7 +99,7 @@ end
 function main()
     expr  = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
     outf  = length(ARGS) >= 2 ? ARGS[2] : "output.png"
-    style = Formatic.Display
+    style = TeXLayout.Display
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
     family = FontFamily(FONT_PATH)

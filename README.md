@@ -1,11 +1,11 @@
-# Formatic.jl
+# TeXLayout.jl
 
 A Julia-idiomatic OpenType-aware LaTeX math typesetter, designed for use
 with [Makie.jl](https://github.com/MakieOrg/Makie.jl).
 
 ## Overview
 
-Formatic.jl converts LaTeX math strings into a flat list of positioned glyph elements
+TeXLayout.jl converts LaTeX math strings into a flat list of positioned glyph elements
 that a renderer (e.g. CairoMakie or GLMakie) can consume directly.  The pipeline is:
 
 ```
@@ -32,7 +32,7 @@ units relative to the formula baseline, and a scale factor.
 ## Usage
 
 ```julia
-using Formatic
+using TeXLayout
 
 # Use the default font family (New Computer Modern Math, downloaded automatically).
 family = default_font_family()
@@ -66,7 +66,7 @@ Early development (v0.1).  The following features are not yet implemented:
 
 ## Acknowledgements
 
-Formatic.jl draws heavily on the following prior work:
+TeXLayout.jl draws heavily on the following prior work:
 
 - **[KaTeX](https://katex.org/)** (MIT licence) — the primary reference for algorithm
   design, TeX style cascade rules, operator lists, and test cases.  The screenshotter

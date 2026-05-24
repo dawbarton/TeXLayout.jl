@@ -1,4 +1,4 @@
-# Render demonstration panels for newly implemented Formatic.jl features.
+# Render demonstration panels for newly implemented TeXLayout.jl features.
 #
 # Generates four PNG files (one per feature group) in the directory given
 # as the first argument (default: current directory):
@@ -15,7 +15,7 @@
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
-using Formatic
+using TeXLayout
 using FreeTypeAbstraction
 
 const BASE_PX   = 120   # pixels per em for math content
@@ -73,7 +73,7 @@ function em_bbox(boxes, upm; pad=0.12)
 end
 
 # ── Render one expression into a fresh canvas ─────────────────────────────────
-function render_expr(expr::String, family, mt, face_math, style=Formatic.Display)
+function render_expr(expr::String, family, mt, face_math, style=TeXLayout.Display)
     boxes = layout(parse_latex(expr), family, style)
     upm = mt.upm
     bx1, bx2, by1, by2 = em_bbox(boxes, upm)

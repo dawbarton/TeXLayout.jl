@@ -1,11 +1,11 @@
 # TeXbook Layout Rules as implemented in KaTeX
 
 These are the TeXbook "rules" referenced in KaTeX's source, collected here for
-quick lookup during Formatic.jl development.  Page numbers refer to the TeXbook
+quick lookup during TeXLayout.jl development.  Page numbers refer to the TeXbook
 (Knuth, 5th edition).  The OpenType equivalents are noted where they differ from
 the original TeX metric names.
 
-The **Status** field for each rule describes Formatic.jl's implementation
+The **Status** field for each rule describes TeXLayout.jl's implementation
 relative to what KaTeX does.  "Matches KaTeX" means the algorithm agrees
 modulo the OpenType/TeX metric naming differences; deviations are noted
 explicitly.
@@ -123,7 +123,7 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   enough to cover the base, or assembles one from extensible parts. ✓
 - **Codepoint note:** KaTeX's `symbols.ts` maps `\acute`/`\grave`/`\bar` to
   Modifier Letter codepoints (U+02CA/U+02CB/U+02C9) absent in most OpenType
-  math fonts.  Formatic.jl uses Latin-1/ASCII equivalents (U+00B4/U+0060/U+00AF)
+  math fonts.  TeXLayout.jl uses Latin-1/ASCII equivalents (U+00B4/U+0060/U+00AF)
   which are present in NewCMMath and render to the same glyphs.
 
 ---
@@ -256,7 +256,7 @@ supShift = max(supShift, minSupShift, supm.depth + 0.25 × xHeight)
 **Status — one deviation (structural).**
 1. The `supm.depth + 0.25 × xHeight` clamp is implemented using the OpenType
    constant `SuperscriptBottomMin`. ✓
-2. KaTeX uses three minSupShift cases; Formatic.jl uses two (cramped vs
+2. KaTeX uses three minSupShift cases; TeXLayout.jl uses two (cramped vs
    not-cramped), matching the two OpenType constants available.  The Display
    case (`sup1`) has no OpenType equivalent — the font designer is expected to
    encode the appropriate value in `SuperscriptShiftUp`.  This structural

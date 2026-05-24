@@ -1,4 +1,4 @@
-# Formatic.jl — OpenType-aware LaTeX math typesetter for Makie.
+# TeXLayout.jl — OpenType-aware LaTeX math typesetter for Makie.
 #
 # A Julia-idiomatic implementation of KaTeX-quality math layout, designed as
 # a drop-in replacement for MathTeXEngine.jl.  Key improvements over
@@ -9,7 +9,7 @@
 # Pipeline:  tokenize → parse → layout → Vector{LayoutBox}
 #            └─ Makie: LayoutBox → GlyphCollection
 
-module Formatic
+module TeXLayout
 
 include("math_table.jl")
 include("fonts.jl")
@@ -24,7 +24,7 @@ export MathTable, GlyphConstruction, GlyphAssembly, GlyphAssemblyPart,
 export FontFamily, GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint, glyph_metrics_upright,
        font_family, default_font_family
 # TexStyle enum values deliberately not exported at top level to avoid
-# conflicts with Base.Text and Base.Display.  Access as Formatic.Display etc.
+# conflicts with Base.Text and Base.Display.  Access as TeXLayout.Display etc.
 export TexStyle,
        sup_style, sub_style, frac_num_style, frac_den_style, cramp_style,
        is_cramped, is_display, is_script, is_script_script, size_scale

@@ -1,4 +1,4 @@
-# Formatic.jl — Architecture and Developer Guide
+# TeXLayout.jl — Architecture and Developer Guide
 
 This file documents key architectural decisions, invariants, and caveats for
 Claude (and human developers) working on this codebase.
@@ -7,7 +7,7 @@ Claude (and human developers) working on this codebase.
 
 ## Purpose
 
-Formatic.jl is a Julia-idiomatic OpenType-aware LaTeX math typesetter.  It is intended
+TeXLayout.jl is a Julia-idiomatic OpenType-aware LaTeX math typesetter.  It is intended
 as a drop-in replacement for MathTeXEngine.jl in Makie.jl.  The design reference is
 [KaTeX](https://katex.org/); the implementation is not a direct port but follows the same
 algorithmic structure where it is sound.
@@ -17,9 +17,9 @@ algorithmic structure where it is sound.
 ## File structure
 
 ```
-Formatic.jl/
+TeXLayout.jl/
 ├── src/
-│   ├── Formatic.jl        # Module entry point; all exports declared here
+│   ├── TeXLayout.jl        # Module entry point; all exports declared here
 │   ├── math_table.jl      # OpenType MATH table parser (binary → MathConstants struct)
 │   ├── fonts.jl           # FontFamily, GlyphMetrics, font-cache, glyph lookup
 │   ├── style.jl           # TexStyle enum (D/T/S/SS × cramped), style transition functions

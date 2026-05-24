@@ -1,4 +1,4 @@
-# KaTeX-derived test suite for Formatic.jl.
+# KaTeX-derived test suite for TeXLayout.jl.
 #
 # Three testsets, drawn from three KaTeX test files:
 #   1. Screenshotter smoke tests — selected expressions from ss_data.yaml; each
@@ -6,7 +6,7 @@
 #      style.  Expressions whose entire content maps to unrecognised glyph names
 #      (and therefore produce zero boxes with the current font) are annotated
 #      broken=true.
-#   2. Malformed-input — expressions from errors-spec.ts; Formatic.jl is
+#   2. Malformed-input — expressions from errors-spec.ts; TeXLayout.jl is
 #      deliberately lenient and never throws on ill-formed input, but certain
 #      malformed inputs currently trigger a BoundsError (parser advances past the
 #      sentinel EOF token).  Those are annotated broken=true.
@@ -94,7 +94,7 @@
 
     @testset "GreekLetters" begin
         # KaTeX: \alpha\beta\gamma\omega renders four Greek glyphs.
-        # Formatic: each becomes NKCommand; NewCMMath-Regular does contain PS
+        # TeXLayout: each becomes NKCommand; NewCMMath-Regular does contain PS
         # glyph names "alpha", "beta", "gamma", "omega" so this passes.
         expr = "\\alpha\\beta\\gamma\\omega"
         @test (parse_latex(expr); true)
@@ -103,7 +103,7 @@
 
     @testset "Functions" begin
         # KaTeX: renders \sin etc. as upright multi-letter operators.
-        # Formatic: each becomes NKOperator; characters are looked up via
+        # TeXLayout: each becomes NKOperator; characters are looked up via
         # the upright (codepoint) path and render as roman letters.
         expr = "\\sin\\cos\\tan\\ln\\log"
         @test (parse_latex(expr); true)
@@ -167,50 +167,50 @@ end
 
     @testset "superscript inside closing brace" begin
         # KaTeX error: "Expected group after '^'".
-        # Formatic: silently produces NKSuperscript with NKChar("}") as exponent.
+        # TeXLayout: silently produces NKSuperscript with NKChar("}") as exponent.
         @test no_crash("{1^}")
     end
 
     @testset "subscript at end of input" begin
         # KaTeX error: "Expected group after '_'".
-        # Formatic: silently produces NKSubscript with an empty NKSpace argument.
+        # TeXLayout: silently produces NKSubscript with an empty NKSpace argument.
         @test no_crash("1_")
     end
 
     @testset "superscript at end of input" begin
         # KaTeX error: "Expected group after '^'".
-        # Formatic: silently produces NKSuperscript with an empty NKSpace argument.
+        # TeXLayout: silently produces NKSuperscript with an empty NKSpace argument.
         @test no_crash("1^")
     end
 
     @testset "double superscript" begin
         # KaTeX error: "Double superscript".
-        # Formatic: silently ignores the second '^'; the third character is
+        # TeXLayout: silently ignores the second '^'; the third character is
         # emitted as a bare NKChar in the outer sequence.
         @test no_crash("1^2^3")
     end
 
     @testset "double subscript" begin
         # KaTeX error: "Double subscript".
-        # Formatic: silently ignores the second '_'.
+        # TeXLayout: silently ignores the second '_'.
         @test no_crash("1_2_3")
     end
 
     @testset "unclosed sqrt brace" begin
         # KaTeX error: "Expected '}'".
-        # Formatic: treats EOF as the closing brace — no crash.
+        # TeXLayout: treats EOF as the closing brace — no crash.
         @test no_crash("\\sqrt{2")
     end
 
     @testset "unclosed sqrt optional argument" begin
         # KaTeX error: "Expected ']'".
-        # Formatic: silently uses an empty NKSpace as the body — no crash.
+        # TeXLayout: silently uses an empty NKSpace as the body — no crash.
         @test no_crash("\\sqrt[3")
     end
 
     @testset "missing right delimiter" begin
         # KaTeX error: "Missing \\right".
-        # Formatic: \right and its delimiter are consumed as NKCommand and NKChar
+        # TeXLayout: \right and its delimiter are consumed as NKCommand and NKChar
         # children of the NKDelimited node — no crash.
         @test no_crash("\\left(1+2)")
     end
