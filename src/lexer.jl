@@ -37,53 +37,53 @@ function tokenize(input::AbstractString)::Vector{Token}
     i      = 1
 
     while i <= n
-        c = s[i]
+        c    = s[i]
+        next = nextind(s, i)
 
         if c == '\\'
             # Backslash: consume the command name.
-            if i == n
+            if next > n
                 # Bare backslash at end — treat as TKChar.
                 push!(tokens, Token(TKChar, "\\", i))
-                i += 1
-            else
-                j = i + 1
-                next = s[j]
-                if isletter(next)
-                    # Multi-letter command: greedily consume letters.
-                    while j <= n && isletter(s[j])
-                        j += 1
-                    end
-                    push!(tokens, Token(TKCommand, s[i:j-1], i))
-                else
-                    # Single non-letter character after backslash (e.g. \{ \  \\).
-                    push!(tokens, Token(TKCommand, s[i:j], i))
-                    j += 1
+                i = next
+            elseif isletter(s[next])
+                # Multi-letter command: greedily consume letters.
+                j = nextind(s, next)
+                while j <= n && isletter(s[j])
+                    j = nextind(s, j)
                 end
+                push!(tokens, Token(TKCommand, s[i:prevind(s, j)], i))
+                i = j
+            else
+                # Single non-letter character after backslash (e.g. \{ \  \\).
+                j = nextind(s, next)
+                push!(tokens, Token(TKCommand, s[i:prevind(s, j)], i))
                 i = j
             end
 
         elseif c == '^'
-            push!(tokens, Token(TKSup, "^", i));  i += 1
+            push!(tokens, Token(TKSup, "^", i));  i = next
         elseif c == '_'
-            push!(tokens, Token(TKSub, "_", i));  i += 1
+            push!(tokens, Token(TKSub, "_", i));  i = next
         elseif c == '{'
-            push!(tokens, Token(TKLBrace, "{", i));  i += 1
+            push!(tokens, Token(TKLBrace, "{", i));  i = next
         elseif c == '}'
-            push!(tokens, Token(TKRBrace, "}", i));  i += 1
+            push!(tokens, Token(TKRBrace, "}", i));  i = next
         elseif c == '$'
-            push!(tokens, Token(TKMathShift, "\$", i));  i += 1
+            push!(tokens, Token(TKMathShift, "\$", i));  i = next
         elseif c == '&'
-            push!(tokens, Token(TKAmpersand, "&", i));  i += 1
+            push!(tokens, Token(TKAmpersand, "&", i));  i = next
         elseif c == '~'
-            push!(tokens, Token(TKSpace, "~", i));  i += 1
+            push!(tokens, Token(TKSpace, "~", i));  i = next
         elseif isspace(c)
             # Spaces are insignificant in math mode; skip the entire run.
+            i = next
             while i <= n && isspace(s[i])
-                i += 1
+                i = nextind(s, i)
             end
         else
-            # Everything else is an ordinary character.
-            push!(tokens, Token(TKChar, string(c), i));  i += 1
+            # Everything else is an ordinary character (may be multi-byte UTF-8).
+            push!(tokens, Token(TKChar, string(c), i));  i = next
         end
     end
 

@@ -103,4 +103,25 @@
         @test toks[1].value == "\\ "
     end
 
+    @testset "Multi-byte UTF-8 characters" begin
+        # Direct Unicode math characters must not throw StringIndexError.
+        toks = tokenize("α+β")
+        kinds = [t.kind for t in toks if t.kind !== TKEOF]
+        @test kinds == [TKChar, TKChar, TKChar]
+        @test toks[1].value == "α"
+        @test toks[2].value == "+"
+        @test toks[3].value == "β"
+        # Positions are byte offsets; α and β are 2 bytes each in UTF-8.
+        @test toks[1].pos == 1
+        @test toks[2].pos == 3
+        @test toks[3].pos == 4
+    end
+
+    @testset "Whitespace runs containing Unicode neighbours" begin
+        # The whitespace-skip loop must use nextind, not byte += 1.
+        toks = tokenize("α  β")
+        char_toks = filter(t -> t.kind === TKChar, toks)
+        @test [t.value for t in char_toks] == ["α", "β"]
+    end
+
 end
