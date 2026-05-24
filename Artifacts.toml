@@ -4,55 +4,61 @@
 # first calls font_family(:symbol) for that family.
 #
 # Internal structure of every tarball:
-#   math.otf        — OpenType math font  (mandatory)
-#   regular.otf/.ttf — upright text (optional)
+#   math.otf           — OpenType math font (mandatory)
+#   regular.otf/.ttf   — upright text (optional)
 #   bold.otf/.ttf
 #   italic.otf/.ttf
 #   bolditalic.otf/.ttf
+#   LICENSE / OFL.txt / README.md  — font license files
 #
-# Font family summary:
+# Font family summary and licenses:
 #   NewCMMath — New Computer Modern (default; Computer-Modern style)
+#               GUST Font License (LPPL 1.3c)
 #   Pagella   — TeX Gyre Pagella MTE (Palatino style)
+#               GUST Font License (LPPL 1.3c)
 #   Luciole   — Luciole Math (designed for low vision / readability)
+#               Luciole-Math.otf: SIL OFL 1.1; text TTFs: CC-BY
 #   STIXTwo   — STIX Two Math v2.0.2 (Times / STIX style)
+#               SIL OFL 1.1 (Reserved Font Name "TM Math")
 #   FiraMath  — Fira Math v0.3.4 + Fira Sans (sans-serif)
+#               SIL OFL 1.1 (both components)
 
 [NewCMMath]
 lazy = true
-git-tree-sha1 = "616b954dbb8f4c5e4e3564da36977274ff02b0bd"
+git-tree-sha1 = "0ef7324748294dd1c9648cf190f3f0d7688e5d2f"
 
     [[NewCMMath.download]]
     url = "https://github.com/DavidBarton/Formatic.jl/releases/download/v0.1-fonts/NewCMMath.tar.gz"
-    sha256 = "641958429dab3cdc3ab329f40678ae54c40f0609c1ceeee10da0873ffc4b0001"
+    sha256 = "43d343c9e17ba002c34333fe6eabeb49a84ad192d0b648d6c5ec4d813df3e196"
 
 [Pagella]
 lazy = true
-git-tree-sha1 = "64ff1681dd67fee31cd73fb98a68a5c19795da21"
+git-tree-sha1 = "0662dd77e974392b23ee8a402425cbaa4522493c"
 
     [[Pagella.download]]
     url = "https://github.com/DavidBarton/Formatic.jl/releases/download/v0.1-fonts/Pagella.tar.gz"
-    sha256 = "7bb610f0f56e87ba82c1fa603e6ba67da58b5f330e54c1e33673e655fc7bc295"
+    sha256 = "62d31efc7425b76d052b0d6d8dc7a54f0affb081f3c5b5d99a454387a53c4b2f"
 
 [Luciole]
 lazy = true
-git-tree-sha1 = "2311b3afe0111551c10557dcede566749414d75c"
+git-tree-sha1 = "4548239626d4097cafa35c8160098bf7248f9e4e"
 
     [[Luciole.download]]
     url = "https://github.com/DavidBarton/Formatic.jl/releases/download/v0.1-fonts/Luciole.tar.gz"
-    sha256 = "2abf92b3506287c9ea8971188c27d7223755019c2548a47d4449a9920e35a588"
+    sha256 = "1d5543b010b5c8589b8bc6abb5a92bcfc2ca692aaf5e181e077aa60a92fbb3bf"
 
 [STIXTwo]
 lazy = true
-git-tree-sha1 = "703a35a39823634c9f3da92b4cd02a337a20f0c6"
+git-tree-sha1 = "d26da8680b7db6f29c17d7e5425560244608cf9c"
 
     [[STIXTwo.download]]
     url = "https://github.com/DavidBarton/Formatic.jl/releases/download/v0.1-fonts/STIXTwo.tar.gz"
-    sha256 = "b06885df7763521f702d4018bef4d1eb4464bba3fc90cf3ccaa9ef675e6eb73f"
+    sha256 = "2a9519ba24e4d250b85fd113e64858bc031b33ca4e814e111d68c900243bf838"
 
 [FiraMath]
 lazy = true
-git-tree-sha1 = "0ee28d3032f50616147f98e75babe956032b2060"
+git-tree-sha1 = "638126165b8e0c1e90ae78e776c588648c2fd8d7"
 
     [[FiraMath.download]]
     url = "https://github.com/DavidBarton/Formatic.jl/releases/download/v0.1-fonts/FiraMath.tar.gz"
-    sha256 = "4c0acd51eb307f665d8a1ce3911902e1afb92b14e12105ea223a859c6328f616"
+    sha256 = "372611b395f7e900589eab2708af20b9bf2fffc0b908e0f19b1e960616406108"
