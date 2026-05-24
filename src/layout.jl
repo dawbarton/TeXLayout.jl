@@ -1861,8 +1861,12 @@ function _layout_node!(
                 min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
             # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
             y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
+            # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
+            # shifted left by the full IC so it sits under the stroke, not the advance width.
+            # Matches KaTeX supsub.ts: marginLeft = makeEm(-italic_correction) on subscript.
+            ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
             for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, x0 + base_adv + b.x, y_sub + b.y, b.scale))
+                push!(boxes, LayoutBox(b.element, x0 + base_adv - ic_em + b.x, y_sub + b.y, b.scale))
             end
             return base_adv + sub_adv + mc.space_after_script * s
         end
@@ -1911,6 +1915,10 @@ function _layout_node!(
             sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
             append!(boxes, tmp_base)
             script_x = x0 + base_adv
+            # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
+            # shifted left by the full IC so it sits under the stroke, not the advance width.
+            # Superscript is not shifted. Matches KaTeX supsub.ts behaviour.
+            ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
             s = scale / upm
             min_sup = is_cramped(style) ?
                 mc.superscript_shift_up_cramped * s :
@@ -1941,7 +1949,7 @@ function _layout_node!(
                 end
             end
             for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sub + b.y, b.scale))
+                push!(boxes, LayoutBox(b.element, script_x - ic_em + b.x, y_sub + b.y, b.scale))
             end
             for b in tmp_sup
                 push!(boxes, LayoutBox(b.element, script_x + b.x, y_sup + b.y, b.scale))
