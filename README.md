@@ -19,11 +19,50 @@ units relative to the formula baseline, and a scale factor.
 
 - Full TeX style cascade (Display / Text / Script / ScriptScript, each with a cramped
   variant), driven entirely by the font's OpenType MATH table — no hard-coded constants.
-- Correct sub/superscript placement, fractions, radicals, and delimiters.
+- Correct sub/superscript placement, fractions, radicals, and auto-sized delimiters.
 - Named math operators (`\sin`, `\cos`, `\lim`, `\operatorname{…}`, and 25 others)
   rendered upright using the companion regular font or the math font's codepoint mapping.
+- Inter-atom spacing (TeX atom-class table: ord/bin/rel/op/open/close/punct/inner).
+- Accents (`\hat`, `\bar`, `\vec`, `\widehat`, `\widetilde`, `\overline`, `\underbrace`, …).
+- Font switching (`\mathbf`, `\mathrm`, `\mathbb`, `\mathcal`, `\mathfrak`, `\mathtt`, …).
+- Five bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NKCommand` leaf nodes that are silently skipped by the layout engine.
+
+## Usage
+
+```julia
+using Formatic
+
+# Use the default font family (New Computer Modern Math, downloaded automatically).
+family = default_font_family()
+
+# Or select one of the five bundled families by symbol:
+#   :new_cm    — New Computer Modern (default)
+#   :pagella   — TeX Gyre Pagella (Palatino style)
+#   :luciole   — Luciole Math (designed for low vision)
+#   :stix_two  — STIX Two Math (Times style)
+#   :fira_math — Fira Math + Fira Sans (sans-serif)
+family = font_family(:stix_two)
+
+# Or supply your own font files:
+family = font_family("/path/to/MyMath.otf"; regular="/path/to/MyText.otf")
+
+# Lay out a formula:
+boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}", family)
+
+# boxes is a Vector{LayoutBox}; each box carries:
+#   .element  — Glyph, HRule, VRule, or Space
+#   .x, .y    — baseline-relative position in em units
+#   .scale    — font-size multiplier (1.0 for Display/Text, 0.7 for Script, …)
+```
+
+## Status
+
+Early development (v0.1).  The following features are not yet implemented:
+
+- Array and matrix environments (`\begin{array}`, `pmatrix`, `cases`, …).
+- `\text{…}` inter-atom spacing (text-mode fragments are not yet classified by atom class).
 
 ## Acknowledgements
 
@@ -43,34 +82,16 @@ Formatic.jl draws heavily on the following prior work:
   [OpenType spec](https://docs.microsoft.com/en-us/typography/opentype/spec/math)) — the
   source of truth for all metric constants (axis height, script shifts, fraction
   parameters, radical gaps, etc.).
-- **[NewComputerModern](https://ctan.org/pkg/newcomputermodern)** font family — used as
-  the fixture font in the test suite; provides a complete OpenType MATH table against
-  which all metric constants are validated.
 
-## Usage
+### Bundled fonts
 
-```julia
-using Formatic, CairoMakie
+The five font families available via `font_family(:symbol)` are redistributed under their
+respective open licences.  Each tarball includes the relevant licence file.
 
-family = FontFamily("/path/to/NewCMMath-Regular.otf")
-boxes  = generate_tex_elements("\\frac{1}{\\sqrt{2}}", family)
-
-# boxes is a Vector{LayoutBox}; each box carries:
-#   .element  — Glyph, HRule, VRule, or Space
-#   .x, .y    — baseline-relative position in em units
-#   .scale    — font-size multiplier (1.0 for Display/Text, 0.7 for Script, …)
-```
-
-## Status
-
-Early development (v0.1).  The following features are not yet implemented:
-
-- Limits placement (`\lim_{n\to\infty}` in Display mode places the subscript beside the
-  operator rather than below it).
-- Inter-atom spacing (thin/medium spaces between operator classes).
-- Delimiter auto-sizing (`\left`/`\right` produce correctly-sized delimiters but do not
-  yet scale them to the enclosed content).
-- Accent commands (`\hat`, `\vec`, `\overline`, `\underbrace`, …) — stubbed in the AST.
-- Font-switching (`\mathbf`, `\mathrm`, `\mathbb`, …).
-- Array and matrix environments (`\begin{array}`, `pmatrix`, `cases`, …).
-- `default_font_family()` for zero-argument `generate_tex_elements` calls.
+| Symbol | Font | Authors | Licence |
+|:-------|:-----|:--------|:--------|
+| `:new_cm` | [New Computer Modern](https://ctan.org/pkg/newcomputermodern) | Antonis Tsolomitis (University of the Aegean) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:pagella` | [TeX Gyre Pagella Math](https://ctan.org/pkg/tex-gyre-math-pagella) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:luciole` | [Luciole](https://luciole-vision.com/) | Daniel Flipo and [typographies.fr](https://typographies.fr/), in collaboration with [Centre de Ressources Handicap Visuel](https://crhv.fr/) de Lyon; with support from DIPHE/Université Lumière Lyon 2, GUTenberg, Swiss Ceres Foundation, PEP69 | Math font: [SIL OFL 1.1](https://openfontlicense.org); text fonts: [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `:stix_two` | [STIX Two Math](https://github.com/stipub/stixfonts) v2.0.2 | The STIX Fonts Project Authors; STIX Fonts™ is a trademark of the [Institute of Electrical and Electronics Engineers](https://www.ieee.org/) | [SIL OFL 1.1](https://openfontlicense.org) (Reserved Font Name "TM Math") |
+| `:fira_math` | [Fira Math](https://github.com/firamath/firamath) v0.3.4 + [Fira Sans](https://github.com/mozilla/Fira) | Fira Math: Xiangdong Zeng; Fira Sans: Mozilla and Telefonica S.A. | [SIL OFL 1.1](https://openfontlicense.org) |
