@@ -771,7 +771,15 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
                      m.x_min, m.y_min, m.x_max, m.y_max)
     catch
     end
+    # Fallback 1: AGL name with a known codepoint (e.g. "parenleft" in a font
+    # that uses "uni0028").
     cp = get(_CANONICAL_CODEPOINTS, name, nothing)
+    # Fallback 2: "uni{HHHH}" name (e.g. "uni23DE") in a font that uses the AGL
+    # name ("overbrace").  Parse the codepoint and resolve via the font's own map.
+    if cp === nothing
+        m2 = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
+        m2 !== nothing && (cp = parse(UInt32, m2.captures[1], base=16))
+    end
     cp === nothing && return nothing
     try
         m  = glyph_metrics_by_codepoint(ctx.family, cp)
@@ -799,6 +807,23 @@ function _construction_key(ctx::_LayoutCtx, canonical_name::String)::String
     catch
     end
     return canonical_name
+end
+
+# Return the key under which a Unicode-named brace glyph is stored in
+# horiz_constructions.  Most fonts use "uni23DE" etc., but some (e.g. Luciole)
+# use AGL names ("overbrace").  Resolve via the font's own codepoint→PS mapping.
+function _horiz_construction_key(ctx::_LayoutCtx, uni_name::String)::String
+    haskey(ctx.horiz_constructions, uni_name) && return uni_name
+    m = match(r"^uni([0-9A-Fa-f]{4,6})$", uni_name)
+    m === nothing && return uni_name
+    cp = parse(UInt32, m.captures[1], base=16)
+    try
+        ps = glyph_name_by_codepoint(ctx.family, cp)
+        isempty(ps) && return uni_name
+        haskey(ctx.horiz_constructions, ps) && return ps
+    catch
+    end
+    return uni_name
 end
 
 # Return a Glyph for character `ch` under the given font variant (Option C):
@@ -1225,7 +1250,7 @@ function _layout_horiz_brace!(
     upm = ctx.upm
     mc  = ctx.mc
     is_over  = startswith(brace_node.value, "\\over")
-    glyph_ps = _HORIZ_BRACE_GLYPHS[brace_node.value]
+    glyph_ps = _horiz_construction_key(ctx, _HORIZ_BRACE_GLYPHS[brace_node.value])
 
     # Primary note lives on the brace side; secondary note is the opposite.
     primary_node   = is_over ? sup_node : sub_node

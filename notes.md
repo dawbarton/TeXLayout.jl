@@ -198,3 +198,12 @@
 - Fira Math has a **full Fira Sans companion** (regular, italic, bold, bold-italic all present in artifact). The font family IS complete.
 - Fira Math **lacks widehat/widetilde** in its MATH table horiz_constructions (only has overbrace/underbrace variants). `\widehat` always falls back to the fixed-size combining circumflex (uni0302, adv=0), correctly centred by the ink-midpoint formula.
 - Fira Math also **lacks calligraphic and fraktur** Unicode math alphabets — `\mathcal{H}` renders as upright H, `\mathfrak{g}` as regular g. Code is correct; this is a Fira Math v0.3.4 font limitation.
+
+## 2026-05-24T21:27+00:00 PS name vs codepoint audit and Luciole overbrace fix
+
+- **Bug fixed**: `\overbrace` (and all other horiz brace commands) was silently missing for Luciole because `_HORIZ_BRACE_GLYPHS` mapped `\overbrace` → `"uni23DE"`, but Luciole uses the AGL name `"overbrace"` in its `horiz_constructions` table.
+  - All other fonts (NewCM, Pagella, STIX Two, FiraMath) use `"uni23DE"` — Luciole is the outlier.
+  - Same pattern as the existing `_construction_key` issue (FiraMath uses `"uni0028"` instead of `"parenleft"` in vert_constructions), but in the opposite direction.
+- **Fix**: Added `_horiz_construction_key(ctx, uni_name)` — mirrors `_construction_key` for horiz_constructions. Resolves `"uni{HHHH}"` to font's actual PS name via `glyph_name_by_codepoint`; covers all six brace commands simultaneously.
+- **Defensive fix**: Extended `_cmd_glyph` with a second fallback path: if the name looks like `"uni{HHHH}"`, parse the codepoint and resolve via `glyph_name_by_codepoint`. This handles the symmetric case where future code might pass a Unicode-style name to a font using AGL naming.
+- **Audit result**: No other unhandled PS name vs codepoint gaps in current code paths. All other callsites either use font-native construction table names, properly-resolved `glyph_name_by_codepoint` results, or the existing `_CANONICAL_CODEPOINTS` mechanism.
