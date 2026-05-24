@@ -70,6 +70,7 @@ struct _LayoutCtx
     vert_constructions::Dict{String,GlyphConstruction}
     horiz_constructions::Dict{String,GlyphConstruction}  # for \widehat, \widetilde
     top_accent_attachments::Dict{String,Int}  # PS glyph name → x position (design units)
+    italic_corrections::Dict{String,Int}      # PS glyph name → design units (from MATH table)
     min_connector_overlap::Int
     mode::Symbol          # :math | :text
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
@@ -1372,6 +1373,20 @@ end
 # Unwrap NKLimitsOverride to expose the actual operator node for layout.
 _limits_base(node::Node) = node.kind === NKLimitsOverride ? node.children[1] : node
 
+# Return the italic correction (in em units) of the first Glyph in `boxes`, or 0.0.
+# Used to shift limits of slanted operators (e.g. ∫) so they track the diagonal stroke.
+# Per the OpenType MATH spec and KaTeX, limits are offset by ±½ IC: subscripts shift
+# left and superscripts shift right.
+function _base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx,
+                                    scale::Float64)::Float64
+    for b in boxes
+        b.element isa Glyph || continue
+        ic = get(ctx.italic_corrections, b.element.glyph_name, 0)
+        return ic * scale / ctx.upm
+    end
+    return 0.0
+end
+
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).
 function _use_limits(base::Node, style::TexStyle)::Bool
@@ -1778,6 +1793,8 @@ function _layout_node!(
                         y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
             total_w = max(base_w, sup_w)
             Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
+            # ±½ italic correction shifts superscript right over the slanted stroke.
+            Δsup += _base_italic_correction_em(tmp_base, ctx, scale) / 2
             for b in tmp_base
                 push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
             end
@@ -1822,6 +1839,8 @@ function _layout_node!(
                         y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
             total_w = max(base_w, sub_w)
             Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
+            # ±½ italic correction shifts subscript left under the slanted stroke.
+            Δsub -= _base_italic_correction_em(tmp_base, ctx, scale) / 2
             for b in tmp_base
                 push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
             end
@@ -1871,6 +1890,10 @@ function _layout_node!(
             Δbase = (total_w - base_w) / 2
             Δsub  = (total_w - sub_w)  / 2
             Δsup  = (total_w - sup_w)  / 2
+            # ±½ italic correction shifts sub/sup to track the slanted operator stroke.
+            ic_half = _base_italic_correction_em(tmp_base, ctx, scale) / 2
+            Δsub -= ic_half
+            Δsup += ic_half
             for b in tmp_base
                 push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
             end
@@ -2079,6 +2102,7 @@ function _layout_node!(
         # Switch the active font variant for all recursive calls within the body.
         new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
                              ctx.horiz_constructions, ctx.top_accent_attachments,
+                             ctx.italic_corrections,
                              ctx.min_connector_overlap, ctx.mode, Symbol(node.value))
         isempty(node.children) && return 0.0
         return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
@@ -2195,6 +2219,7 @@ function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutB
     mt  = load_math_table(family.math)
     ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
                      mt.horiz_constructions, mt.top_accent_attachments,
+                     mt.italic_corrections,
                      mt.min_connector_overlap, :math, :default)
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
