@@ -179,8 +179,14 @@ driven by `MathConstants.script_percent_scale_down` and
 - `_LayoutCtx` carries: `family` (`FontFamily`), `mc` (`MathConstants`), `upm`
   (design units per em), `vert_constructions` and `horiz_constructions` (extensible glyph
   tables from the MATH table), `top_accent_attachments` (PS name → x offset for accent
-  alignment), `min_connector_overlap` (minimum overlap between assembly parts), `mode`
-  (`:math` or `:text`), and `font_variant` (`:default` or a `\mathXX` variant symbol).
+  alignment), `italic_corrections` (PS glyph name → design units; from the MATH table;
+  used to shift subscripts on slanted bases such as `\int`), `min_connector_overlap`
+  (minimum overlap between assembly parts), `mode` (`:math` or `:text`), and
+  `font_variant` (`:default` or a `\mathXX` variant symbol).
+- **`_base_italic_correction_em(boxes, ctx, scale)`** — helper that returns the italic
+  correction of the first `Glyph` element in a box list, converted to em units (design
+  units × scale / upm).  Returns 0.0 if no glyph is found or the glyph has no IC entry.
+  Used by all script placement branches to implement the italic correction rules.
 
 ### `MathConstants` (`math_table.jl`)
 Parsed directly from the font's OpenType MATH table.  All constants are in design units;
@@ -244,7 +250,7 @@ A summary of major features and their status.
 | Fractions (`\frac`) | ✓ | TeX Rule 15d/15e gap clamping; fraction rule from MATH table |
 | Square roots (`\sqrt`, `\sqrt[n]`) | ✓ | Pre-built variants + extensible assembly; top-anchored |
 | Delimiters (`\left`/`\right`) | ✓ | Auto-sized from `vert_constructions`; centred on math axis |
-| Sub/superscripts | ✓ | Standard beside-base placement using MATH shift constants |
+| Sub/superscripts | ✓ | Standard beside-base placement using MATH shift constants; italic correction applied to subscripts on slanted single-glyph bases (e.g. `\int`) — full IC shift left, matching KaTeX `supsub.ts` |
 | Named operators (`\sin`, `\cos`, `\lim`, …) | ✓ | Upright glyphs; 30+ operators including `\limsup`, `\liminf` |
 | Large operators (`\sum`, `\prod`, `\int`, …) | ✓ | Display-size variant selected via `display_operator_min_height` |
 | Limits placement | ✓ | Sub/sup centred below/above in Display style; 4 MATH constants used |

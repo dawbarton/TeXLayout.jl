@@ -20,6 +20,7 @@ units relative to the formula baseline, and a scale factor.
 - Full TeX style cascade (Display / Text / Script / ScriptScript, each with a cramped
   variant), driven entirely by the font's OpenType MATH table — no hard-coded constants.
 - Correct sub/superscript placement, fractions, radicals, and auto-sized delimiters.
+  Italic correction applied to subscripts on slanted bases (e.g. `\int`) to track the stroke.
 - Named math operators (`\sin`, `\cos`, `\lim`, `\operatorname{…}`, and 25 others)
   rendered upright using the companion regular font or the math font's codepoint mapping.
 - Inter-atom spacing (TeX atom-class table: ord/bin/rel/op/open/close/punct/inner).
