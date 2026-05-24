@@ -116,6 +116,15 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     (e.g. `"parenleft\x00parenright"`).  An empty substring means a null delimiter (no glyph
     rendered).  The layout engine looks up `vert_constructions` from the MATH table to pick
     the smallest variant tall enough to cover the inner content, centred on the math axis.
+  - `NKFontSwitch` — produced by `\mathbf{…}`, `\mathit{…}`, `\mathrm{…}`, `\mathbb{…}`,
+    `\mathcal{…}`, `\mathfrak{…}`, `\mathsf{…}`, `\mathtt{…}`, `\boldsymbol{…}`, and
+    aliases.  `value` is the variant name (e.g. `"mathbf"`); `children[1]` is the body
+    sequence.  The layout engine recurses with `ctx.font_variant` set to the variant.
+  - `NKHorizBrace` — produced by `\overbrace`, `\underbrace`, `\overbracket`,
+    `\underbracket`, `\overgroup`, `\undergroup`.  `value` is the bare command name;
+    `children[1]` is the body.  The layout engine selects the widest-fitting variant
+    (or extensible assembly) from `horiz_constructions`, then applies limits-style
+    note placement for any sub/superscript on the brace node.
   - `NKLimitsOverride` — produced by `\limits` or `\nolimits`; wraps the preceding base
     node as its sole child; `value` is `"limits"` or `"nolimits"`.  The layout engine
     checks this before dispatching the script placement algorithm.
@@ -125,8 +134,9 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     `'c'`/`'l'` characters for shorthand environments.  Children are a flat row-major
     list of `NKGroup` cells (one per cell, padded to a rectangular grid).  The layout
     engine calls `_parse_colspec` to recover per-column alignments and vertical-rule
-    positions; `\begin{array}` is the only environment in `_COLSPEC_ENVS` (reads a
+    counts; `\begin{array}` is the only environment in `_COLSPEC_ENVS` (reads a
     mandatory `{colspec}` argument); all others derive the colspec automatically.
+    `||` in a colspec produces two adjacent rules separated by `_MATRIX_DOUBLERULESEP`.
 
 ### `TexStyle` (`style.jl`)
 Eight styles: `Display`, `CrampedDisplay`, `Text`, `CrampedText`, `Script`,
@@ -139,9 +149,15 @@ driven by `MathConstants.script_percent_scale_down` and
 ### `FontFamily` / `GlyphMetrics` (`fonts.jl`)
 - `FontFamily` holds font paths: `math` (mandatory), `regular`, `italic`, `bold`,
   `bold_italic` (all optional).
+- **Constructors:** `font_family(::Symbol)` looks up a named artifact (`:new_cm`,
+  `:pagella`, `:luciole`, `:stix_two`, `:fira_math`); `font_family(math_path; regular,
+  bold, italic, bolditalic)` accepts file paths directly; `default_font_family()` is an
+  alias for `font_family(:new_cm)`.
 - **Three glyph lookup functions:**
-  - `glyph_metrics(family, name)` — PS glyph name in the math font (returns italic math
-    glyphs for single letters such as `"x"`, `"alpha"`).
+  - `glyph_metrics(family, name)` — metrics for a PostScript glyph name in the math font
+    (e.g. `"parenleft"`, `"alpha"`).  The form of single-letter names depends on the font;
+    in NewCMMath, `"x"` maps to the *upright* roman form, not italic — use
+    `glyph_metrics_by_codepoint` with a Unicode math-variant codepoint for italic letters.
   - `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint in the math font (throws
     on miss).
   - `glyph_metrics_upright(family, ch)` — upright character; uses `regular` font if
@@ -153,11 +169,14 @@ driven by `MathConstants.script_percent_scale_down` and
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
   Positions are in em units (design units / UPM × scale); x right, y up, origin at
   formula baseline.
-- Element subtypes: `Glyph` (name + cached metrics), `HRule` (width + thickness),
-  `VRule`, `Space`.
-- `_LayoutCtx` carries `family`, `mc` (MathConstants), `upm`, `vert_constructions`, and
-  `min_connector_overlap` (all from the MATH table) so the `NKDelimited` branch can look
-  up delimiter variants and construct extensible assemblies.
+- Element subtypes: `Glyph` (PS name + advance/bearing/bbox metrics in design units),
+  `HRule` (width + thickness in em), `VRule` (height + thickness in em), `Space` (width
+  in em).
+- `_LayoutCtx` carries: `family` (`FontFamily`), `mc` (`MathConstants`), `upm`
+  (design units per em), `vert_constructions` and `horiz_constructions` (extensible glyph
+  tables from the MATH table), `top_accent_attachments` (PS name → x offset for accent
+  alignment), `min_connector_overlap` (minimum overlap between assembly parts), `mode`
+  (`:math` or `:text`), and `font_variant` (`:default` or a `\mathXX` variant symbol).
 
 ### `MathConstants` (`math_table.jl`)
 Parsed directly from the font's OpenType MATH table.  All constants are in design units;
@@ -180,9 +199,10 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
    construct requires identifying the correct MATH table fields (see the OpenType spec
    or KaTeX's `fontMetricsData.js`).
 
-4. **`NKOperator` uses codepoint lookup, not PS-name lookup.** For letters a–z and A–Z,
-   the PS-name path in NewCMMath (and most OpenType math fonts) returns the *italic*
-   variant; the codepoint path returns the *upright* variant.  This is intentional.
+4. **`NKOperator` uses codepoint lookup, not PS-name lookup.** The codepoint path reliably
+   returns the *upright* roman form in OpenType math fonts.  (In NewCMMath, PS names like
+   `"x"` also happen to map to the upright form, but this is font-dependent — using
+   codepoints is the portable approach for upright text.)
 
 5. **Large operator glyphs are resolved by codepoint, not command name.** PS glyph names
    in OpenType math fonts diverge from LaTeX command names (`\sum` → `"summation"`,
@@ -218,20 +238,23 @@ A summary of major features and their status.
 | Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
-| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; vertical rules from `\|` in colspec; two-pass grid layout centred on math axis |
+| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double (`||`) vertical rules from colspec; two-pass grid layout centred on math axis |
 | `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
 
 ## Known limitations / future work
 - **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
   from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
   yet used; adding them would give better coverage for characters outside the math block
-  (e.g., Greek bold letters) and is deferred to steps 5–6.
-- **`default_font_family()`** — now implemented; returns NewCMMath via the Julia
-  Artifacts system.  The five font tarballs in `shared/font_archives/` must be
-  uploaded to a GitHub Release and the URLs in `Artifacts.toml` updated before
-  the package is usable by other users.
+  (e.g., Greek bold letters).
+- **Artifacts not yet published** — `default_font_family()` and `font_family(::Symbol)`
+  work locally (artifacts in `~/.julia/artifacts/`), but the placeholder URLs in
+  `Artifacts.toml` must be replaced with real GitHub Release asset URLs before the
+  package is installable by other users.  The five tarballs are in `shared/font_archives/`.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.
+- **Makie integration** — the package produces `Vector{LayoutBox}` but does not yet
+  implement the MathTeXEngine.jl interface (`generate_tex_elements`) needed for
+  CairoMakie/GLMakie to use it as a drop-in replacement.
 
 ---
 
