@@ -25,6 +25,9 @@ units relative to the formula baseline, and a scale factor.
 - Inter-atom spacing (TeX atom-class table: ord/bin/rel/op/open/close/punct/inner).
 - Accents (`\hat`, `\bar`, `\vec`, `\widehat`, `\widetilde`, `\overline`, `\underbrace`, …).
 - Font switching (`\mathbf`, `\mathrm`, `\mathbb`, `\mathcal`, `\mathfrak`, `\mathtt`, …).
+- Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
+  `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
+  `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
 - Five bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NKCommand` leaf nodes that are silently skipped by the layout engine.
@@ -61,7 +64,6 @@ boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}", family)
 
 Early development (v0.1).  The following features are not yet implemented:
 
-- Array and matrix environments (`\begin{array}`, `pmatrix`, `cases`, …).
 - `\text{…}` inter-atom spacing (text-mode fragments are not yet classified by atom class).
 
 ## Acknowledgements
