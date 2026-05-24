@@ -473,11 +473,57 @@ const _HORIZ_BRACE_GLYPHS = Dict{String,String}(
     "\\underparen"   => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
 )
 
-# Unicode codepoints for symbols whose LaTeX command name differs from the
-# PostScript glyph name used in OpenType math fonts (e.g. \infty → "infinity",
-# not "infty").  Looked up by codepoint so the correct PS name is resolved
-# independently of font-specific naming conventions.
+# Canonical PostScript name → Unicode codepoint for glyphs that some fonts
+# (notably FiraMath) name using the "uni{HHHH}" convention instead of the
+# traditional Adobe Glyph List (AGL) name.  Used in two places:
+#   1. _construction_key: translate e.g. "parenleft" to the key actually
+#      present in vert_constructions for the current font.
+#   2. _cmd_glyph: codepoint fallback when the canonical PS name lookup fails.
+const _CANONICAL_CODEPOINTS = Dict{String, UInt32}(
+    "parenleft"      => 0x0028,
+    "parenright"     => 0x0029,
+    "bracketleft"    => 0x005B,
+    "bracketright"   => 0x005D,
+    "braceleft"      => 0x007B,
+    "braceright"     => 0x007D,
+    "bar"            => 0x007C,
+    "slash"          => 0x002F,
+    "backslash"      => 0x005C,
+    "radical"        => 0x221A,
+    "dblverticalbar" => 0x2016,
+    "angleleft"      => 0x27E8,
+    "angleright"     => 0x27E9,
+)
+
+# Unicode codepoints for symbol commands, resolved by codepoint so the correct
+# PS glyph name is used regardless of font-specific naming.  This covers two
+# cases: (1) commands where the AGL PS name differs from the LaTeX name (e.g.
+# \infty → "infinity", \pm → "plusminus"); (2) Greek letters, which most fonts
+# name "alpha", "pi", etc. but some (e.g. FiraMath) name "uni03B1", "uni03C0".
 const _SYMBOL_CODEPOINTS = Dict{String,UInt32}(
+    # Greek lowercase
+    "alpha"          => 0x03B1,  "beta"           => 0x03B2,
+    "gamma"          => 0x03B3,  "delta"          => 0x03B4,
+    "epsilon"        => 0x03F5,  "varepsilon"     => 0x03B5,
+    "zeta"           => 0x03B6,  "eta"            => 0x03B7,
+    "theta"          => 0x03B8,  "vartheta"       => 0x03D1,
+    "iota"           => 0x03B9,  "kappa"          => 0x03BA,
+    "varkappa"       => 0x03F0,  "lambda"         => 0x03BB,
+    "mu"             => 0x03BC,  "nu"             => 0x03BD,
+    "xi"             => 0x03BE,  "pi"             => 0x03C0,
+    "varpi"          => 0x03D6,  "rho"            => 0x03C1,
+    "varrho"         => 0x03F1,  "sigma"          => 0x03C3,
+    "varsigma"       => 0x03C2,  "tau"            => 0x03C4,
+    "upsilon"        => 0x03C5,  "phi"            => 0x03D5,
+    "varphi"         => 0x03C6,  "chi"            => 0x03C7,
+    "psi"            => 0x03C8,  "omega"          => 0x03C9,
+    # Greek uppercase
+    "Gamma"          => 0x0393,  "Delta"          => 0x0394,
+    "Theta"          => 0x0398,  "Lambda"         => 0x039B,
+    "Xi"             => 0x039E,  "Pi"             => 0x03A0,
+    "Sigma"          => 0x03A3,  "Upsilon"        => 0x03A5,
+    "Phi"            => 0x03A6,  "Psi"            => 0x03A8,
+    "Omega"          => 0x03A9,
     # Misc math
     "infty"          => 0x221E,  "partial"        => 0x2202,
     "forall"         => 0x2200,  "exists"         => 0x2203,
@@ -643,14 +689,44 @@ function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
 end
 
 # Return a Glyph for a PostScript glyph name, or nothing if not in the font.
+# Falls back to a codepoint lookup for canonical AGL names that fail in fonts
+# which use Unicode-style PS names (e.g. FiraMath uses "uni0028" not "parenleft").
+# The returned Glyph carries the font's own PS name so renderers can locate it.
 function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     try
         m = glyph_metrics(ctx.family, name)
         return Glyph(name, m.advance_width, m.left_side_bearing,
                      m.x_min, m.y_min, m.x_max, m.y_max)
     catch
+    end
+    cp = get(_CANONICAL_CODEPOINTS, name, nothing)
+    cp === nothing && return nothing
+    try
+        m  = glyph_metrics_by_codepoint(ctx.family, cp)
+        ps = glyph_name_by_codepoint(ctx.family, cp)
+        actual = isempty(ps) ? name : ps
+        return Glyph(actual, m.advance_width, m.left_side_bearing,
+                     m.x_min, m.y_min, m.x_max, m.y_max)
+    catch
         return nothing
     end
+end
+
+# Return the key under which a canonically-named glyph is stored in
+# vert_constructions.  Fonts that use Unicode-style PS names (e.g. FiraMath)
+# store the entry under "uni0028" rather than "parenleft"; we translate by
+# resolving the codepoint to the font's own PS name.
+function _construction_key(ctx::_LayoutCtx, canonical_name::String)::String
+    haskey(ctx.vert_constructions, canonical_name) && return canonical_name
+    cp = get(_CANONICAL_CODEPOINTS, canonical_name, nothing)
+    cp === nothing && return canonical_name
+    try
+        ps = glyph_name_by_codepoint(ctx.family, cp)
+        isempty(ps) && return canonical_name
+        haskey(ctx.vert_constructions, ps) && return ps
+    catch
+    end
+    return canonical_name
 end
 
 # Return a Glyph for character `ch` under the given font variant (Option C):
@@ -871,8 +947,9 @@ end
 # `required_du` design units (same selection logic as `_layout_radical!`),
 # or `nothing` if no variant information is available.  Does NOT push to boxes.
 function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph,Nothing}
-    if haskey(ctx.vert_constructions, "radical")
-        vc = ctx.vert_constructions["radical"]
+    rkey = _construction_key(ctx, "radical")
+    if haskey(ctx.vert_constructions, rkey)
+        vc = ctx.vert_constructions[rkey]
         for v in vc.variants
             Float64(v.advance) >= required_du && return _cmd_glyph(ctx, v.glyph_name)
         end
@@ -903,11 +980,12 @@ function _layout_radical!(
         return g.advance_width / upm * scale
     end
 
-    if !haskey(ctx.vert_constructions, "radical")
+    rkey = _construction_key(ctx, "radical")
+    if !haskey(ctx.vert_constructions, rkey)
         return _place_variant("radical")
     end
 
-    vc = ctx.vert_constructions["radical"]
+    vc = ctx.vert_constructions[rkey]
 
     for v in vc.variants
         Float64(v.advance) >= required_du && return _place_variant(v.glyph_name)
@@ -945,11 +1023,12 @@ function _layout_delim!(
         return g.advance_width / upm * scale
     end
 
-    if !haskey(ctx.vert_constructions, glyph_name)
+    dkey = _construction_key(ctx, glyph_name)
+    if !haskey(ctx.vert_constructions, dkey)
         return _place_glyph(glyph_name)
     end
 
-    vc = ctx.vert_constructions[glyph_name]
+    vc = ctx.vert_constructions[dkey]
 
     # Try pre-built variants (smallest sufficient first).
     for v in vc.variants
