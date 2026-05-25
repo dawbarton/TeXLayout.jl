@@ -378,7 +378,7 @@ const STRESS_SECTIONS = [
     "17. LIMITS OVERRIDE (\\limits / \\nolimits)" => _D([
         raw"\int\limits_0^{\infty} e^{-st}f(t)\,dt = \mathcal{L}\{f\}(s)",
         raw"\sum\nolimits_{k=0}^{n} x^k = \frac{x^{n+1}-1}{x-1}",
-        raw"\lim_{h\to 0}\frac{f(x+h)-f(x)}{h} \quad \text{vs.} \quad \lim\limits_{h\to 0}\frac{f(x+h)-f(x)}{h}",
+        raw"\int_{h\to 0}\frac{f(x+h)-f(x)}{h} \quad \text{vs.} \quad \int\limits_{h\to 0}\frac{f(x+h)-f(x)}{h}",
     ]),
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -449,11 +449,17 @@ const STRESS_SECTIONS = [
 
 function write_png(path, canvas::Matrix{UInt8})
     H, W = size(canvas)
-    open(`convert pgm:- png:$path`, "w") do io
-        write(io, "P5\n$W $H\n255\n")
-        for row in 1:H
-            write(io, view(canvas, row, :))
+    tmp = tempname() * ".pgm"
+    try
+        open(tmp, "w") do io
+            write(io, "P5\n$W $H\n255\n")
+            for row in 1:H
+                write(io, view(canvas, row, :))
+            end
         end
+        run(`magick $tmp png:$path`)
+    finally
+        isfile(tmp) && rm(tmp)
     end
     println("Written $path  ($(W)×$(H) px)")
 end
