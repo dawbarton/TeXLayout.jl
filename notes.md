@@ -254,3 +254,35 @@
 - All remaining entries in `_CMD_ATOM_CLASS` without a codepoint are legitimately handled by other code paths (font switch → NKFontSwitch, accents → NKAccent, `\big*` delimiters, `\bmod`/`\pmod`/`\xleftarrow`/`\xrightarrow`, ellipsis variants), or are negated composites without a single codepoint (documented limitation), or `\bigplus` (no standard Unicode codepoint).
 - CLAUDE.md Known Limitations updated: "~150 AMS symbols missing" bullet replaced with accurate `\bigplus` note.
 - 798 tests pass.
+
+## 2026-05-25T11:00+00:00 Makie integration via MathTeXEngine extension
+
+- **Goal**: Make CairoMakie/GLMakie use TeXLayout's OpenType-aware typesetter when both packages are loaded, as a transparent drop-in replacement for MathTeXEngine's layout engine.
+
+- **Architecture**: Julia package extension system (`[weakdeps]` + `[extensions]` in Project.toml). Extension `ext/MathTeXEngineExt.jl` overrides `MathTeXEngine.generate_tex_elements` when both MathTeXEngine and GeometryBasics are loaded. GeometryBasics is listed as a co-trigger because it is always transitively loaded with MathTeXEngine and the extension needs `Point2f`.
+
+- **Key constraint — `__precompile__(false)`**: Julia raises `"Method overwriting is not permitted during Module precompilation"` when an extension replaces an existing method. The extension opts out of precompilation entirely; methods are JIT-compiled at runtime as normal.
+
+- **Data flow**:
+  1. `generate_tex_elements(str)` receives a `LaTeXString` whose content is `"$...$"` — strip surrounding `$` before passing to `parse_latex`.
+  2. `layout(node, tl_family, Display)` returns a flat list of `LayoutBox` values.
+  3. Each box is converted to `(MTE.TeXChar, Point2f, Float64)` or `(MTE.HLine, …)` / `(MTE.VLine, …)`.
+  4. Makie's `texelems_and_glyph_collection` consumes the result unchanged (it filters on `isa MathTeXEngine.TeXChar` etc., so real MTE types are mandatory).
+
+- **Glyph resolution**: `FreeTypeAbstraction.glyph_index(font, name::String)` for PostScript names, with fallbacks for single-char names and `uniXXXX` encoded names.
+
+- **MTE FontFamily construction**: Built from TeXLayout's `FontFamily` absolute paths; `MathTeXEngine.FontFamily(Dict(:math => path, ...))` passes absolute paths through unchanged.
+
+- **Position type**: Must be `Point2f` (a `StaticVector`/`VecTypes`) — Makie's `to_ndim` requires `VecTypes`; plain tuples fail.
+
+- **Validation**: Smoke-tested with `L"x^2"` (2 TeXChars at correct positions/scales), `L"\frac{a}{b}"` (1 HLine), and a CairoMakie figure with five formulae (fraction, sum, integral, sqrt, Greek letters). All rendered correctly.
+
+- **Files added/modified**:
+  - `ext/MathTeXEngineExt.jl` (new): full extension with five helper functions
+  - `Project.toml`: added `[weakdeps]` and `[extensions]` sections
+  - `tools/demo_makie.jl` (new): self-contained CairoMakie demo
+  - `CLAUDE.md`: updated "Makie integration" status in Known Limitations
+
+- **Open questions / future work**:
+  - The `font_family` argument to the overridden `generate_tex_elements` is currently ignored; TeXLayout always uses `default_font_family()`. Could honour caller-specified fonts in future.
+  - `__precompile__(false)` adds ~1 s first-call compilation overhead; a more surgical fix (overloading on `str::LaTeXString` specifically to avoid the same-signature restriction) could restore precompilation, but requires investigation.

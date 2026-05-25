@@ -286,9 +286,11 @@ A summary of major features and their status.
   adding them would cover characters outside the Unicode math block.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.
-- **Makie integration** — the package produces `Vector{LayoutBox}` but does not yet
-  implement the MathTeXEngine.jl interface (`generate_tex_elements`) needed for
-  CairoMakie/GLMakie to use it as a drop-in replacement.
+- **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
+  extension).  When both `TeXLayout` and `MathTeXEngine` are loaded, the extension
+  overrides `MathTeXEngine.generate_tex_elements` with TeXLayout's OpenType layout
+  engine.  The extension uses `__precompile__(false)` because Julia forbids method
+  overwriting during module precompilation.
 
 ---
 
