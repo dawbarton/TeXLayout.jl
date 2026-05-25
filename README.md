@@ -52,6 +52,34 @@ text!(ax, 0.5, 0.5; text=L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
 save("output.png", fig)
 ```
 
+For a consistent appearance, set Makie's text fonts to the same files that
+TeXLayout uses for math.  `default_font_family()` returns the font paths for
+New Computer Modern (TeXLayout's default), so passing those paths to
+`set_theme!` makes axis labels, tick labels, and titles share the same
+typeface as the math rendering:
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+
+ff = default_font_family()   # New Computer Modern (TeXLayout's default)
+
+# Note: Makie uses :bolditalic (not :bold_italic).
+set_theme!(fonts = (;
+    regular    = ff.regular,
+    bold       = ff.bold,
+    italic     = ff.italic,
+    bolditalic = ff.bold_italic,
+))
+
+fig = Figure(size = (800, 500))
+ax  = Axis(fig[1, 1]; xlabel = L"x", ylabel = L"f(x)")
+x   = LinRange(0, 2π, 400)
+lines!(ax, x, sin.(x);               label = L"\sin(x)")
+lines!(ax, x, exp.(-x/4).*sin.(3x); label = L"e^{-x/4}\sin(3x)")
+axislegend(ax)
+save("output.png", fig)
+```
+
 > **Note:** The extension works by adding a specialised
 > `MathTeXEngine.generate_tex_elements(::LaTeXString)` method from within a
 > package that owns neither the function nor the argument type — a form of
