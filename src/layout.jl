@@ -1769,8 +1769,8 @@ function _layout_node!(
         return cursor - x0
 
     elseif node.kind === NKSpace
-        w = parse(Float64, node.value) * scale
-        iszero(w) && return 0.0
+        iszero(node.width) && return 0.0
+        w = node.width * scale
         push!(boxes, LayoutBox(Space(w), x0, y0, scale))
         return w
 

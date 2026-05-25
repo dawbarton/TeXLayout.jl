@@ -33,16 +33,25 @@ An AST node.  Leaf nodes (chars, spaces, standalone commands) have an empty
 `children` vector and carry their source text in `value`.  Interior nodes
 carry children and may carry auxiliary text in `value` (e.g. the command name
 for `NKAccent`).
+
+The `width` field is meaningful only for `NKSpace` nodes; it carries the
+explicit horizontal space in em units (may be negative for `\\!`, etc.).
+All other node kinds leave it at the default of `0.0`.
 """
 struct Node
     kind::NodeKind
     value::String           # source text for leaf nodes; command name for interior
     children::Vector{Node}
+    width::Float64          # em units; NKSpace only, 0.0 otherwise
 end
 
 # Convenience constructors
-Node(kind::NodeKind, value::String) = Node(kind, value, Node[])
-Node(kind::NodeKind, children::Vector{Node}) = Node(kind, "", children)
+Node(kind::NodeKind, value::String) = Node(kind, value, Node[], 0.0)
+Node(kind::NodeKind, children::Vector{Node}) = Node(kind, "", children, 0.0)
+Node(kind::NodeKind, value::String, children::Vector{Node}) = Node(kind, value, children, 0.0)
+
+"""Construct an `NKSpace` node carrying an explicit horizontal width in em."""
+space_node(w::Real) = Node(NKSpace, "", Node[], Float64(w))
 
 # Explicit horizontal spacing commands mapped to their width in em units.
 # Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
@@ -347,12 +356,12 @@ function _parse_primary!(p::_Parser)::Node
 
     elseif tok.kind === TKSpace
         _advance!(p)
-        return Node(NKSpace, "0.0")   # ~ and explicit spaces are zero-width in math
+        return space_node(0.0)   # ~ and explicit spaces are zero-width in math
 
     elseif tok.kind === TKEOF
         # Do not advance past the sentinel — leave it in place so every caller
         # that loops on _current(p).kind sees TKEOF and exits cleanly.
-        return Node(NKSpace, "0.0")
+        return space_node(0.0)
 
     else
         # Anything else (unlikely in well-formed input): emit as TKChar.
@@ -465,15 +474,13 @@ function _parse_command!(p::_Parser)::Node
     cmd = tok.value
 
     if haskey(_SPACE_WIDTHS, cmd)
-        return Node(NKSpace, string(_SPACE_WIDTHS[cmd]))
+        return space_node(_SPACE_WIDTHS[cmd])
 
     elseif cmd ∈ ("\\kern", "\\hskip")
-        w = _parse_kern_dimension!(p, false)
-        return Node(NKSpace, string(w))
+        return space_node(_parse_kern_dimension!(p, false))
 
     elseif cmd ∈ ("\\mkern", "\\mskip")
-        w = _parse_kern_dimension!(p, true)
-        return Node(NKSpace, string(w))
+        return space_node(_parse_kern_dimension!(p, true))
 
     elseif cmd == "\\frac"
         num = _parse_argument!(p)
@@ -546,7 +553,7 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\end"
         # \end encountered outside a \begin context (malformed input): consume and ignore.
         _read_brace_word!(p)
-        return Node(NKSpace, "0.0")
+        return space_node(0.0)
 
     else
         bare = cmd[2:end]   # strip leading '\'
