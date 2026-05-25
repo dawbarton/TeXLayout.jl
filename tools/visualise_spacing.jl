@@ -146,7 +146,7 @@ function main()
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
     family = FontFamily(FONT_PATH)
-    mt     = load_math_table(FONT_PATH)
+    mt     = TeXLayout.load_math_table(FONT_PATH)
     face   = FTFont(FONT_PATH)
 
     axis_em = mt.constants.axis_height / mt.upm

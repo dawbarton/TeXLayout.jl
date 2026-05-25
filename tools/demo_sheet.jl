@@ -301,7 +301,7 @@ function main()
     end
 
     math_path = family.math
-    mt        = load_math_table(math_path)
+    mt        = TeXLayout.load_math_table(math_path)
     face_math = FTFont(math_path)
     font_name = FreeTypeAbstraction.family_name(face_math)
 

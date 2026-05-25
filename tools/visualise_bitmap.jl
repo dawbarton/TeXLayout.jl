@@ -103,7 +103,7 @@ function main()
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
     family = FontFamily(FONT_PATH)
-    mt     = load_math_table(FONT_PATH)
+    mt     = TeXLayout.load_math_table(FONT_PATH)
     boxes  = layout(parse_latex(expr), family, style)
 
     if isempty(boxes)
