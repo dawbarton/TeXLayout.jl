@@ -1,15 +1,13 @@
 # Fixture data extracted from NewCMMath-Regular.otf via fonttools/ttx.
 # UPM = 1000; all design-unit values are integers. Do not edit by hand.
 #
-# Regeneration command (from workspace root):
+# Regeneration command (run after downloading the font via the artifact):
 #   uv run python3 utils/extract_math_fixture.py \
-#       external/MathTeXEngine.jl/assets/fonts/NewComputerModern/NewCMMath-Regular.otf \
+#       <artifact-dir>/math.otf \
 #       TeXLayout.jl/test/fixtures/newcm_math.jl
 
-const FIXTURE_FONT_PATH = joinpath(
-    @__DIR__, "..", "..", "..", "external",
-    "MathTeXEngine.jl", "assets", "fonts", "NewComputerModern", "NewCMMath-Regular.otf",
-)
+# Resolve via the registered NewCMMath artifact, consistent with the rest of the package.
+const FIXTURE_FONT_PATH = font_family(:new_cm).math
 
 const FONT_UPM = 1000
 
