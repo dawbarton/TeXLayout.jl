@@ -24,6 +24,9 @@ units relative to the formula baseline, and a scale factor.
 - Named math operators (`\sin`, `\cos`, `\lim`, `\operatorname{…}`, and 25 others)
   rendered upright using the companion regular font or the math font's codepoint mapping.
 - Inter-atom spacing (TeX atom-class table: ord/bin/rel/op/open/close/punct/inner).
+- `\text{…}` and `\mbox{…}`: upright (regular-font) glyphs with word spacing;
+  classified as ordinary atoms for correct inter-atom spacing at the boundary
+  with adjacent math.
 - Accents (`\hat`, `\bar`, `\vec`, `\widehat`, `\widetilde`, `\overline`, `\underbrace`, …).
 - Font switching (`\mathbf`, `\mathrm`, `\mathbb`, `\mathcal`, `\mathfrak`, `\mathtt`, …).
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
@@ -180,7 +183,6 @@ exported.
 
 Early development (v0.1).  The following features are not yet implemented:
 
-- `\text{…}` inter-atom spacing (text-mode fragments are not yet classified by atom class).
 - Type-piracy-free Makie integration (current approach is functional but uses a specialised method on types owned by other packages; see note above).
 
 ## Acknowledgements
