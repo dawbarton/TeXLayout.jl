@@ -747,16 +747,13 @@ function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
     if ctx.mode === :math
         ch = get(_MATH_CHAR_REMAP, ch, ch)
     end
-    try
-        cp = UInt32(ch)
-        m  = glyph_metrics_by_codepoint(ctx.family, cp)
-        ps = glyph_name_by_codepoint(ctx.family, cp)
-        return Glyph(isempty(ps) ? string(ch) : ps,
-                     m.advance_width, m.left_side_bearing,
-                     m.x_min, m.y_min, m.x_max, m.y_max)
-    catch
-        return nothing
-    end
+    cp = UInt32(ch)
+    m  = glyph_metrics_by_codepoint(ctx.family, cp)
+    m === nothing && return nothing
+    ps = glyph_name_by_codepoint(ctx.family, cp)
+    return Glyph(isempty(ps) ? string(ch) : ps,
+                 m.advance_width, m.left_side_bearing,
+                 m.x_min, m.y_min, m.x_max, m.y_max)
 end
 
 # Return an upright Glyph for a character, or nothing if not in the font.
@@ -778,12 +775,9 @@ end
 # Unicode-style PS names (e.g. FiraMath "uni0028" vs AGL "parenleft").
 # The returned Glyph carries the font's own PS name so renderers can locate it.
 function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
-    try
-        m = glyph_metrics(ctx.family, name)
-        return Glyph(name, m.advance_width, m.left_side_bearing,
-                     m.x_min, m.y_min, m.x_max, m.y_max)
-    catch
-    end
+    m = glyph_metrics(ctx.family, name)
+    m !== nothing && return Glyph(name, m.advance_width, m.left_side_bearing,
+                                  m.x_min, m.y_min, m.x_max, m.y_max)
     # Fallback 1: AGL name with a known codepoint (e.g. "parenleft" in a font
     # that uses "uni0028").
     cp = get(_CANONICAL_CODEPOINTS, name, nothing)
@@ -794,15 +788,12 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
         m2 !== nothing && (cp = parse(UInt32, m2.captures[1], base=16))
     end
     cp === nothing && return nothing
-    try
-        m  = glyph_metrics_by_codepoint(ctx.family, cp)
-        ps = glyph_name_by_codepoint(ctx.family, cp)
-        actual = isempty(ps) ? name : ps
-        return Glyph(actual, m.advance_width, m.left_side_bearing,
-                     m.x_min, m.y_min, m.x_max, m.y_max)
-    catch
-        return nothing
-    end
+    m2 = glyph_metrics_by_codepoint(ctx.family, cp)
+    m2 === nothing && return nothing
+    ps = glyph_name_by_codepoint(ctx.family, cp)
+    actual = isempty(ps) ? name : ps
+    return Glyph(actual, m2.advance_width, m2.left_side_bearing,
+                 m2.x_min, m2.y_min, m2.x_max, m2.y_max)
 end
 
 # Return the key under which a canonically-named glyph is stored in
@@ -813,12 +804,8 @@ function _construction_key(ctx::_LayoutCtx, canonical_name::String)::String
     haskey(ctx.vert_constructions, canonical_name) && return canonical_name
     cp = get(_CANONICAL_CODEPOINTS, canonical_name, nothing)
     cp === nothing && return canonical_name
-    try
-        ps = glyph_name_by_codepoint(ctx.family, cp)
-        isempty(ps) && return canonical_name
-        haskey(ctx.vert_constructions, ps) && return ps
-    catch
-    end
+    ps = glyph_name_by_codepoint(ctx.family, cp)
+    !isempty(ps) && haskey(ctx.vert_constructions, ps) && return ps
     return canonical_name
 end
 
@@ -830,12 +817,8 @@ function _horiz_construction_key(ctx::_LayoutCtx, uni_name::String)::String
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", uni_name)
     m === nothing && return uni_name
     cp = parse(UInt32, m.captures[1], base=16)
-    try
-        ps = glyph_name_by_codepoint(ctx.family, cp)
-        isempty(ps) && return uni_name
-        haskey(ctx.horiz_constructions, ps) && return ps
-    catch
-    end
+    ps = glyph_name_by_codepoint(ctx.family, cp)
+    !isempty(ps) && haskey(ctx.horiz_constructions, ps) && return ps
     return uni_name
 end
 
@@ -844,16 +827,14 @@ end
 #   2. For :mathrm, fall through to the upright glyph lookup (regular font or math codepoint).
 #   3. Fall through to the default character glyph (italic math form).
 function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph,Nothing}
-    cp_opt = _math_variant_codepoint(variant, ch)
-    if cp_opt !== nothing
-        try
-            cp = cp_opt
-            m  = glyph_metrics_by_codepoint(ctx.family, cp)
+    cp = _math_variant_codepoint(variant, ch)
+    if cp !== nothing
+        m = glyph_metrics_by_codepoint(ctx.family, cp)
+        if m !== nothing
             ps = glyph_name_by_codepoint(ctx.family, cp)
             return Glyph(isempty(ps) ? string(Char(cp)) : ps,
                          m.advance_width, m.left_side_bearing,
                          m.x_min, m.y_min, m.x_max, m.y_max)
-        catch
         end
     end
     # :mathrm (and :boldsymbol for non-latin chars) fall back to upright rendering.
@@ -1741,15 +1722,12 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     # correct glyph is found regardless of font-specific PS naming.
     cp = get(_SYMBOL_CODEPOINTS, name, nothing)
     cp === nothing && return 0.0
-    g = try
-        m  = glyph_metrics_by_codepoint(ctx.family, cp)
-        ps = glyph_name_by_codepoint(ctx.family, cp)
-        Glyph(isempty(ps) ? name : ps,
-              m.advance_width, m.left_side_bearing,
-              m.x_min, m.y_min, m.x_max, m.y_max)
-    catch
-        return 0.0
-    end
+    m = glyph_metrics_by_codepoint(ctx.family, cp)
+    m === nothing && return 0.0
+    ps = glyph_name_by_codepoint(ctx.family, cp)
+    g  = Glyph(isempty(ps) ? name : ps,
+               m.advance_width, m.left_side_bearing,
+               m.x_min, m.y_min, m.x_max, m.y_max)
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / upm * scale
 end
@@ -2104,6 +2082,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
     isempty(accent_ps) && return base_w
     accent_m = glyph_metrics(ctx.family, accent_ps)
+    accent_m === nothing && return base_w
 
     # Vertical placement: clearance = min(base_top, accent_base_height_em).
     # This places the accent so it just clears a normal x-height character while

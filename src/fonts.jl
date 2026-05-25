@@ -89,15 +89,16 @@ end
 # ── Public API ────────────────────────────────────────────────────────────────
 
 """
-    glyph_metrics(family, glyph_name) -> GlyphMetrics
+    glyph_metrics(family, glyph_name) -> Union{GlyphMetrics, Nothing}
 
-Return horizontal metrics for the named glyph in the math font.
-`glyph_name` is the PostScript name (e.g. `"f"`, `"parenleft"`, `"alpha"`).
+Return horizontal metrics for the named glyph in the math font, or `nothing`
+if the glyph is absent.  `glyph_name` is the PostScript name (e.g. `"f"`,
+`"parenleft"`, `"alpha"`).
 """
-function glyph_metrics(family::FontFamily, glyph_name::String)::GlyphMetrics
+function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetrics,Nothing}
     face, hmtx = _load_font(family.math)
     gid = Int(FreeTypeAbstraction.glyph_index(face, glyph_name))
-    gid == 0 && error("glyph not found in font: $glyph_name")
+    gid == 0 && return nothing
 
     adv, lsb = hmtx[gid + 1]   # hmtx is 1-indexed; GID is 0-based
 
@@ -138,14 +139,15 @@ function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics
 end
 
 """
-    glyph_metrics_by_codepoint(family, codepoint) -> GlyphMetrics
+    glyph_metrics_by_codepoint(family, codepoint) -> Union{GlyphMetrics, Nothing}
 
-Return metrics for the glyph mapped from a Unicode codepoint in the math font.
+Return metrics for the glyph mapped from a Unicode codepoint in the math font,
+or `nothing` if the codepoint has no glyph.
 """
-function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::GlyphMetrics
+function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::Union{GlyphMetrics,Nothing}
     face, hmtx = _load_font(family.math)
     gid = Int(_FT.FT_Get_Char_Index(face, cp))
-    gid == 0 && error("no glyph for codepoint U+$(string(cp, base=16, pad=4))")
+    gid == 0 && return nothing
 
     adv, lsb = hmtx[gid + 1]
 
