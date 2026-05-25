@@ -48,6 +48,17 @@ TeXLayout.jl/
 │   ├── KaTeX/             # Original KaTeX JS implementation
 │   ├── Makie.jl/          # Makie ecosystem packages
 │   └── MathTeXEngine.jl/  # Previous Julia math typesetter
+├── docs/
+│   ├── make.jl            # Documenter.jl build script
+│   ├── Project.toml
+│   └── src/               # Markdown source pages
+│       ├── index.md
+│       ├── 01-getting-started.md
+│       ├── 02-fonts.md
+│       ├── 03-makie.md
+│       ├── 04-commands.md
+│       ├── 05-api.md
+│       └── 91-developer.md
 ├── Project.toml
 └── README.md
 ```
@@ -97,16 +108,18 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
   returns `Node(NKSpace, "")` without advancing when it sees `TKEOF`.
 
 ### `Node` / `NodeKind` (`parser.jl`)
-- Immutable struct: `kind::NodeKind`, `value::String`, `children::Vector{Node}`.
+- Immutable struct: `kind::NodeKind`, `value::String`, `children::Vector{Node}`,
+  `width::Float64`.
 - Leaf nodes (chars, spaces, commands, operators) have empty `children`; interior nodes
-  have empty or placeholder `value`.
+  have empty or placeholder `value`.  The `width` field is only meaningful for `NKSpace`
+  nodes (em units); all other node kinds leave it at `0.0`.
 - Key node kinds:
   - `NKChar` — single character; `value` is the one-character string.
   - `NKCommand` — unrecognised command; `value` is the full token including `\`.
-  - `NKSpace` — explicit horizontal space; `value` is a decimal string giving the
-    width in em units (may be negative for `\!` and similar).  Commands `\,` `\:` `\;`
-    `\!` `\quad` `\qquad` `\kern` `\mkern` `\hskip` `\mskip` and their aliases all
-    produce this node.  1 mu = 1/18 em.
+  - `NKSpace` — explicit horizontal space; the em width (possibly negative for `\!` and
+    similar) is stored in `node.width::Float64`.  `value` is always `""` for this kind.
+    Commands `\,` `\:` `\;` `\!` `\quad` `\qquad` `\kern` `\mkern` `\hskip` `\mskip`
+    and their aliases all produce this node.  1 mu = 1/18 em.
   - `NKOperator` — named math operator (e.g. `\sin`); `value` is the bare name (`"sin"`).
     Rendered upright using `glyph_metrics_upright`.  In Display style, operators in
     `_LIMITS_OPERATORS` (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`,
@@ -125,7 +138,7 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     aliases.  `value` is the variant name (e.g. `"mathbf"`); `children[1]` is the body
     sequence.  The layout engine recurses with `ctx.font_variant` set to the variant.
   - `NKHorizBrace` — produced by `\overbrace`, `\underbrace`, `\overbracket`,
-    `\underbracket`, `\overgroup`, `\undergroup`.  `value` is the bare command name;
+    `\underbracket`, `\overparen`, `\underparen`.  `value` is the bare command name;
     `children[1]` is the body.  The layout engine selects the widest-fitting variant
     (or extensible assembly) from `horiz_constructions`, then applies limits-style
     note placement for any sub/superscript on the brace node.
@@ -147,7 +160,7 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
     commands.  `value` is the command string (e.g. `"\\xrightarrow"`); `children[1]` is
     the mandatory above-label argument; `children[2]` (optional) is the below-label from
     `[…]`.  The layout engine stretches the arrow to cover the labels with padding, centres
-    it on the math axis, and places the labels at `XARROW_KERN` (0.111 em) clearance.
+    it on the math axis, and places the labels at `_XARROW_KERN` (0.111 em) clearance.
   - `NKMatrix` — produced by `\begin{env}…\end{env}`; `value` encodes
     `"env\x00nrow\x00colspec"` where `colspec` is either the verbatim column-spec
     string from `\begin{array}{…}` (e.g. `"|l|c|r|"`) or a derived string of
@@ -172,15 +185,16 @@ driven by `MathConstants.script_percent_scale_down` and
 - **Constructors:** `font_family(::Symbol)` looks up a named artifact (`:new_cm`,
   `:pagella`, `:termes`, `:schola`, `:bonum`, `:luciole`, `:stix_two`, `:fira_math`);
   `font_family(math_path; regular,
-  bold, italic, bolditalic)` accepts file paths directly; `default_font_family()` is an
-  alias for `font_family(:new_cm)`.
+  bold, italic, bolditalic)` accepts file paths directly; `default_font_family()` returns
+  the current session-wide default (initially `:new_cm`; overrideable with
+  `set_default_font_family!`).
 - **Three glyph lookup functions:**
   - `glyph_metrics(family, name)` — metrics for a PostScript glyph name in the math font
     (e.g. `"parenleft"`, `"alpha"`).  The form of single-letter names depends on the font;
     in NewCMMath, `"x"` maps to the *upright* roman form, not italic — use
     `glyph_metrics_by_codepoint` with a Unicode math-variant codepoint for italic letters.
-  - `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint in the math font (throws
-    on miss).
+  - `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint in the math font (returns
+    `nothing` on miss).
   - `glyph_metrics_upright(family, ch)` — upright character; uses `regular` font if
     present, otherwise falls back to math font codepoint mapping which yields upright
     forms in OpenType math fonts like NewCMMath (returns `nothing` on miss).
@@ -245,7 +259,7 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
    then obtains the correct PS name.  The display-size variant is selected from
    `vert_constructions` using the `display_operator_min_height` MATH constant.
 
-6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.**
+6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.** (See also invariant 7 on layout purity.)
    PS glyph naming conventions differ across fonts: NewCMMath/Pagella/STIXTwo use standard
    AGL names (`"parenleft"`, `"ltimes"`, `"alpha"`), while FiraMath uses uni-style names
    (`"uni0028"`, `"uni22C9"`, `"uni03B1"`) and Luciole uses its own convention (`"lparen"`,
@@ -259,7 +273,7 @@ used anywhere — if the font lacks a MATH table, `load_math_table` throws.
    AGL names to the font's own names when looking up `vert_constructions`/`horiz_constructions`
    (those dicts are keyed by the font's MATH table PS names and cannot be changed).
 
-6. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
+7. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
    removes or modifies existing entries.  Temporary `LayoutBox` vectors (used for
    centering fractions and limits) are merged in with adjusted coordinates.
 
@@ -275,7 +289,7 @@ A summary of major features and their status.
 | Square roots (`\sqrt`, `\sqrt[n]`) | ✓ | Pre-built variants + extensible assembly; top-anchored |
 | Delimiters (`\left`/`\right`) | ✓ | Auto-sized from `vert_constructions`; centred on math axis |
 | Sub/superscripts | ✓ | Standard beside-base placement using MATH shift constants; italic correction applied to subscripts on slanted single-glyph bases (e.g. `\int`) — full IC shift left, matching KaTeX `supsub.ts` |
-| Named operators (`\sin`, `\cos`, `\lim`, …) | ✓ | Upright glyphs; 30+ operators including `\limsup`, `\liminf` |
+| Named operators (`\sin`, `\cos`, `\lim`, …) | ✓ | Upright glyphs; 27 operators including `\limsup`, `\liminf` |
 | Large operators (`\sum`, `\prod`, `\int`, …) | ✓ | Display-size variant selected via `display_operator_min_height` |
 | Limits placement | ✓ | Sub/sup centred below/above in Display style; 4 MATH constants used |
 | `\limits` / `\nolimits` override | ✓ | Parsed as `NKLimitsOverride`; respected in all script branches |

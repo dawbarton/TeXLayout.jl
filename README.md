@@ -9,6 +9,17 @@
 A Julia-idiomatic OpenType-aware LaTeX math typesetter, designed for use
 with [Makie.jl](https://github.com/MakieOrg/Makie.jl).
 
+Example outputs:
+
+- [New Computer Modern Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_new_cm.png)
+- [TeX Gyre Bonum Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_bonum.png)
+- [TeX Gyre Pagella Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_pagella.png)
+- [TeX Gyre Schola Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_schola.png)
+- [TeX Gyre Termes Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_termes.png)
+- [Luciole Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_luciole.png)
+- [STIX Two Math v2.0.2](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_stix_two.png)
+- [Fira Math + Fira Sans v0.3.4](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_fira_math.png)
+
 ## Overview
 
 TeXLayout.jl converts LaTeX math strings into a flat list of positioned glyph elements
