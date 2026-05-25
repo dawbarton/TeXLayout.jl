@@ -856,6 +856,17 @@ function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph
     return _char_glyph(ctx, ch)
 end
 
+# Copy every element of `src` into `dst`, translating each box by (dx, dy).
+# Used throughout the layout engine to splice a scratch sub-layout (laid out
+# at origin (0,0) or some local origin) into the parent's coordinate system.
+function _emit_shifted!(dst::Vector{LayoutBox}, src::Vector{LayoutBox},
+                        dx::Float64, dy::Float64)
+    for b in src
+        push!(dst, LayoutBox(b.element, b.x + dx, b.y + dy, b.scale))
+    end
+    return nothing
+end
+
 # Maximum y-extent (top of the ink) of all boxes, in em units.
 # HRule stores its bottom edge in box.y; its top is box.y + element.thickness.
 function _boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64
@@ -1316,9 +1327,7 @@ function _layout_horiz_brace!(
     end
 
     # Place body (centred over total_w at y0).
-    for b in tmp_body
-        push!(boxes, LayoutBox(b.element, x0 + Δbody + b.x, y0 + b.y, b.scale))
-    end
+    _emit_shifted!(boxes, tmp_body, x0 + Δbody, y0)
 
     # Place brace (centred over body_w; extension fills body width).
     _layout_wide_accent!(ctx, glyph_ps, body_w, brace_y, x0 + Δbody, scale, boxes)
@@ -1328,16 +1337,10 @@ function _layout_horiz_brace!(
     note_gap = 0.2 * scale
     if !isempty(tmp_pri)
         Δpri = (total_w - pri_w) / 2
-        if is_over
-            # Note bottom ink = brace_top + note_gap
-            note_y = brace_top + note_gap - _boxes_bottom(tmp_pri, upm)
-        else
-            # Note top ink = brace_bot - note_gap
-            note_y = brace_bot - note_gap - _boxes_top(tmp_pri, upm)
-        end
-        for b in tmp_pri
-            push!(boxes, LayoutBox(b.element, x0 + Δpri + b.x, note_y + b.y, b.scale))
-        end
+        note_y = is_over ?
+            brace_top + note_gap - _boxes_bottom(tmp_pri, upm) :
+            brace_bot - note_gap - _boxes_top(tmp_pri, upm)
+        _emit_shifted!(boxes, tmp_pri, x0 + Δpri, note_y)
     end
 
     # Secondary note: placed as a normal side script to the right of the stack.
@@ -1352,18 +1355,14 @@ function _layout_horiz_brace!(
             y_sub = min(y0 - mc.subscript_shift_down * s,
                         y0 + body_bot - mc.subscript_baseline_drop_min * s)
             y_sub = min(y_sub, y0 - _boxes_top(tmp_sec, upm) + mc.subscript_top_max * s)
-            for b in tmp_sec
-                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sub + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_sec, script_x, y_sub)
         else
             min_sup = is_cramped(style) ?
                 mc.superscript_shift_up_cramped * s : mc.superscript_shift_up * s
             y_sup = max(y0 + min_sup,
                         y0 + body_top - mc.superscript_baseline_drop_max * s)
             y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sec, upm))
-            for b in tmp_sec
-                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sup + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_sec, script_x, y_sup)
         end
         total_w += sec_w + mc.space_after_script * s
     end
@@ -1646,9 +1645,7 @@ function _layout_matrix!(
                                         (col_widths[c] - cell_widths[r, c]) / 2
         x_cell = x0 + left_w + x_col[c] + offset
         y_cell = y_shift + row_y[r]
-        for b in tmp
-            push!(boxes, LayoutBox(b.element, x_cell + b.x, y_cell + b.y, b.scale))
-        end
+        _emit_shifted!(boxes, tmp, x_cell, y_cell)
     end
 
     # ── Emit vertical rules from colspec ──
@@ -1798,12 +1795,8 @@ function _layout_node!(
             Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
             # ±½ italic correction shifts superscript right over the slanted stroke.
             Δsup += _base_italic_correction_em(tmp_base, ctx, scale) / 2
-            for b in tmp_base
-                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
-            end
-            for b in tmp_sup
-                push!(boxes, LayoutBox(b.element, x0 + Δsup + b.x, y_sup + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+            _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
             return total_w
         else
             tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
@@ -1820,9 +1813,7 @@ function _layout_node!(
                 max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
             # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
             y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
-            for b in tmp_sup
-                push!(boxes, LayoutBox(b.element, x0 + base_adv + b.x, y_sup + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_sup, x0 + base_adv, y_sup)
             return base_adv + sup_adv + mc.space_after_script * s
         end
 
@@ -1844,12 +1835,8 @@ function _layout_node!(
             Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
             # ±½ italic correction shifts subscript left under the slanted stroke.
             Δsub -= _base_italic_correction_em(tmp_base, ctx, scale) / 2
-            for b in tmp_base
-                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
-            end
-            for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, x0 + Δsub + b.x, y_sub + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+            _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
             return total_w
         else
             tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
@@ -1868,9 +1855,7 @@ function _layout_node!(
             # shifted left by the full IC so it sits under the stroke, not the advance width.
             # Matches KaTeX supsub.ts: marginLeft = makeEm(-italic_correction) on subscript.
             ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
-            for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, x0 + base_adv - ic_em + b.x, y_sub + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_sub, x0 + base_adv - ic_em, y_sub)
             return base_adv + sub_adv + mc.space_after_script * s
         end
 
@@ -1901,15 +1886,9 @@ function _layout_node!(
             ic_half = _base_italic_correction_em(tmp_base, ctx, scale) / 2
             Δsub -= ic_half
             Δsup += ic_half
-            for b in tmp_base
-                push!(boxes, LayoutBox(b.element, x0 + Δbase + b.x, y0 + b.y, b.scale))
-            end
-            for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, x0 + Δsub + b.x, y_sub + b.y, b.scale))
-            end
-            for b in tmp_sup
-                push!(boxes, LayoutBox(b.element, x0 + Δsup + b.x, y_sup + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+            _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
+            _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
             return total_w
         else
             tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
@@ -1951,12 +1930,8 @@ function _layout_node!(
                     y_sub += psi
                 end
             end
-            for b in tmp_sub
-                push!(boxes, LayoutBox(b.element, script_x - ic_em + b.x, y_sub + b.y, b.scale))
-            end
-            for b in tmp_sup
-                push!(boxes, LayoutBox(b.element, script_x + b.x, y_sup + b.y, b.scale))
-            end
+            _emit_shifted!(boxes, tmp_sub, script_x - ic_em, y_sub)
+            _emit_shifted!(boxes, tmp_sup, script_x,         y_sup)
             return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
         end
 
@@ -2002,13 +1977,9 @@ function _layout_node!(
         den_y  = y0 - den_shift
 
         Δnum = (frac_w - num_w) / 2
-        for b in tmp_num
-            push!(boxes, LayoutBox(b.element, x0 + Δnum + b.x, num_y + b.y, b.scale))
-        end
         Δden = (frac_w - den_w) / 2
-        for b in tmp_den
-            push!(boxes, LayoutBox(b.element, x0 + Δden + b.x, den_y + b.y, b.scale))
-        end
+        _emit_shifted!(boxes, tmp_num, x0 + Δnum, num_y)
+        _emit_shifted!(boxes, tmp_den, x0 + Δden, den_y)
         push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
         return frac_w
 
@@ -2065,9 +2036,7 @@ function _layout_node!(
             end
         end
 
-        for b in tmp
-            push!(boxes, LayoutBox(b.element, x0 + rad_adv + b.x, y0 - body_shift + b.y, b.scale))
-        end
+        _emit_shifted!(boxes, tmp, x0 + rad_adv, y0 - body_shift)
         push!(boxes, LayoutBox(HRule(body_w, rule_thickness), x0 + rad_adv, y0 + rule_y_local, scale))
         return rad_adv + body_w
 
@@ -2100,12 +2069,11 @@ function _layout_node!(
         required_du = required_em / scale * upm
 
         # Place left delimiter (variant or assembly), then inner content, then right.
-        left_w  = _layout_delim!(ctx, left_name,  required_du, x0,               y0, scale, boxes)
-        inner_x = x0 + left_w
-        for b in tmp
-            push!(boxes, LayoutBox(b.element, inner_x + (b.x - x0), b.y, b.scale))
-        end
-        right_w = _layout_delim!(ctx, right_name, required_du, inner_x + content_w, y0, scale, boxes)
+        # _layout_children! placed `tmp` boxes in absolute coords starting at x0;
+        # shift them rightwards by left_w to make room for the left delimiter.
+        left_w  = _layout_delim!(ctx, left_name,  required_du, x0,           y0, scale, boxes)
+        _emit_shifted!(boxes, tmp, left_w, 0.0)
+        right_w = _layout_delim!(ctx, right_name, required_du, x0 + left_w + content_w, y0, scale, boxes)
 
         return left_w + content_w + right_w
 
@@ -2130,9 +2098,7 @@ function _layout_node!(
         base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
 
         # Emit base at (x0, y0).
-        for b in tmp
-            push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
-        end
+        _emit_shifted!(boxes, tmp, x0, y0)
 
         # Look up the accent glyph.  Return base-only if not present in the font.
         accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
@@ -2192,9 +2158,7 @@ function _layout_node!(
         rule_t  = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
         gap     = (is_over ? mc.overbar_vertical_gap   : mc.underbar_vertical_gap)   / upm * scale
 
-        for b in tmp
-            push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
-        end
+        _emit_shifted!(boxes, tmp, x0, y0)
 
         if is_over
             # Rule bottom sits at body_top + gap; rule top = body_top + gap + rule_t.
