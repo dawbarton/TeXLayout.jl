@@ -300,6 +300,12 @@ A summary of major features and their status.
   to the extension, but alternative integration strategies (e.g. a dedicated Makie
   recipe or a proper upstream extension point in MathTeXEngine) will be investigated
   in future.
+- **Makie extension ignores caller-specified font family** — the overridden
+  `generate_tex_elements` accepts a `font_family` argument (for API compatibility
+  with MathTeXEngine) but always uses `TeXLayout.default_font_family()` (`:new_cm`)
+  regardless.  To use a different font family for math rendering in Makie, the
+  extension would need to honour this argument or provide an alternative
+  configuration mechanism (e.g. a global `set_makie_font_family!` setter).
 
 ---
 
