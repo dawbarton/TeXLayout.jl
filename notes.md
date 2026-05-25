@@ -226,3 +226,23 @@
 - **Verification**: For `\int_0^\infty` with NewCMMath, subscript (`zero`) lands at x=0.5400, superscript (`infinity`) at x=0.9990. Difference = 0.459 em = IC of `integral.v1` (459/1000 du). Correct.
 - **No effect on symmetric operators**: `\sum`, `\prod` etc. have IC = 0, so they are unaffected.
 - All 789 tests pass. Demo sheets regenerated.
+
+## 2026-05-25T00:17+00:00 Code review and clean-up pass
+
+- **Scope**: Audit for idiomatic Julia, abstractions, logic bugs, and KaTeX-equivalence; apply agreed fixes incrementally.
+- **Bugs found and fixed**:
+  - **Lexer UTF-8 unsafe**: `src/lexer.jl` advanced byte indices with `i += 1` rather than `nextind`. Any multi-byte char in math input (e.g. `α + β`) raised `StringIndexError` on the first non-ASCII codepoint. Fixed; two regression tests added.
+  - **Brace fallback inversion** in `_layout_horiz_brace!`: when the font lacked a brace glyph the `brace_top`/`brace_bot` placeholder values referenced the wrong side of the body in both `is_over` and `!is_over` cases, so any secondary script note would have been mis-positioned. Rare path (none of the bundled fonts hit it) but logic is now consistent with the comment above.
+- **Idiomatic clean-up**:
+  - Deduplicated `_HORIZ_BRACE_COMMANDS` (parser) / `_HORIZ_BRACE_GLYPHS` (layout) — same six-entry dict in two places; reduced the parser-side copy to a `Set{String}` of recognised commands.
+  - `NKSpace` now carries a `width::Float64` field instead of round-tripping the value through `String` (`Node(NKSpace, "0.5")` → `parse(Float64, sp.value)` on every layout). Added a `space_node(w)` constructor.
+  - Factored the 22 repeated `for b in tmp; push!(boxes, LayoutBox(b.element, dx+b.x, dy+b.y, b.scale)); end` loops into `_emit_shifted!(boxes, src, dx, dy)`.
+  - Added `_with_variant(ctx, variant)` helper so `NKFontSwitch` doesn't have to rebuild the whole 10-field `_LayoutCtx` by hand.
+- **Architectural refactor**:
+  - **Split `_layout_node!` per kind** (`src/layout.jl`): the 500-line if/elseif chain that handled every `NodeKind` is now a thin dispatcher delegating to `_layout_X!` helpers (one per kind). Behaviour is byte-identical; the goal was readability — each rule now lives in a function of 5–80 lines.
+  - **`glyph_metrics` / `glyph_metrics_by_codepoint` now return `Union{GlyphMetrics, Nothing}`** instead of throwing. This is a breaking API change. Every internal caller previously wrapped them in `try/catch return nothing end`; the new contract removes the exception-driven control flow from the hot path. Test for `@test_throws Exception` replaced with `=== nothing`.
+- **Considered and rejected**:
+  - Removing the redundant `scale` parameter (which always equals `size_scale(style, mc)`): would touch ~40 sites mechanically for no functional gain and remove explicit documentation of the contract.
+  - Reclassifying `NKHorizBrace` from `:inner` to `:ord`: KaTeX's `horizBrace.ts` emits `minner`, so our current classification matches.
+  - Factoring the 3× repeated `base.kind === NKHorizBrace && return _layout_horiz_brace!(...)` dispatch: only 2 lines per site after the per-kind split, so factoring would add ceremony without saving meaningful code.
+- **Verification**: All 797 tests pass after every commit (originally 789; +8 for new Unicode lexer tests and one nothing-return test). Smoke-tested a 18-input suite including direct-Unicode and empty/malformed inputs.
