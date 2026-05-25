@@ -84,6 +84,15 @@ end
     ctx.mode, variant,
 )
 
+# Return a copy of `ctx` with mode set to :text, preserving all other fields.
+# Used by NKText so that character lookup uses upright (regular-font) glyphs and
+# math-mode italic remapping and inter-atom spacing are suppressed.
+@inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
+    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
+    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    :text, ctx.font_variant,
+)
+
 # Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
 # glyph.  Applied only in :math mode; text mode uses the literal codepoint.
 const _MATH_CHAR_REMAP = Dict{Char,Char}(
@@ -1683,6 +1692,9 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
              # Standard LaTeX renders math-mode letters italic; use the
              # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
              _variant_glyph(ctx, :mathit, ch)
+         elseif ctx.mode === :text
+             # \text{}/\mbox{}: use upright (regular-font) glyph; no italic remapping.
+             _upright_glyph(ctx, ch)
          else
              _char_glyph(ctx, ch)
          end
@@ -2036,35 +2048,63 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     left_name  = sep === nothing ? node.value : node.value[1:sep-1]
     right_name = sep === nothing ? ""          : node.value[sep+1:end]
 
-    # Lay out inner content in a scratch buffer to measure its vertical extent.
-    tmp       = LayoutBox[]
-    content_w = _layout_children!(node.children, ctx, style, x0, y0, scale, tmp)
+    # Partition inner children into content segments separated by NKMiddle nodes.
+    # segments[i] holds the children between the (i-1)-th and i-th \middle delimiter.
+    # middles[i]  is the NKMiddle node separating segments[i] from segments[i+1].
+    segments    = Vector{Node}[]
+    middles     = Node[]
+    current_seg = Node[]
+    for child in node.children
+        if child.kind === NKMiddle
+            push!(segments, current_seg)
+            push!(middles,  child)
+            current_seg = Node[]
+        else
+            push!(current_seg, child)
+        end
+    end
+    push!(segments, current_seg)
 
-    # Vertical extent of the inner content (in em units relative to y0).
-    content_top = _boxes_top(tmp, upm)
-    content_bot = _boxes_bottom(tmp, upm)
+    # Lay out each segment at the origin into a scratch buffer to measure dimensions.
+    # x=0 is used so that box positions are relative; they are shifted when placed.
+    seg_boxes  = [LayoutBox[] for _ in segments]
+    seg_widths = zeros(Float64, length(segments))
+    for (i, seg) in enumerate(segments)
+        seg_widths[i] = _layout_children!(seg, ctx, style, 0.0, y0, scale, seg_boxes[i])
+    end
+
+    # Measure the overall vertical extent across all segment boxes.
+    all_tmp     = isempty(seg_boxes) ? LayoutBox[] : reduce(vcat, seg_boxes)
+    content_top = _boxes_top(all_tmp, upm)
+    content_bot = _boxes_bottom(all_tmp, upm)
     # Ensure a sensible non-zero span when content has no glyph ink.
     content_top = max(content_top, y0 + mc.axis_height / upm * scale)
     content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
 
-    # Required delimiter advance: sized so the delimiter covers the content
-    # symmetrically around the math axis.  Converted to unscaled design units
-    # because GlyphVariant.advance and GlyphAssemblyPart.full_advance are both
-    # stored in unscaled design units.
+    # Required delimiter advance: sized so every delimiter covers the content
+    # symmetrically around the math axis (same formula for left, middle, and right).
+    # Converted to unscaled design units because GlyphVariant.advance and
+    # GlyphAssemblyPart.full_advance are stored in unscaled design units.
     axis_em     = y0 + mc.axis_height / upm * scale
     h_above     = max(0.0, content_top - axis_em)
     h_below     = max(0.0, axis_em - content_bot)
     required_em = 2.0 * max(h_above, h_below)
     required_du = required_em / scale * upm
 
-    # Place left delimiter (variant or assembly), then inner content, then right.
-    # _layout_children! placed `tmp` boxes in absolute coords starting at x0;
-    # shift them rightwards by left_w to make room for the left delimiter.
-    left_w  = _layout_delim!(ctx, left_name,  required_du, x0,           y0, scale, boxes)
-    _emit_shifted!(boxes, tmp, left_w, 0.0)
-    right_w = _layout_delim!(ctx, right_name, required_du,
-                             x0 + left_w + content_w, y0, scale, boxes)
-    return left_w + content_w + right_w
+    # Place left delimiter, then (segment + middle delimiter)*, then last segment + right.
+    cursor = x0
+    left_w = _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes)
+    cursor += left_w
+    for (i, (seg_b, seg_w)) in enumerate(zip(seg_boxes, seg_widths))
+        _emit_shifted!(boxes, seg_b, cursor, 0.0)
+        cursor += seg_w
+        if i <= length(middles)
+            mid_w = _layout_delim!(ctx, middles[i].value, required_du, cursor, y0, scale, boxes)
+            cursor += mid_w
+        end
+    end
+    right_w = _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes)
+    return cursor - x0 + right_w
 end
 
 function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
@@ -2072,6 +2112,13 @@ function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
     isempty(node.children) && return 0.0
     new_ctx = _with_variant(ctx, Symbol(node.value))
     return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
+end
+
+function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
+    # Render the body in text mode: upright (regular-font) glyphs, no math-italic
+    # remapping, no inter-atom spacing (guarded in _layout_children! by mode check).
+    isempty(node.children) && return 0.0
+    return _layout_node!(node.children[1], _with_text_mode(ctx), style, x0, y0, scale, boxes)
 end
 
 function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
@@ -2188,7 +2235,8 @@ function _layout_node!(
         return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
     k === NKMatrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
     k === NKLimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
-    # NKText and any unrecognised kind: emit nothing.
+    k === NKText           && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
+    # NKMiddle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end
 

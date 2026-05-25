@@ -264,6 +264,8 @@ A summary of major features and their status.
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
 | Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double (`||`) vertical rules from colspec; two-pass grid layout centred on math axis |
+| `\middle` delimiter | ✓ | `NKMiddle`; auto-sized to the same height as the enclosing `\left`/`\right` pair; multiple `\middle` delimiters per group are supported |
+| `\text{}`, `\mbox{}` | ✓ | `NKText`; switches to upright (regular-font) glyph lookup via `_with_text_mode`; inter-atom spacing suppressed inside text fragments |
 | `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
 
 ## Known limitations / future work
@@ -285,8 +287,6 @@ A summary of major features and their status.
   Greek, and common symbols (∇, ∂, variant letters) to their Unicode math-variant
   codepoints.  The `bold`, `italic`, `bolditalic` slots in `FontFamily` are not yet used;
   adding them would cover characters outside the Unicode math block.
-- **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
-  atom-class spacing purposes.
 - **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
   extension).  When `TeXLayout`, `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings`
   are all loaded, the extension adds a specialised

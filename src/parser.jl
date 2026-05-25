@@ -20,12 +20,13 @@
     NKOverUnder     # \overline / \underline; value is "overline" or "underline"
     NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
     NKSpace          # explicit space token (\, \; \quad etc.)
-    NKText           # \text{…} — text-mode fragment
+    NKText           # \text{…} / \mbox{…}: text-mode fragment; children[1] = body
     NKOperator       # named math operator rendered upright: \sin, \cos, \operatorname{…}
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
     NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
     NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00colspec"; children = flat row-major cells
+    NKMiddle         # \middle<delim>: auto-sized inner delimiter; value = PS glyph name
 end
 
 """
@@ -246,14 +247,22 @@ function _parse_delim_name!(p::_Parser)::String
 end
 
 # Parse atoms until \right, '}' or EOF.  The \right token is left unconsumed so
-# that the caller can record the right-delimiter glyph name.
+# that the caller can record the right-delimiter glyph name.  \middle<delim> inside
+# the body is consumed here and emitted as an NKMiddle node; the layout engine uses
+# it to place an auto-sized inner delimiter at the correct position.
 function _parse_delimited_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
         (k === TKEOF || k === TKRBrace) && break
         k === TKCommand && _current(p).value == "\\right" && break
-        push!(children, _parse_atom!(p))
+        if k === TKCommand && _current(p).value == "\\middle"
+            _advance!(p)   # consume \middle
+            ps = _parse_delim_name!(p)
+            push!(children, Node(NKMiddle, ps))
+        else
+            push!(children, _parse_atom!(p))
+        end
     end
     return children
 end
@@ -554,6 +563,10 @@ function _parse_command!(p::_Parser)::Node
         # \end encountered outside a \begin context (malformed input): consume and ignore.
         _read_brace_word!(p)
         return space_node(0.0)
+
+    elseif cmd == "\\text" || cmd == "\\mbox"
+        body = _parse_argument!(p)
+        return Node(NKText, [body])
 
     else
         bare = cmd[2:end]   # strip leading '\'
