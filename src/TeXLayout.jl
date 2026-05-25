@@ -18,24 +18,25 @@ include("lexer.jl")
 include("parser.jl")
 include("layout.jl")
 
-# MathConstants deliberately not exported (conflicts with Base.MathConstants module).
-export MathTable, GlyphConstruction, GlyphAssembly, GlyphAssemblyPart,
-       GlyphVariant, load_math_table
-export FontFamily, GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint, glyph_metrics_upright,
-       font_family, default_font_family, set_default_font_family!
-# TexStyle enum values deliberately not exported at top level to avoid
-# conflicts with Base.Text and Base.Display.  Access as TeXLayout.Display etc.
-export TexStyle,
-       sup_style, sub_style, frac_num_style, frac_den_style, cramp_style,
-       is_cramped, is_display, is_script, is_script_script, size_scale
-export TokenKind, TKChar, TKCommand, TKSup, TKSub, TKLBrace, TKRBrace,
-       TKMathShift, TKAmpersand, TKSpace, TKEOF, Token, tokenize
-export NodeKind, NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
-       NKDecorated, NKFrac, NKSqrt, NKDelimited, NKAccent, NKOverUnder,
-       NKCommand, NKSpace, NKText, NKOperator, NKLimitsOverride,
-       NKFontSwitch, NKHorizBrace, NKMatrix,
-       Node, parse_latex
-export TeXElement, Glyph, HRule, VRule, Space, LayoutBox, layout,
-       generate_tex_elements
+# Public API — minimal surface for typical users.
+#
+# Internal types (NodeKind, NKxxx, TokenKind, TKxxx, MathTable, GlyphMetrics,
+# style helpers, glyph-metric functions) are accessible as TeXLayout.Xxx but
+# are not exported so they do not pollute the caller's namespace.
+#
+# TexStyle enum *values* (Display, Text, Script, …) are deliberately not
+# exported to avoid conflicts with Base.Text and Base.Display; access them
+# as TeXLayout.Display etc.
+
+# Font API
+export FontFamily, font_family, default_font_family, set_default_font_family!
+# Style enum type (values accessed as TeXLayout.Display / TeXLayout.Text / …)
+export TexStyle
+# Pipeline
+export parse_latex, layout
+# Layout output types
+export LayoutBox, TeXElement, Glyph, HRule, VRule, Space
+# Makie integration
+export generate_tex_elements
 
 end
