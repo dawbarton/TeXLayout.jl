@@ -80,6 +80,7 @@ end
 # ── Render one LaTeX expression to a canvas ───────────────────────────────────
 
 function render_expr(expr::String, family, mt, face_math,
+                     face_regular=nothing,
                      style=TeXLayout.Display)::Matrix{UInt8}
     local boxes
     try
@@ -107,9 +108,11 @@ function render_expr(expr::String, family, mt, face_math,
         if el isa Glyph
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_x(box.x); pen_cy = em_y(box.y)
+            face = (el.font_slot === :regular && face_regular !== nothing) ?
+                       face_regular : face_math
             local bmp, ext
             try
-                bmp, ext = renderface(face_math, el.glyph_name, pixel_size)
+                bmp, ext = renderface(face, el.glyph_name, pixel_size)
             catch
                 continue
             end
@@ -300,10 +303,11 @@ function main()
         font_family(font_spec)
     end
 
-    math_path = family.math
-    mt        = TeXLayout.load_math_table(math_path)
-    face_math = FTFont(math_path)
-    font_name = FreeTypeAbstraction.family_name(face_math)
+    math_path    = family.math
+    mt           = TeXLayout.load_math_table(math_path)
+    face_math    = FTFont(math_path)
+    face_regular = family.regular !== nothing ? FTFont(family.regular) : nothing
+    font_name    = FreeTypeAbstraction.family_name(face_math)
 
     # Collect all per-section expression canvases.
     section_strips = Matrix{UInt8}[]
@@ -311,7 +315,7 @@ function main()
     for (sec_title, exprs) in DEMO_SECTIONS
         canvases = Matrix{UInt8}[]
         for expr in exprs
-            c = render_expr(expr, family, mt, face_math)
+            c = render_expr(expr, family, mt, face_math, face_regular)
             push!(canvases, c)
         end
         row = hcat_canvases(canvases)

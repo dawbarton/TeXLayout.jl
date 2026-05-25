@@ -483,6 +483,23 @@ const _LIMITS_OP_COMMANDS = Set{String}([
 # selects a glyph variant wide enough to span the base, or assembles one.
 const _WIDE_ACCENT_COMMANDS = Set{String}(["\\widehat", "\\widetilde"])
 
+# Fallback codepoints for accents that use combining forms (U+0300–U+036F) rather
+# than spacing modifier letters.  Fonts such as Luciole Math carry these glyphs
+# at the combining codepoints instead of the spacing modifier codepoints used in
+# _ACCENT_CODEPOINTS, so we try these when the primary lookup returns nothing.
+const _ACCENT_FALLBACK_CODEPOINTS = Dict{String,UInt32}(
+    "\\hat"      => 0x0302,   # ̂  COMBINING CIRCUMFLEX ACCENT
+    "\\acute"    => 0x0301,   # ́  COMBINING ACUTE ACCENT
+    "\\tilde"    => 0x0303,   # ̃  COMBINING TILDE
+    "\\breve"    => 0x0306,   # ̆  COMBINING BREVE
+    "\\check"    => 0x030C,   # ̌  COMBINING CARON
+    "\\dot"      => 0x0307,   # ̇  COMBINING DOT ABOVE
+    "\\mathring" => 0x030A,   # ̊  COMBINING RING ABOVE
+    "\\ddot"     => 0x0308,   # ̈  COMBINING DIAERESIS
+    "\\grave"    => 0x0300,   # ̀  COMBINING GRAVE ACCENT
+    "\\bar"      => 0x0305,   # ̅  COMBINING OVERLINE
+)
+
 # Horizontal brace/bracket/paren commands mapped to their PS glyph names in
 # horiz_constructions.  Over-variants sit entirely above the baseline; under-
 # variants sit entirely below — see the formulae in _layout_horiz_brace!.
@@ -2288,8 +2305,14 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
     _emit_shifted!(boxes, tmp, x0, y0)
 
-    # Look up the accent glyph.  Return base-only if not present in the font.
+    # Look up the accent glyph.  Try the primary codepoint first; if the font
+    # does not have a glyph there, try the combining-form fallback (e.g. Luciole
+    # Math uses U+0302–U+030C instead of the spacing modifier codepoints).
     accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
+    if isempty(accent_ps)
+        fb = get(_ACCENT_FALLBACK_CODEPOINTS, node.value, nothing)
+        fb !== nothing && (accent_ps = glyph_name_by_codepoint(ctx.family, fb))
+    end
     isempty(accent_ps) && return base_w
     accent_m = glyph_metrics(ctx.family, accent_ps)
     accent_m === nothing && return base_w
