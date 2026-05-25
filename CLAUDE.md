@@ -276,11 +276,10 @@ A summary of major features and their status.
   stroke at x offset) — analogous to how TeX builds `\not\leq` — or per-font codepoint
   investigation.  Do not add combining-sequence "codepoints" to `_SYMBOL_CODEPOINTS`; they
   will not work with `glyph_metrics_by_codepoint`.
-- **Extended AMS symbols not yet in `_SYMBOL_CODEPOINTS`** — ~150 commands in
-  `_CMD_ATOM_CLASS` (box operators, extended geometry, rare relations, etc.) currently fall
-  back to PS-name lookup, which works on NewCM/Pagella/STIXTwo but silently produces blanks
-  on FiraMath and Luciole.  The fix is to bulk-add their Unicode codepoints to
-  `_SYMBOL_CODEPOINTS`; see the analysis in `notes.md` (2026-05-24 session).
+- **`\bigplus` has no Unicode codepoint** — it is in `_CMD_ATOM_CLASS` (`:op`) but not in
+  `_SYMBOL_CODEPOINTS`, so it produces blank space on all fonts.  It is not a standard
+  LaTeX/AMS symbol and has no single Unicode codepoint; per-font investigation would be
+  needed to support it.
 - **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
   from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
   yet used; adding them would give better coverage for characters outside the math block

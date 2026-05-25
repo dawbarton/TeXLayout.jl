@@ -679,6 +679,8 @@ const _SYMBOL_CODEPOINTS = Dict{String,UInt32}(
     "Finv"           => 0x2132,  "Game"           => 0x2141,
     "degree"         => 0x00B0,  "textdollar"     => 0x0024,
     "diagup"         => 0x2571,  "diagdown"       => 0x2572,
+    "doteq"          => 0x2250,  "Join"           => 0x2A1D,
+    "Bbbk"           => 0x1D55C, "backslash"      => 0x005C,
     # Delimiter aliases
     "lvert"          => 0x007C,  "rvert"          => 0x007C,
     "lVert"          => 0x2016,  "rVert"          => 0x2016,
