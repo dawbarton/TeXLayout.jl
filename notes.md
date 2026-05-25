@@ -345,3 +345,23 @@
 - **Known limitation (pre-existing)**: Metric values for regular-font glyphs are divided by `ctx.upm` (the math font's UPM). If `family.regular` has a different UPM than `family.math`, the em-unit widths will be slightly wrong. In practice, all supported font families use UPM=1000 consistently, so this is not currently an issue.
 
 - 821 tests, all pass. Committed.
+
+## 2026-05-25T16:22+00:00 Fix Luciole blank glyphs, operator font selection, and missing accents
+
+- **Root causes identified and fixed** for three Luciole-specific bugs:
+
+- **Issue #1 & #2 — blank glyphs in \text{} and named operators (\sin etc.)**
+  - `_upright_glyph` correctly produces `font_slot = :regular` glyphs with PS names from `regular.ttf` (e.g. "s", "i", "n")
+  - Both rendering tools (`demo_sheet.jl`, `stress_test_sheet.jl`) called `renderface(face_math, el.glyph_name, ...)` unconditionally — Luciole Math has no glyph named "s" → blank
+  - Fix: load `face_regular = FTFont(family.regular)` when available; select render face by `el.font_slot` at render time
+  - Note: using the regular font for operators is architecturally correct — it matches KaTeX behaviour
+
+- **Issue #3 — Luciole accents dropped (\dot{q}, \tilde{a}, \breve{u}, etc.)**
+  - `_ACCENT_CODEPOINTS` uses spacing modifier codepoints (U+02C6 ˆ, U+02DC ˜, U+02D8 ˘, U+02D9 ˙, U+02C7 ˇ, U+00B4 ´, U+02DA ˚)
+  - Luciole Math carries these at combining-form codepoints (U+0302–U+030C) instead — primary lookup returned "" → silent drop
+  - Fix: added `_ACCENT_FALLBACK_CODEPOINTS` in `layout.jl` mapping the 10 most common accent commands to their combining equivalents; `_layout_accent!` now tries fallback before giving up
+  - Affected accents recovered: \hat, \acute, \tilde, \breve, \check, \dot, \mathring, \ddot, \grave, \bar
+
+- **Incidental fix**: `stress_test_sheet.jl` was using `magick` (not installed); aligned with `demo_sheet.jl` to use `convert`
+
+- All three fixes are in commit `4a22217`; verified visually with Luciole stress test and demo sheets, and NewCM regression check passed
