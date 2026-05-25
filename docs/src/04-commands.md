@@ -1,0 +1,321 @@
+# LaTeX Command Reference
+
+This page lists every LaTeX command recognised by TeXLayout's parser and layout engine.
+Commands are grouped by mathematical role.  All commands are valid inside math mode
+(i.e. after `generate_tex_elements` is called, or inside an `L"…"` string when using
+the Makie integration).
+
+## Ordinary symbols
+
+### Greek lowercase
+
+`\alpha`, `\beta`, `\gamma`, `\delta`, `\epsilon`, `\varepsilon`, `\zeta`, `\eta`,
+`\theta`, `\vartheta`, `\iota`, `\kappa`, `\lambda`, `\mu`, `\nu`, `\xi`, `\pi`,
+`\varpi`, `\rho`, `\varrho`, `\sigma`, `\varsigma`, `\tau`, `\upsilon`, `\phi`,
+`\varphi`, `\chi`, `\psi`, `\omega`
+
+### Greek uppercase
+
+`\Gamma`, `\Delta`, `\Theta`, `\Lambda`, `\Xi`, `\Pi`, `\Sigma`, `\Upsilon`, `\Phi`,
+`\Psi`, `\Omega`
+
+### Miscellaneous
+
+`\infty`, `\partial`, `\nabla`, `\forall`, `\exists`, `\nexists`, `\emptyset`,
+`\varnothing`, `\angle`, `\measuredangle`, `\sphericalangle`, `\ell`, `\imath`,
+`\jmath`, `\hbar`, `\hslash`, `\Re`, `\Im`, `\wp`, `\aleph`, `\beth`, `\gimel`,
+`\daleth`, `\prime`, `\backprime`, `\complement`, `\surd`, `\top`, `\bot`, `\flat`,
+`\natural`, `\sharp`, `\triangle`, `\triangledown`, `\square`, `\blacksquare`,
+`\lozenge`, `\blacklozenge`, `\bigstar`, `\eth`, `\vdots`, `\checkmark`
+
+## Binary operators
+
+`\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\ast`, `\star`, `\circ`, `\bullet`,
+`\cap`, `\cup`, `\sqcap`, `\sqcup`, `\wedge` (alias `\land`), `\vee` (alias `\lor`),
+`\setminus`, `\smallsetminus`, `\oplus`, `\ominus`, `\otimes`, `\oslash`, `\odot`,
+`\ltimes`, `\rtimes`, `\wr`, `\amalg`, `\dagger`, `\ddagger`, `\triangleleft`,
+`\triangleright`, `\dotplus`, `\intercal`, `\divideontimes`, `\boxplus`, `\boxminus`,
+`\boxtimes`, `\boxdot`, `\barwedge`, `\curlywedge`, `\curlyvee`, `\doublebarwedge`,
+`\leftthreetimes`, `\rightthreetimes`
+
+## Relations
+
+`\leq` (alias `\le`), `\geq` (alias `\ge`), `\neq` (alias `\ne`), `\equiv`,
+`\approx`, `\sim`, `\simeq`, `\cong`, `\propto`, `\perp`, `\parallel`, `\mid`,
+`\nmid`, `\subset`, `\supset`, `\subseteq`, `\supseteq`, `\sqsubseteq`,
+`\sqsupseteq`, `\in`, `\notin`, `\ni`, `\prec`, `\succ`, `\preceq`, `\succeq`,
+`\ll`, `\gg`, `\to`, `\leftarrow`, `\rightarrow`, `\Leftarrow`, `\Rightarrow`,
+`\leftrightarrow`, `\Leftrightarrow`, `\iff`, `\implies`, `\mapsto`, `\longmapsto`,
+`\hookleftarrow`, `\hookrightarrow`, `\uparrow`, `\downarrow`, `\vdash`, `\dashv`,
+`\models`, `\smile`, `\frown`
+
+AMS extensions include: `\leqslant`, `\geqslant`, `\approxeq`, `\lesssim`,
+`\gtrsim`, `\lessgtr`, `\gtrless`, `\lesseqgtr`, `\gtreqless`, `\eqslantless`,
+`\eqslantgtr`, `\preccurlyeq`, `\succcurlyeq`, `\curlyeqprec`, `\curlyeqsucc`,
+`\precsim`, `\succsim`, `\subseteqq`, `\supseteqq`, `\Subset`, `\Supset`,
+`\trianglelefteq`, `\trianglerighteq`, `\blacktriangleleft`, `\blacktriangleright`,
+`\vartriangleleft`, `\vartriangleright`, and many more.
+
+## Large operators
+
+In Display style, large operators are automatically enlarged using the font's
+`display_operator_min_height` constant from the OpenType MATH table.  For `\sum`,
+`\prod`, `\coprod`, `\bigcap`, `\bigcup`, and all `\bigXxx` variants, limits
+placement (sub/superscript stacked above/below the operator) is used automatically
+in Display style; inline (beside-base) placement is used in Text style.  Use
+`\limits` or `\nolimits` to override this decision.
+
+`\sum`, `\prod`, `\coprod`, `\int`, `\iint`, `\iiint`, `\iiiint`, `\oint`,
+`\oiint`, `\oiiint`, `\bigcap`, `\bigcup`, `\bigsqcup`, `\bigsqcap`, `\bigwedge`,
+`\bigvee`, `\bigoplus`, `\bigotimes`, `\bigodot`, `\biguplus`
+
+## Named operators
+
+Rendered upright using the companion regular font (or the math font's own codepoint
+mapping where no regular font is configured).  In Display style, the operators
+`\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`, `\min`, `\det`, `\gcd`, and
+`\Pr` automatically use limits placement.
+
+`\sin`, `\cos`, `\tan`, `\cot`, `\sec`, `\csc`, `\arcsin`, `\arccos`, `\arctan`,
+`\ln`, `\log`, `\exp`, `\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`,
+`\min`, `\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
+
+For an operator name that is not in the list above, use `\operatorname{name}`.
+
+## Delimiters
+
+### Auto-sized pairs
+
+Wrap content in `\left`…`\right` to have the delimiter height chosen automatically
+to cover the enclosed expression.  The size is selected from the font's
+`vert_constructions` table (pre-built size variants and extensible assemblies).
+
+| Left | Right |
+|:-----|:------|
+| `\left(` | `\right)` |
+| `\left[` | `\right]` |
+| `\left\{` | `\right\}` |
+| `\left\|` or `\left\vert` | `\right\|` or `\right\vert` |
+| `\left\|` or `\left\Vert` | `\right\|` or `\right\Vert` |
+| `\left/` | `\right/` |
+| `\left\backslash` | `\right\backslash` |
+| `\left\langle` | `\right\rangle` |
+| `\left\lfloor` | `\right\rfloor` |
+| `\left\lceil` | `\right\rceil` |
+| `\left.` | `\right.` (null delimiter — no glyph rendered) |
+
+All delimiters are centred on the math axis.
+
+### Inner delimiter
+
+`\middle` (followed by a delimiter token) inserts a delimiter auto-sized to the same
+height as the enclosing `\left`/`\right` pair.  Multiple `\middle` delimiters per
+group are supported.
+
+## Fractions
+
+| Command | Behaviour |
+|:--------|:----------|
+| `\frac{num}{den}` | Standard fraction in the current style |
+| `\dfrac{num}{den}` | Forces Display style for the fraction (even inside a subscript) |
+| `\tfrac{num}{den}` | Forces Text style for the fraction |
+
+The fraction rule thickness and shift distances are read from the OpenType MATH table.
+
+## Radicals
+
+| Command | Behaviour |
+|:--------|:----------|
+| `\sqrt{body}` | Square root |
+| `\sqrt[degree]{body}` | Root with explicit degree |
+
+The radical glyph is selected from the font's `vert_constructions` table, then
+extended with an assembly if the body is taller than the largest pre-built variant.
+The overbar is top-anchored to the radical glyph.
+
+## Sub- and superscripts
+
+Standard TeX notation: `x^{sup}`, `x_{sub}`, `x_{sub}^{sup}`.  The source order of
+`_` and `^` does not matter.
+
+Italic correction is applied to subscripts on slanted single-glyph bases such as
+`\int`, matching KaTeX behaviour.  For large operators with automatic limits
+placement, use `\limits` to force stacked placement or `\nolimits` to force
+beside-base placement regardless of the current style.
+
+## Accents
+
+### Non-stretchy
+
+`\hat`, `\acute`, `\grave`, `\ddot`, `\tilde`, `\bar`, `\breve`, `\check`, `\dot`,
+`\mathring`, `\vec`
+
+The accent is horizontally aligned to the base glyph using the font's
+`MathTopAccentAttachment` table.
+
+### Stretchy (horizontally extensible)
+
+`\widehat`, `\widetilde`
+
+The glyph variant is selected from `horiz_constructions`; the accent is centred over
+the base.
+
+### Overline and underline rules
+
+`\overline{…}`, `\underline{…}` — draws a rule above or below the body; gap and
+rule thickness are read from the OpenType MATH table.
+
+## Horizontal extensibles
+
+The following commands stretch horizontally to cover their body and accept an
+optional sub/superscript note placed above or below (limits style):
+
+`\overbrace`, `\underbrace`, `\overbracket`, `\underbracket`, `\overparen`,
+`\underparen`
+
+Example: `\overbrace{a + b + c}^{n \text{ terms}}`
+
+## Extensible arrows
+
+All extensible-arrow commands stretch the arrow horizontally to span the label.
+The optional `[below-label]` argument is placed below the arrow.
+
+```
+\xrightarrow[below]{above}
+```
+
+Available commands:
+
+`\xrightarrow`, `\xleftarrow`, `\xLeftarrow`, `\xRightarrow`, `\xleftrightarrow`,
+`\xLeftrightarrow`, `\xhookleftarrow`, `\xhookrightarrow`, `\xmapsto`,
+`\xrightharpoondown`, `\xrightharpoonup`, `\xleftharpoondown`, `\xleftharpoonup`,
+`\xrightleftharpoons`, `\xleftrightharpoons`, `\xtwoheadrightarrow`,
+`\xtwoheadleftarrow`, `\xlongequal`
+
+## Matrices and arrays
+
+All environments use `\begin{env}…\end{env}` syntax.  Cells are separated by `&`;
+rows are terminated by `\\`.
+
+| Environment | Delimiters | Column alignment |
+|:------------|:-----------|:-----------------|
+| `matrix` | none | centred |
+| `pmatrix` | `( )` | centred |
+| `bmatrix` | `[ ]` | centred |
+| `Bmatrix` | `\{ \}` | centred |
+| `vmatrix` | `\| \|` | centred |
+| `Vmatrix` | `‖ ‖` | centred |
+| `smallmatrix` | none | centred (0.9× scale) |
+| `cases` | `\{` left only | left-aligned |
+| `array` | none | per `{colspec}` |
+
+The `array` environment takes a mandatory column-spec argument:
+
+```latex
+\begin{array}{lcr|c||r}
+  a & b & c & d & e \\
+  f & g & h & i & j
+\end{array}
+```
+
+Each letter in the spec is `l` (left-aligned), `c` (centred), or `r` (right-aligned).
+`|` inserts a single vertical rule between columns; `||` inserts a double rule.
+
+## Text mode
+
+`\text{…}`, `\mbox{…}` — switch to upright (regular-font) glyph rendering for the
+enclosed content.  Spaces are preserved as explicit `Space` elements using the font's
+word-space advance.  The entire text fragment is classified as an ordinary atom for
+inter-atom spacing purposes.
+
+## Font switching
+
+Apply to a braced argument; the variant propagates into sub/superscripts.
+
+| Command | Variant |
+|:--------|:--------|
+| `\mathbf{…}` | Bold |
+| `\mathit{…}` | Italic |
+| `\mathrm{…}` | Roman (upright math) |
+| `\mathbb{…}` | Blackboard bold |
+| `\mathcal{…}` | Calligraphic / script |
+| `\mathfrak{…}` | Fraktur |
+| `\mathsf{…}` | Sans-serif |
+| `\mathtt{…}` | Typewriter / monospace |
+| `\boldsymbol{…}` or `\bm{…}` | Bold (symbols) |
+| `\mathscr{…}` | Script |
+
+Aliases: `\Bbb` = `\mathbb`, `\bold` = `\mathbf`, `\frak` = `\mathfrak`.
+
+Font switching maps Latin and Greek characters to their Unicode Mathematical
+Alphanumeric Symbols codepoints (U+1D400–U+1D7FF).  The `bold`, `italic`, and
+`bolditalic` slots in `FontFamily` are reserved for characters outside the Unicode
+math block and are not yet used.
+
+## Style overrides
+
+`\displaystyle`, `\textstyle`, `\scriptstyle`, `\scriptscriptstyle` — force a
+specific TeX style for the rest of the current group.  `\dfrac` and `\tfrac` force
+Display or Text style respectively for the fraction only.
+
+Style overrides also reset the scale factor to match the target style
+(`size_scale(new_style, mc)`), so `\dfrac` inside a subscript renders at full display
+size, matching KaTeX behaviour.
+
+## Font sizing
+
+The following commands multiply the current scale by a fixed factor and apply to the
+rest of the current group.  The style (D/T/S/SS) is unchanged.
+
+| Command | Multiplier |
+|:--------|:----------:|
+| `\tiny` | 0.5× |
+| `\scriptsize` | 0.7× |
+| `\footnotesize` | 0.8× |
+| `\small` | 0.9× |
+| `\normalsize` | 1.0× |
+| `\large` | 1.2× |
+| `\Large` | 1.44× |
+| `\LARGE` | 1.728× |
+| `\huge` | 2.074× |
+| `\Huge` | 2.488× |
+
+## Spacing
+
+Inter-atom spacing between mathematical object classes (Ord, Bin, Rel, Op, Open,
+Close, Punct, Inner) is inserted automatically according to the standard TeX table.
+The following commands insert explicit horizontal space:
+
+| Command | Width |
+|:--------|:------|
+| `\,` or `\thinspace` | 3/18 em (thin space) |
+| `\:` or `\medspace` | 4/18 em (medium space) |
+| `\;` or `\thickspace` | 5/18 em (thick space) |
+| `\!` or `\negthinspace` | −3/18 em |
+| `\negmedspace` | −4/18 em |
+| `\negthickspace` | −5/18 em |
+| `\enspace` | 0.5 em |
+| `\quad` | 1 em |
+| `\qquad` | 2 em |
+| `\kern{dim}` | explicit dimension (em or mu units) |
+| `\mkern{dim}` | explicit math kern (mu units) |
+| `\hskip{dim}` | same as `\kern` |
+| `\mskip{dim}` | same as `\mkern` |
+
+1 mu = 1/18 em.  Negative spaces are fully supported.
+
+## Known limitations
+
+A small set of negated and variant relations currently produce **blank space** because
+they have no single Unicode codepoint in standard OpenType math fonts:
+
+`\nleqslant`, `\ngeqslant`, `\nleqq`, `\ngeqq`, `\lvertneqq`, `\gvertneqq`,
+`\varsubsetneq`, `\varsupsetneq`, `\npreceq`, `\nsucceq`
+
+These symbols are defined in Unicode as a base character combined with U+0338
+(COMBINING SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR-1), but OpenType math
+fonts do not consistently encode them as single glyphs.  Correct support would
+require two-glyph overlay rendering, similar to how TeX builds `\not\leq`.
+
+`\bigplus` also has no Unicode codepoint and currently produces blank space on all
+fonts.

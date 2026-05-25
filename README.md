@@ -1,5 +1,7 @@
 # TeXLayout.jl
 
+[![Development documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://dawbarton.github.io/TeXLayout.jl/dev)
+[![Docs workflow Status](https://github.com/dawbarton/TeXLayout.jl/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/dawbarton/TeXLayout.jl/actions/workflows/docs.yml?query=branch%3Amain)
 [![Test workflow status](https://github.com/dawbarton/TeXLayout.jl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dawbarton/TeXLayout.jl/actions/workflows/ci.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/dawbarton/TeXLayout.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/dawbarton/TeXLayout.jl)
 [![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
