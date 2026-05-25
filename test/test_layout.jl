@@ -584,18 +584,34 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test name_rm != name_it
     end
 
-    @testset "FontSwitch: \\mathrm uses math font, not regular font" begin
-        # \mathrm should go through _char_glyph (math font only), so the glyph name
-        # should NOT be the same as the one produced by the text-mode upright path
-        # (_upright_glyph uses family.regular when available).
-        boxes_rm   = layout(parse_latex("\\mathrm{x}"),  family, Text)
-        boxes_text = layout(parse_latex("\\text{x}"),    family, Text)
-        @test !isempty(find_glyphs(boxes_rm))
-        @test !isempty(find_glyphs(boxes_text))
-        # Both produce a glyph — with NewCMMath the PS names may coincide for plain
-        # upright letters, so the key test is that \mathrm produces at least one glyph
-        # and that its advance width is positive (not a missing-glyph zero).
-        @test find_glyphs(boxes_rm)[1].element.advance_width > 0
+    @testset "font_slot: math-mode glyphs carry :math" begin
+        # All math-mode glyphs must have font_slot = :math so the renderer queries
+        # the math font.
+        boxes = layout(parse_latex("x + \\alpha"), family, Text)
+        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+    end
+
+    @testset "font_slot: \\text glyphs carry :regular when family has regular font" begin
+        # When a regular font is configured, _upright_glyph should emit :regular.
+        # Build a two-font family using the NewCM10-Regular companion for NewCMMath.
+        reg_path = joinpath(dirname(FIXTURE_FONT_PATH), "NewCM10-Regular.otf")
+        if isfile(reg_path)
+            family_with_reg = FontFamily(FIXTURE_FONT_PATH, reg_path, nothing, nothing, nothing)
+            boxes = layout(parse_latex(raw"\text{hi}"), family_with_reg, Text)
+            @test all(b.element.font_slot === :regular for b in find_glyphs(boxes))
+        end
+    end
+
+    @testset "font_slot: \\text glyphs fall back to :math when no regular font" begin
+        # Without a regular font, _upright_glyph falls back to the math font.
+        boxes = layout(parse_latex(raw"\text{hi}"), family, Text)
+        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+    end
+
+    @testset "FontSwitch: \\mathrm uses math font (font_slot :math)" begin
+        boxes = layout(parse_latex("\\mathrm{x}"), family, Text)
+        @test !isempty(find_glyphs(boxes))
+        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
     end
 
     @testset "\\text{if } preserves trailing space" begin

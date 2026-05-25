@@ -90,16 +90,19 @@ end
 
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
-function _box_to_mte(box, math_font, mte_ff)
+# `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
+# `font_slot` field selects which one to use for glyph-index resolution.
+function _box_to_mte(box, math_font, reg_font, mte_ff)
     pos   = Point2f(box.x, box.y)
     scale = Float64(box.scale)
     el    = box.element
 
     if el isa TeXLayout.Glyph
-        gid = _glyph_index(math_font, el.glyph_name)
+        chosen = el.font_slot === :regular ? reg_font : math_font
+        gid = _glyph_index(chosen, el.glyph_name)
         gid == 0 && return nothing
         tc = MathTeXEngine.TeXChar(
-            gid, math_font, mte_ff, false, _represented_char(el.glyph_name))
+            gid, chosen, mte_ff, false, _represented_char(el.glyph_name))
         return (tc, pos, scale)
     elseif el isa TeXLayout.HRule
         return (MathTeXEngine.HLine(Float32(el.width), Float32(el.thickness)), pos, scale)
@@ -134,11 +137,13 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family=MathT
     boxes = TeXLayout.layout(node, tl_family, TeXLayout.Display)
 
     math_font, _ = TeXLayout._load_font(tl_family.math)
-    mte_ff = _mte_font_family(tl_family)
+    reg_path      = something(tl_family.regular, tl_family.math)
+    reg_font, _   = TeXLayout._load_font(reg_path)
+    mte_ff        = _mte_font_family(tl_family)
 
     result = Tuple[]
     for box in boxes
-        t = _box_to_mte(box, math_font, mte_ff)
+        t = _box_to_mte(box, math_font, reg_font, mte_ff)
         t !== nothing && push!(result, t)
     end
     return result

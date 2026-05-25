@@ -329,3 +329,19 @@
 
 - 6 new tests added; 819 total, all pass.
 - Committed to `TeXLayout.jl`.
+
+## 2026-05-25T15:40+00:00 Thread font_slot through layout to enable correct text-font rendering
+
+- **Problem**: `Glyph` only stored a PS name; the renderer always used `family.math` to resolve it. `\text{}` glyphs used `family.regular` for metrics but the math font for rendering — inconsistent for mismatched families.
+
+- **Fix — `font_slot` field on `Glyph`**: Added `font_slot::Symbol` (`:math` | `:regular`) as the second field of `Glyph`. All glyph builders set this explicitly:
+  - `_char_glyph`, `_cmd_glyph`, `_variant_glyph`, `_layout_command!`, `_layout_accent!` → `:math`
+  - `_upright_glyph` → `:regular` when `family.regular !== nothing` (and looks up PS name from the regular font); `:math` as fallback.
+
+- **PS name consistency fix**: Previously `_upright_glyph` got metrics from `family.regular` but the PS name from the math font. Now both come from the same font. Added `glyph_name_by_codepoint(font_path::String, cp::UInt32)` overload to `fonts.jl` to support this.
+
+- **Makie extension updated**: `_box_to_mte` now takes `reg_font` alongside `math_font`; dispatches on `el.font_slot` to select the correct FreeType face for `glyph_index` resolution. `generate_tex_elements` loads `reg_font` (falling back to `math_font` if no regular font configured).
+
+- **Known limitation (pre-existing)**: Metric values for regular-font glyphs are divided by `ctx.upm` (the math font's UPM). If `family.regular` has a different UPM than `family.math`, the em-unit widths will be slightly wrong. In practice, all supported font families use UPM=1000 consistently, so this is not currently an issue.
+
+- 821 tests, all pass. Committed.

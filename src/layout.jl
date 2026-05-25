@@ -10,14 +10,18 @@
 abstract type TeXElement end
 
 """
-A single glyph to be rendered from the math font.
+A single glyph to be rendered.
 
 `glyph_name` is the PostScript glyph name; the renderer resolves it to a glyph
-index via its font handle.  The metric fields are cached from the font in design
-units so that the renderer need not re-query them.
+index via its font handle.  `font_slot` tells the renderer which font to use:
+`:math` for the OpenType math font (all math-mode glyphs), or `:regular` for
+the companion text font (glyphs inside `\\text{}`/`\\mbox{}`).  The metric
+fields are cached from the chosen font in design units so the renderer need not
+re-query them.
 """
 struct Glyph <: TeXElement
     glyph_name::String
+    font_slot::Symbol       # :math | :regular
     advance_width::Int
     left_side_bearing::Int
     x_min::Int; y_min::Int; x_max::Int; y_max::Int
@@ -762,21 +766,32 @@ function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
     m  = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return nothing
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    return Glyph(isempty(ps) ? string(ch) : ps,
+    return Glyph(isempty(ps) ? string(ch) : ps, :math,
                  m.advance_width, m.left_side_bearing,
                  m.x_min, m.y_min, m.x_max, m.y_max)
 end
 
 # Return an upright Glyph for a character, or nothing if not in the font.
-# Uses the regular font slot when present; falls back to math font codepoint mapping.
+# Uses the regular font slot when present (both metrics and PS name come from
+# the same font so the renderer can locate the glyph correctly); falls back to
+# the math font when no regular font is configured.
 function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
-    m = glyph_metrics_upright(ctx.family, ch)
-    m === nothing && return nothing
-    # Use the actual PS name from the math font so the renderer gets the correct glyph.
-    ps = glyph_name_by_codepoint(ctx.family, UInt32(ch))
-    name = isempty(ps) ? string(ch) : ps
-    Glyph(name, m.advance_width, m.left_side_bearing,
-          m.x_min, m.y_min, m.x_max, m.y_max)
+    family = ctx.family
+    if family.regular !== nothing
+        m = glyph_metrics_upright(family, ch)
+        m === nothing && return nothing
+        ps = glyph_name_by_codepoint(family.regular, UInt32(ch))
+        name = isempty(ps) ? string(ch) : ps
+        return Glyph(name, :regular, m.advance_width, m.left_side_bearing,
+                     m.x_min, m.y_min, m.x_max, m.y_max)
+    else
+        m = glyph_metrics_by_codepoint(family, UInt32(ch))
+        m === nothing && return nothing
+        ps = glyph_name_by_codepoint(family.math, UInt32(ch))
+        name = isempty(ps) ? string(ch) : ps
+        return Glyph(name, :math, m.advance_width, m.left_side_bearing,
+                     m.x_min, m.y_min, m.x_max, m.y_max)
+    end
 end
 
 # Return a Glyph for a PostScript glyph name, or nothing if not in the font.
@@ -787,7 +802,7 @@ end
 # The returned Glyph carries the font's own PS name so renderers can locate it.
 function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     m = glyph_metrics(ctx.family, name)
-    m !== nothing && return Glyph(name, m.advance_width, m.left_side_bearing,
+    m !== nothing && return Glyph(name, :math, m.advance_width, m.left_side_bearing,
                                   m.x_min, m.y_min, m.x_max, m.y_max)
     # Fallback 1: AGL name with a known codepoint (e.g. "parenleft" in a font
     # that uses "uni0028").
@@ -803,7 +818,7 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     m2 === nothing && return nothing
     ps = glyph_name_by_codepoint(ctx.family, cp)
     actual = isempty(ps) ? name : ps
-    return Glyph(actual, m2.advance_width, m2.left_side_bearing,
+    return Glyph(actual, :math, m2.advance_width, m2.left_side_bearing,
                  m2.x_min, m2.y_min, m2.x_max, m2.y_max)
 end
 
@@ -843,7 +858,7 @@ function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph
         m = glyph_metrics_by_codepoint(ctx.family, cp)
         if m !== nothing
             ps = glyph_name_by_codepoint(ctx.family, cp)
-            return Glyph(isempty(ps) ? string(Char(cp)) : ps,
+            return Glyph(isempty(ps) ? string(Char(cp)) : ps, :math,
                          m.advance_width, m.left_side_bearing,
                          m.x_min, m.y_min, m.x_max, m.y_max)
         end
@@ -1746,7 +1761,7 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     m = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return 0.0
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    g  = Glyph(isempty(ps) ? name : ps,
+    g  = Glyph(isempty(ps) ? name : ps, :math,
                m.advance_width, m.left_side_bearing,
                m.x_min, m.y_min, m.x_max, m.y_max)
     push!(boxes, LayoutBox(g, x0, y0, scale))
@@ -2172,7 +2187,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
         x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
     end
 
-    push!(boxes, LayoutBox(Glyph(accent_ps, accent_m.advance_width,
+    push!(boxes, LayoutBox(Glyph(accent_ps, :math, accent_m.advance_width,
                                  accent_m.left_side_bearing,
                                  accent_m.x_min, accent_m.y_min,
                                  accent_m.x_max, accent_m.y_max),

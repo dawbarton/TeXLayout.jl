@@ -174,9 +174,16 @@ driven by `MathConstants.script_percent_scale_down` and
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
   Positions are in em units (design units / UPM × scale); x right, y up, origin at
   formula baseline.
-- Element subtypes: `Glyph` (PS name + advance/bearing/bbox metrics in design units),
-  `HRule` (width + thickness in em), `VRule` (height + thickness in em), `Space` (width
-  in em).
+- Element subtypes:
+  - `Glyph` — PS name + `font_slot::Symbol` (`:math` or `:regular`) + advance/bearing/bbox
+    metrics in design units.  `font_slot` tells the renderer which font file to use for
+    glyph-index resolution: `:math` → `family.math`, `:regular` → `family.regular` (falls
+    back to `family.math` when `regular` is `nothing`).  All math-mode glyphs carry `:math`;
+    glyphs from `\text{}`/`\mbox{}` carry `:regular` when a companion regular font is
+    configured.
+  - `HRule` — width + thickness in em.
+  - `VRule` — height + thickness in em.
+  - `Space` — width in em.
 - `_LayoutCtx` carries: `family` (`FontFamily`), `mc` (`MathConstants`), `upm`
   (design units per em), `vert_constructions` and `horiz_constructions` (extensible glyph
   tables from the MATH table), `top_accent_attachments` (PS name → x offset for accent

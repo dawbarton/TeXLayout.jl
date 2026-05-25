@@ -353,7 +353,13 @@ in the math font.  Returns an empty string if the codepoint has no glyph or the
 font carries no glyph-name table.
 """
 function glyph_name_by_codepoint(family::FontFamily, cp::UInt32)::String
-    face, _ = _load_font(family.math)
+    return glyph_name_by_codepoint(family.math, cp)
+end
+
+# Low-level overload: look up the PS glyph name for a codepoint in any font
+# file by path.  Used by _upright_glyph to query the regular font directly.
+function glyph_name_by_codepoint(font_path::String, cp::UInt32)::String
+    face, _ = _load_font(font_path)
     gid = Int(_FT.FT_Get_Char_Index(face, cp))
     gid == 0 && return ""
     buf = zeros(UInt8, 128)
