@@ -52,16 +52,26 @@ text!(ax, 0.5, 0.5; text=L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
 save("output.png", fig)
 ```
 
+To use a different font for all math rendering (including via Makie), call
+`set_default_font_family!` before loading CairoMakie or GLMakie:
+
+```julia
+using TeXLayout
+set_default_font_family!(:stix_two)   # or any other bundled symbol / FontFamily
+
+using CairoMakie, LaTeXStrings
+# All L"…" strings are now rendered with STIX Two Math.
+```
+
 For a consistent appearance, set Makie's text fonts to the same files that
 TeXLayout uses for math.  `default_font_family()` returns the font paths for
-New Computer Modern (TeXLayout's default), so passing those paths to
-`set_theme!` makes axis labels, tick labels, and titles share the same
-typeface as the math rendering:
+the active font family, so passing those paths to `set_theme!` makes axis
+labels, tick labels, and titles share the same typeface as the math rendering:
 
 ```julia
 using TeXLayout, CairoMakie, LaTeXStrings
 
-ff = default_font_family()   # New Computer Modern (TeXLayout's default)
+ff = default_font_family()   # whichever family is currently active
 
 # Note: Makie uses :bolditalic (not :bold_italic).
 set_theme!(fonts = (;
@@ -93,10 +103,24 @@ save("output.png", fig)
 ```julia
 using TeXLayout
 
-# Use the default font family (New Computer Modern Math, downloaded automatically).
-family = default_font_family()
+# Lay out a formula with the default font (New Computer Modern Math).
+boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}")
 
-# Or select one of the eight bundled families by symbol:
+# boxes is a Vector{LayoutBox}; each box carries:
+#   .element  — a Glyph, HRule, VRule, or Space value
+#   .x, .y    — baseline-relative position in em units
+#   .scale    — font-size multiplier (1.0 for Display/Text, 0.7 for Script, …)
+```
+
+### Choosing a font family
+
+Eight bundled font families are available, downloaded lazily via Julia Artifacts
+on first use.  Pass a `FontFamily` as the second argument to `generate_tex_elements`,
+or call `set_default_font_family!` once at start-up to change the default used by
+all subsequent calls (including the Makie extension):
+
+```julia
+# Select by symbol — font files are downloaded automatically on first use.
 #   :new_cm    — New Computer Modern (default)
 #   :pagella   — TeX Gyre Pagella (Palatino style)
 #   :termes    — TeX Gyre Termes Math (Times style)
@@ -105,19 +129,53 @@ family = default_font_family()
 #   :luciole   — Luciole Math (designed for low vision)
 #   :stix_two  — STIX Two Math (Times style)
 #   :fira_math — Fira Math + Fira Sans (sans-serif)
-family = font_family(:stix_two)
 
-# Or supply your own font files:
+# Change the session-wide default (affects Makie integration too):
+set_default_font_family!(:stix_two)
+
+# Or pass a FontFamily explicitly for a single call:
+family = font_family(:pagella)
+boxes  = generate_tex_elements(raw"\int_0^\infty e^{-x}\,dx", family)
+
+# Supply your own OpenType math font:
 family = font_family("/path/to/MyMath.otf"; regular="/path/to/MyText.otf")
-
-# Lay out a formula:
-boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}", family)
-
-# boxes is a Vector{LayoutBox}; each box carries:
-#   .element  — Glyph, HRule, VRule, or Space
-#   .x, .y    — baseline-relative position in em units
-#   .scale    — font-size multiplier (1.0 for Display/Text, 0.7 for Script, …)
 ```
+
+### Lower-level pipeline
+
+`generate_tex_elements` is a convenience wrapper.  The individual pipeline stages
+are also exported for advanced use:
+
+```julia
+using TeXLayout
+
+node  = parse_latex(raw"\sum_{k=0}^{n} k^2")  # → Node (AST)
+boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
+```
+
+## API reference
+
+The public API is intentionally small.  All other names (lexer tokens, parser node
+kinds, style helpers, MATH-table types, glyph-metric functions) are accessible as
+`TeXLayout.Xxx` or via explicit `using TeXLayout: name` imports but are not
+exported.
+
+| Name | Kind | Description |
+|:-----|:-----|:------------|
+| `FontFamily` | type | Holds file paths for the math, regular, italic, bold, and bold-italic font roles |
+| `font_family` | function | Construct a `FontFamily` from a symbol (`:new_cm`, `:stix_two`, …) or an OTF path |
+| `default_font_family` | function | Return the current session-wide default `FontFamily` |
+| `set_default_font_family!` | function | Override the session-wide default; accepts a `Symbol` or a `FontFamily` |
+| `TexStyle` | enum type | The eight TeX style levels (`TeXLayout.Display`, `TeXLayout.Text`, …) |
+| `parse_latex` | function | Tokenise and parse a LaTeX math string into a `Node` AST |
+| `layout` | function | Lay out a `Node` into a `Vector{LayoutBox}` given a `FontFamily` and `TexStyle` |
+| `generate_tex_elements` | function | Convenience: `parse_latex` + `layout` in one call |
+| `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |
+| `TeXElement` | union type | Union of `Glyph`, `HRule`, `VRule`, `Space` |
+| `Glyph` | struct | A single rendered glyph, identified by PostScript name and font role |
+| `HRule` | struct | A horizontal rule (fraction bar, radical bar, …) |
+| `VRule` | struct | A vertical rule (array column separator) |
+| `Space` | struct | Explicit horizontal white space |
 
 ## Status
 
