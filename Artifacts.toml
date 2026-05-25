@@ -10,27 +10,6 @@
 #   italic.otf/.ttf
 #   bolditalic.otf/.ttf
 #   LICENSE / OFL.txt / README.md  — font license files
-#
-# To add a new family: run tools/make_font_artifact.jl to build the tarball,
-# then add the git-tree-sha1 and sha256 values printed by that script here.
-#
-# Font family summary and licenses:
-#   NewCMMath — New Computer Modern (default; Computer-Modern style)
-#               GUST Font License (LPPL 1.3c)
-#   Pagella   — TeX Gyre Pagella MTE (Palatino style)
-#               GUST Font License (LPPL 1.3c)
-#   Luciole   — Luciole Math (designed for low vision / readability)
-#               Luciole-Math.otf: SIL OFL 1.1; text TTFs: CC-BY
-#   STIXTwo   — STIX Two Math v2.0.2 (Times / STIX style)
-#               SIL OFL 1.1 (Reserved Font Name "TM Math")
-#   FiraMath  — Fira Math v0.3.4 + Fira Sans (sans-serif)
-#               SIL OFL 1.1 (both components)
-#   Schola    — TeX Gyre Schola Math (Century Schoolbook style)
-#               GUST Font License (LPPL 1.3c)
-#   Termes    — TeX Gyre Termes Math (Times New Roman style)
-#               GUST Font License (LPPL 1.3c)
-#   Bonum     — TeX Gyre Bonum Math (ITC Bookman style)
-#               GUST Font License (LPPL 1.3c)
 
 [NewCMMath]
 lazy = true
@@ -38,32 +17,60 @@ git-tree-sha1 = "0ef7324748294dd1c9648cf190f3f0d7688e5d2f"
 
     [[NewCMMath.download]]
     url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/NewCMMath.tar.gz"
-    sha256 = "43d343c9e17ba002c34333fe6eabeb49a84ad192d0b648d6c5ec4d813df3e196"
-[Pagella]
-lazy = true
-git-tree-sha1 = "0662dd77e974392b23ee8a402425cbaa4522493c"
+    sha256 = "c87ef336216cc02cee17e8ca83b7fec30133f845acf1773a278c28e13b9207e9"
 
-    [[Pagella.download]]
-    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Pagella.tar.gz"
-    sha256 = "62d31efc7425b76d052b0d6d8dc7a54f0affb081f3c5b5d99a454387a53c4b2f"
 [Luciole]
 lazy = true
 git-tree-sha1 = "4548239626d4097cafa35c8160098bf7248f9e4e"
 
     [[Luciole.download]]
     url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Luciole.tar.gz"
-    sha256 = "1d5543b010b5c8589b8bc6abb5a92bcfc2ca692aaf5e181e077aa60a92fbb3bf"
+    sha256 = "cd84936544d79f544944ab056773c94ba1718689aabc3b3893835d9d899dea69"
+
 [STIXTwo]
 lazy = true
-git-tree-sha1 = "d26da8680b7db6f29c17d7e5425560244608cf9c"
+git-tree-sha1 = "ebb864dee2b891226e8fae0d7af2f54caed1949e"
 
     [[STIXTwo.download]]
     url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/STIXTwo.tar.gz"
-    sha256 = "2a9519ba24e4d250b85fd113e64858bc031b33ca4e814e111d68c900243bf838"
+    sha256 = "f0f2a641a8db4009bc74473a487eadb9d5d5441f6c64e38837d71e3e459024be"
+
 [FiraMath]
 lazy = true
-git-tree-sha1 = "638126165b8e0c1e90ae78e776c588648c2fd8d7"
+git-tree-sha1 = "162c31960294d9b1180f15afd295fed1253025e4"
 
     [[FiraMath.download]]
     url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/FiraMath.tar.gz"
-    sha256 = "372611b395f7e900589eab2708af20b9bf2fffc0b908e0f19b1e960616406108"
+    sha256 = "2d8af0bf638cf80a5b9e030b9ffbc32cc84e6df2c28af37a9c4e3f1b69b4c699"
+
+[Bonum]
+lazy = true
+git-tree-sha1 = "663040c4032d276f75d805932b4029f6ec72ccce"
+
+    [[Bonum.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Bonum.tar.gz"
+    sha256 = "860dd52402dc947e32aab6e8fdc14ac662b3ecae81085ff7ff7c9815ab76a7c6"
+
+[Pagella]
+lazy = true
+git-tree-sha1 = "9265c3b4e5f0c7b566aa07fd0799477fadb95d17"
+
+    [[Pagella.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Pagella.tar.gz"
+    sha256 = "0040ad4eca87c8bc8212ee0f05e5207513d05ef99409324bd3e741ca02ccceec"
+
+[Schola]
+lazy = true
+git-tree-sha1 = "565a9c215be89580622cc24b85bc1a28d6437a12"
+
+    [[Schola.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Schola.tar.gz"
+    sha256 = "f350e0394f187410ccd5b34291505a1f5cb1b4780db138ed20cf9aa1732d5c96"
+
+[Termes]
+lazy = true
+git-tree-sha1 = "c9e16f0b9080b7c6c6d7b52dced28733bf5ae6d5"
+
+    [[Termes.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0/Termes.tar.gz"
+    sha256 = "2ba7b6107fa4d9da9d6c6d1f78c93c375e1b320f33696c26e095506799a12036"

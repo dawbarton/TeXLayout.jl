@@ -372,7 +372,9 @@ const _NAMED_ARTIFACTS = Dict{Symbol,String}(
     :luciole   => "Luciole",
     :stix_two  => "STIXTwo",
     :fira_math => "FiraMath",
-    # Schola/Termes/Bonum entries go here once their Artifacts.toml sections are added.
+    :schola    => "Schola",
+    :termes    => "Termes",
+    :bonum     => "Bonum",
 )
 
 # Build a FontFamily from an artifact directory.  Tries .otf first, then .ttf
@@ -403,13 +405,18 @@ _artifact_dir_pagella()   = @artifact_str("Pagella")
 _artifact_dir_luciole()   = @artifact_str("Luciole")
 _artifact_dir_stix_two()  = @artifact_str("STIXTwo")
 _artifact_dir_fira_math() = @artifact_str("FiraMath")
+_artifact_dir_schola()    = @artifact_str("Schola")
+_artifact_dir_termes()    = @artifact_str("Termes")
+_artifact_dir_bonum()     = @artifact_str("Bonum")
 const _ARTIFACT_LOADERS = Dict{Symbol, Function}(
     :new_cm    => _artifact_dir_new_cm,
     :pagella   => _artifact_dir_pagella,
     :luciole   => _artifact_dir_luciole,
     :stix_two  => _artifact_dir_stix_two,
     :fira_math => _artifact_dir_fira_math,
-    # :schola / :termes / :bonum loaders go here once artifacts are published.
+    :schola    => _artifact_dir_schola,
+    :termes    => _artifact_dir_termes,
+    :bonum     => _artifact_dir_bonum,
 )
 
 """
@@ -418,19 +425,16 @@ const _ARTIFACT_LOADERS = Dict{Symbol, Function}(
 Load a named built-in font family.  The artifact tarball is downloaded lazily
 on first use and cached in Julia's artifact store.
 
-| Symbol       | Font                          | Style         |
-|:-------------|:------------------------------|:--------------|
-| `:new_cm`    | New Computer Modern Math      | CM / serif    |
-| `:pagella`   | TeX Gyre Pagella Math         | Palatino      |
-| `:luciole`   | Luciole Math                  | Humanist sans |
-| `:stix_two`  | STIX Two Math v2.0.2          | Times         |
-| `:fira_math` | Fira Math + Fira Sans v0.3.4  | Geometric sans|
-| `:schola`    | TeX Gyre Schola Math          | Century Schoolbook (pending) |
-| `:termes`    | TeX Gyre Termes Math          | Times New Roman (pending)    |
-| `:bonum`     | TeX Gyre Bonum Math           | ITC Bookman (pending)        |
-
-Symbols marked *pending* require `tools/prepare_font_artifacts.jl` to be run and the
-resulting tarballs uploaded to a GitHub Release; see `Artifacts.toml` for details.
+| Symbol       | Font                          | Style              |
+|:-------------|:------------------------------|:-------------------|
+| `:new_cm`    | New Computer Modern Math      | CM / serif         |
+| `:pagella`   | TeX Gyre Pagella Math         | Palatino           |
+| `:luciole`   | Luciole Math                  | Humanist sans      |
+| `:stix_two`  | STIX Two Math v2.0.2          | Times              |
+| `:fira_math` | Fira Math + Fira Sans v0.3.4  | Geometric sans     |
+| `:schola`    | TeX Gyre Schola Math          | Century Schoolbook |
+| `:termes`    | TeX Gyre Termes Math          | Times New Roman    |
+| `:bonum`     | TeX Gyre Bonum Math           | ITC Bookman        |
 """
 function font_family(name::Symbol)::FontFamily
     loader = get(_ARTIFACT_LOADERS, name, nothing)

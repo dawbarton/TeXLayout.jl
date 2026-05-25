@@ -30,6 +30,9 @@ JuliaLocalPreferences.toml
 # External references
 external/
 
+# Julia artifacts (for building)
+artifacts/
+
 # Render artefacts
 *.png
 
