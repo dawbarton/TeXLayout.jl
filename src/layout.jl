@@ -76,6 +76,14 @@ struct _LayoutCtx
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
 end
 
+# Return a copy of `ctx` with `font_variant` replaced.  Used by NKFontSwitch so
+# the rest of the context (family, math constants, mode, …) is inherited.
+@inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _LayoutCtx(
+    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
+    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    ctx.mode, variant,
+)
+
 # Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
 # glyph.  Applied only in :math mode; text mode uses the literal codepoint.
 const _MATH_CHAR_REMAP = Dict{Char,Char}(
@@ -2076,10 +2084,7 @@ end
 function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
     # Switch the active font variant for all recursive calls within the body.
     isempty(node.children) && return 0.0
-    new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
-                         ctx.horiz_constructions, ctx.top_accent_attachments,
-                         ctx.italic_corrections,
-                         ctx.min_connector_overlap, ctx.mode, Symbol(node.value))
+    new_ctx = _with_variant(ctx, Symbol(node.value))
     return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 end
 
