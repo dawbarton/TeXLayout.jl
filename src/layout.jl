@@ -227,7 +227,6 @@ const _CMD_ATOM_CLASS = Dict{String,Symbol}(
     "smile"             => :rel,  "frown"             => :rel,
     "asymp"             => :rel,  "bowtie"            => :rel,
     "Join"              => :rel,  "not"               => :rel,
-    "xleftarrow"        => :rel,  "xrightarrow"       => :rel,
     "nleq"              => :rel,  "ngeq"              => :rel,
     "nless"             => :rel,  "ngtr"              => :rel,
     "nsim"              => :rel,  "nparallel"         => :rel,
@@ -496,6 +495,33 @@ const _HORIZ_BRACE_GLYPHS = Dict{String,String}(
     "\\underparen"   => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
 )
 
+# Spacing constants for extensible arrow labels (amsmath xarrow conventions).
+const _XARROW_KERN = 0.111   # em gap between arrow body and each label (≈ 2 mu)
+const _XARROW_PAD  = 0.3     # minimum em padding added on each side of the widest label
+
+# Extensible arrow commands mapped to their Unicode codepoints.
+# The layout engine resolves codepoint → uni-name → horiz_constructions key.
+const _XARROW_CODEPOINTS = Dict{String,UInt32}(
+    "\\xleftarrow"         => 0x2190,  # ←
+    "\\xrightarrow"        => 0x2192,  # →
+    "\\xLeftarrow"         => 0x21D0,  # ⇐
+    "\\xRightarrow"        => 0x21D2,  # ⇒
+    "\\xleftrightarrow"    => 0x2194,  # ↔
+    "\\xLeftrightarrow"    => 0x21D4,  # ⇔
+    "\\xhookleftarrow"     => 0x21A9,  # ↩
+    "\\xhookrightarrow"    => 0x21AA,  # ↪
+    "\\xmapsto"            => 0x21A6,  # ↦
+    "\\xrightharpoondown"  => 0x21C1,  # ⇁
+    "\\xrightharpoonup"    => 0x21C0,  # ⇀
+    "\\xleftharpoondown"   => 0x21BD,  # ↽
+    "\\xleftharpoonup"     => 0x21BC,  # ↼
+    "\\xrightleftharpoons" => 0x21CC,  # ⇌
+    "\\xleftrightharpoons" => 0x21CB,  # ⇋
+    "\\xtwoheadrightarrow" => 0x21A0,  # ↠
+    "\\xtwoheadleftarrow"  => 0x219E,  # ↞
+    "\\xlongequal"         => 0x003D,  # = (plain equals; extensible via horiz_constructions)
+)
+
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
 # (notably FiraMath) name using the "uni{HHHH}" convention instead of the
 # traditional Adobe Glyph List (AGL) name.  Used in two places:
@@ -739,6 +765,11 @@ function _atom_class(node::Node)::Symbol
     elseif k === NKFontSwitch
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from body (e.g. \mathbf{+} is :bin)
+    elseif k === NKStyleOverride || k === NKSizing
+        isempty(node.children) && return :ord
+        return _atom_class(node.children[1])   # inherit from wrapped body
+    elseif k === NKXArrow
+        return :rel   # extensible arrows are relation atoms
     elseif k === NKSpace
         return :neutral   # explicit spaces reset the spacing context
     else
@@ -1951,6 +1982,114 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
 end
 
+# Apply an absolute style override (\dfrac, \displaystyle, etc.).
+# value encodes the target style as "Display", "Text", "Script", or "ScriptScript".
+# The scale is reset to size_scale(new_style) so that e.g. \dfrac inside a
+# subscript renders at full display size, matching KaTeX behaviour.
+function _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
+    new_style = if node.value == "Display"
+        Display
+    elseif node.value == "Text"
+        Text
+    elseif node.value == "Script"
+        Script
+    else
+        ScriptScript
+    end
+    new_scale = size_scale(new_style, ctx.mc)
+    return _layout_node!(node.children[1], ctx, new_style, x0, y0, new_scale, boxes)
+end
+
+# Apply a relative font-size change (\large, \tiny, etc.).
+# value is the Float64 multiplier serialised as a string.
+function _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
+    factor = parse(Float64, node.value)
+    return _layout_node!(node.children[1], ctx, style, x0, y0, scale * factor, boxes)
+end
+
+# Lay out an extensible arrow with optional above and below labels.
+#
+# Vertical positioning follows KaTeX xarrow.ts:
+#   - Arrow body centred on the math axis.
+#   - Above label: bottom of ink at arrow_top + KERN.
+#   - Below label: top of ink at arrow_bot − KERN.
+#   - Minimum arrow width: max(natural width, widest_label + 2*PAD*scale).
+#   - Both labels and arrow centred horizontally over the full advance.
+function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm  = ctx.mc, ctx.upm
+    cmd      = node.value
+    above_node = node.children[1]
+    below_node = length(node.children) >= 2 ? node.children[2] : nothing
+
+    # Labels rendered at sub/sup script style and scale.
+    above_s     = sup_style(style)
+    above_scale = size_scale(above_s, mc)
+    below_s     = sub_style(style)
+    below_scale = size_scale(below_s, mc)
+
+    tmp_above = LayoutBox[]
+    above_w = _layout_node!(above_node, ctx, above_s, 0.0, 0.0, above_scale, tmp_above)
+
+    tmp_below = LayoutBox[]
+    below_w = 0.0
+    if below_node !== nothing
+        below_w = _layout_node!(below_node, ctx, below_s, 0.0, 0.0, below_scale, tmp_below)
+    end
+
+    # Resolve the arrow glyph in horiz_constructions.
+    cp       = get(_XARROW_CODEPOINTS, cmd, 0x2192)
+    uni_name = "uni" * uppercase(string(cp, base=16, pad=4))
+    arrow_ps = _horiz_construction_key(ctx, uni_name)
+
+    # Natural arrow width from the reference glyph (smallest pre-built variant
+    # or the base glyph itself).
+    hc = get(ctx.horiz_constructions, arrow_ps, nothing)
+    ref_ps = arrow_ps
+    if hc !== nothing && !isempty(hc.variants)
+        ref_ps = hc.variants[1].glyph_name
+    end
+    g_ref = _cmd_glyph(ctx, ref_ps)
+    natural_w = g_ref !== nothing ? Float64(g_ref.advance_width) / upm * scale : scale
+
+    # Arrow width: at least as wide as the widest label plus horizontal padding.
+    label_w = max(above_w, below_w)
+    arrow_w = max(natural_w, label_w + 2 * _XARROW_PAD * scale)
+
+    # Total advance: same as arrow width (labels are centred within it).
+    total_w = arrow_w
+
+    # Vertical: centre arrow on math axis.
+    axis_em = mc.axis_height / upm * scale
+    if g_ref !== nothing
+        arrow_y = y0 + axis_em - (Float64(g_ref.y_min) + Float64(g_ref.y_max)) / (2.0 * upm) * scale
+        arrow_top = arrow_y + Float64(g_ref.y_max) / upm * scale
+        arrow_bot = arrow_y + Float64(g_ref.y_min) / upm * scale
+    else
+        arrow_y   = y0 + axis_em
+        arrow_top = arrow_y + 0.3 * scale
+        arrow_bot = arrow_y - 0.3 * scale
+    end
+
+    # Place the extensible arrow body.
+    _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
+
+    # Place the above label: bottom of ink at arrow_top + kern.
+    if !isempty(tmp_above)
+        Δabove = (total_w - above_w) / 2
+        label_y = arrow_top + _XARROW_KERN * scale - _boxes_bottom(tmp_above, upm)
+        _emit_shifted!(boxes, tmp_above, x0 + Δabove, label_y)
+    end
+
+    # Place the below label: top of ink at arrow_bot − kern.
+    if !isempty(tmp_below)
+        Δbelow = (total_w - below_w) / 2
+        label_y = arrow_bot - _XARROW_KERN * scale - _boxes_top(tmp_below, upm)
+        _emit_shifted!(boxes, tmp_below, x0 + Δbelow, label_y)
+    end
+
+    return total_w
+end
+
 function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     num_node, den_node = node.children[1], node.children[2]
@@ -2252,6 +2391,9 @@ function _layout_node!(
     k === NKMatrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
     k === NKLimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
     k === NKText           && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKStyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKSizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKXArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     # NKMiddle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end

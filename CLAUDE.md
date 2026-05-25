@@ -132,6 +132,22 @@ Each stage is stateless and pure (no global mutation beyond the font cache).
   - `NKLimitsOverride` — produced by `\limits` or `\nolimits`; wraps the preceding base
     node as its sole child; `value` is `"limits"` or `"nolimits"`.  The layout engine
     checks this before dispatching the script placement algorithm.
+  - `NKStyleOverride` — produced by `\dfrac`, `\tfrac`, `\displaystyle`, `\textstyle`,
+    `\scriptstyle`, `\scriptscriptstyle`.  `value` is one of `"Display"`, `"Text"`,
+    `"Script"`, `"ScriptScript"`; `children[1]` is the body.  For `\dfrac`/`\tfrac` the
+    body is an `NKFrac` node; for style-switch commands the body is an `NKSequence`
+    containing the rest of the current group.  The layout engine resets both style and
+    scale to `size_scale(new_style, mc)`, so `\dfrac` inside a subscript renders at
+    full display size (matching KaTeX behaviour).
+  - `NKSizing` — produced by `\large`, `\tiny`, `\normalsize`, etc.  `value` is the
+    Float64 multiplier as a decimal string; `children[1]` is an `NKSequence` wrapping
+    the rest of the current group.  The layout engine multiplies the current scale by
+    this factor (style is unchanged).
+  - `NKXArrow` — produced by `\xrightarrow`, `\xleftarrow`, and 16 other extensible-arrow
+    commands.  `value` is the command string (e.g. `"\\xrightarrow"`); `children[1]` is
+    the mandatory above-label argument; `children[2]` (optional) is the below-label from
+    `[…]`.  The layout engine stretches the arrow to cover the labels with padding, centres
+    it on the math axis, and places the labels at `XARROW_KERN` (0.111 em) clearance.
   - `NKMatrix` — produced by `\begin{env}…\end{env}`; `value` encodes
     `"env\x00nrow\x00colspec"` where `colspec` is either the verbatim column-spec
     string from `\begin{array}{…}` (e.g. `"|l|c|r|"`) or a derived string of
@@ -274,6 +290,10 @@ A summary of major features and their status.
 | `\middle` delimiter | ✓ | `NKMiddle`; auto-sized to the same height as the enclosing `\left`/`\right` pair; multiple `\middle` delimiters per group are supported |
 | `\text{}`, `\mbox{}` | ✓ | `NKText`; switches to upright (regular-font) glyph lookup via `_with_text_mode`; spaces preserved as `Space` elements (word-space advance from font); inter-atom spacing suppressed inside text fragments |
 | `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
+| `\dfrac`, `\tfrac` | ✓ | `NKStyleOverride`; forces Display or Text style (with absolute scale reset); `\dfrac` inside a subscript renders at full display size |
+| Style switches (`\displaystyle`, `\textstyle`, `\scriptstyle`, `\scriptscriptstyle`) | ✓ | `NKStyleOverride`; consumes rest of current group; absolute style and scale override matching KaTeX |
+| Font sizing (`\large`, `\tiny`, …) | ✓ | `NKSizing`; 10 commands from `\tiny` (0.5×) to `\Huge` (2.488×); multiplies current scale |
+| Extensible arrows (`\xrightarrow`, `\xleftarrow`, …) | ✓ | `NKXArrow`; 18 commands; arrow from `horiz_constructions`; centred on math axis; optional below label; labels at 0.111 em kern |
 
 ## Known limitations / future work
 - **Multi-codepoint Unicode symbols** — a subset of negated and variant relations

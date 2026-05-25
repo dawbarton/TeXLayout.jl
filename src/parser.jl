@@ -27,6 +27,9 @@
     NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
     NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00colspec"; children = flat row-major cells
     NKMiddle         # \middle<delim>: auto-sized inner delimiter; value = PS glyph name
+    NKStyleOverride  # \dfrac / \displaystyle etc.; value = style name; children[1] = body
+    NKSizing         # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body
+    NKXArrow         # \xrightarrow etc.; value = command name; children = [above] or [above, below]
 end
 
 """
@@ -166,6 +169,45 @@ const _MATRIX_ENVS = Dict{String,_MatrixEnvInfo}(
     # \begin{array}{colspec} — explicit per-column alignment and vertical rules.
     "array"       => (left="",               right="",               align=:center, scale=1.0),
 )
+
+# Mapping from style-switch commands to the target TeX style name (Display/Text/Script/ScriptScript).
+# \dfrac and \tfrac are not in this map; they are handled inline in _parse_command!.
+const _STYLE_COMMANDS = Dict{String,String}(
+    "\\displaystyle"    => "Display",
+    "\\textstyle"       => "Text",
+    "\\scriptstyle"     => "Script",
+    "\\scriptscriptstyle" => "ScriptScript",
+)
+
+# Font sizing commands mapped to scale multipliers relative to the current scale.
+# Values follow the standard LaTeX font size ladder at the default 10pt base.
+const _SIZING_MULTIPLIERS = Dict{String,Float64}(
+    "\\tiny"         => 0.5,
+    "\\scriptsize"   => 0.7,
+    "\\footnotesize" => 0.8,
+    "\\small"        => 0.9,
+    "\\normalsize"   => 1.0,
+    "\\large"        => 1.2,
+    "\\Large"        => 1.44,
+    "\\LARGE"        => 1.728,
+    "\\huge"         => 2.074,
+    "\\Huge"         => 2.488,
+)
+
+# All extensible arrow commands (amsmath xarrows plus common variants).
+# Each corresponds to a Unicode arrow codepoint in _XARROW_CODEPOINTS in layout.jl.
+const _XARROW_COMMANDS = Set{String}([
+    "\\xleftarrow",         "\\xrightarrow",
+    "\\xLeftarrow",         "\\xRightarrow",
+    "\\xleftrightarrow",    "\\xLeftrightarrow",
+    "\\xhookleftarrow",     "\\xhookrightarrow",
+    "\\xmapsto",
+    "\\xrightharpoondown",  "\\xrightharpoonup",
+    "\\xleftharpoondown",   "\\xleftharpoonup",
+    "\\xrightleftharpoons", "\\xleftrightharpoons",
+    "\\xtwoheadrightarrow", "\\xtwoheadleftarrow",
+    "\\xlongequal",
+])
 
 # Environments that require an explicit column-spec argument after the env name.
 const _COLSPEC_ENVS = Set{String}(["array"])
@@ -531,6 +573,45 @@ function _parse_command!(p::_Parser)::Node
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         return Node(NKFrac, [num, den])
+
+    elseif cmd == "\\dfrac"
+        # \dfrac forces Display style regardless of nesting context (KaTeX behaviour).
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKStyleOverride, "Display", [Node(NKFrac, [num, den])])
+
+    elseif cmd == "\\tfrac"
+        # \tfrac forces Text style (inline fraction) regardless of nesting context.
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKStyleOverride, "Text", [Node(NKFrac, [num, den])])
+
+    elseif haskey(_STYLE_COMMANDS, cmd)
+        # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the
+        # rest of the current group and render all of it at the overridden style.
+        children = _parse_sequence_children!(p)
+        return Node(NKStyleOverride, _STYLE_COMMANDS[cmd], [Node(NKSequence, children)])
+
+    elseif haskey(_SIZING_MULTIPLIERS, cmd)
+        # \large / \tiny etc.: consume the rest of the current group and scale it.
+        children = _parse_sequence_children!(p)
+        return Node(NKSizing, string(_SIZING_MULTIPLIERS[cmd]), [Node(NKSequence, children)])
+
+    elseif cmd ∈ _XARROW_COMMANDS
+        # \xrightarrow[below]{above}: optional below label, mandatory above label.
+        below_node = nothing
+        if _current(p).kind === TKChar && _current(p).value == "["
+            _advance!(p)   # consume '['
+            below_children = Node[]
+            while _current(p).kind !== TKEOF && _current(p).value != "]"
+                push!(below_children, _parse_atom!(p))
+            end
+            _current(p).value == "]" && _advance!(p)   # consume ']'
+            below_node = Node(NKGroup, below_children)
+        end
+        above_node = _parse_argument!(p)
+        children   = below_node === nothing ? [above_node] : [above_node, below_node]
+        return Node(NKXArrow, cmd, children)
 
     elseif cmd == "\\sqrt"
         # Optional degree: \sqrt[3]{x}

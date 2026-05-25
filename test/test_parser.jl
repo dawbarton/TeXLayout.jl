@@ -469,4 +469,93 @@
         @test length(mat.children) == 4
     end
 
+    # ── Style overrides ────────────────────────────────────────────────────────
+
+    @testset "\\dfrac wraps NKFrac in NKStyleOverride(Display)" begin
+        tree = parse_latex(raw"\dfrac{a}{b}")
+        node = tree.children[1]
+        @test node.kind  === NKStyleOverride
+        @test node.value == "Display"
+        @test length(node.children) == 1
+        @test node.children[1].kind === NKFrac
+    end
+
+    @testset "\\tfrac wraps NKFrac in NKStyleOverride(Text)" begin
+        tree = parse_latex(raw"\tfrac{x}{y}")
+        node = tree.children[1]
+        @test node.kind  === NKStyleOverride
+        @test node.value == "Text"
+        @test node.children[1].kind === NKFrac
+    end
+
+    @testset "\\displaystyle consumes rest of group" begin
+        tree = parse_latex(raw"{\displaystyle a + b}")
+        grp  = tree.children[1]
+        @test grp.kind === NKGroup
+        node = grp.children[1]
+        @test node.kind  === NKStyleOverride
+        @test node.value == "Display"
+        # children[1] is an NKSequence wrapping [a, +, b]
+        @test node.children[1].kind === NKSequence
+        @test length(node.children[1].children) == 3
+    end
+
+    @testset "\\scriptstyle has correct style name" begin
+        tree = parse_latex(raw"{\scriptstyle x}")
+        node = tree.children[1].children[1]
+        @test node.kind  === NKStyleOverride
+        @test node.value == "Script"
+    end
+
+    # ── Sizing commands ────────────────────────────────────────────────────────
+
+    @testset "\\large produces NKSizing with multiplier > 1" begin
+        tree = parse_latex(raw"{\large x}")
+        node = tree.children[1].children[1]
+        @test node.kind === NKSizing
+        @test parse(Float64, node.value) > 1.0
+    end
+
+    @testset "\\tiny produces NKSizing with multiplier < 1" begin
+        tree = parse_latex(raw"{\tiny x}")
+        node = tree.children[1].children[1]
+        @test node.kind === NKSizing
+        @test parse(Float64, node.value) < 1.0
+    end
+
+    @testset "\\normalsize produces multiplier 1.0" begin
+        tree = parse_latex(raw"{\normalsize x}")
+        node = tree.children[1].children[1]
+        @test node.kind === NKSizing
+        @test parse(Float64, node.value) ≈ 1.0
+    end
+
+    # ── Extensible arrows ──────────────────────────────────────────────────────
+
+    @testset "\\xrightarrow{f} produces NKXArrow with above label" begin
+        tree = parse_latex(raw"\xrightarrow{f}")
+        node = tree.children[1]
+        @test node.kind  === NKXArrow
+        @test node.value == "\\xrightarrow"
+        @test length(node.children) == 1   # above only
+    end
+
+    @testset "\\xrightarrow[g]{f} has both labels" begin
+        tree = parse_latex(raw"\xrightarrow[g]{f}")
+        node = tree.children[1]
+        @test node.kind === NKXArrow
+        @test length(node.children) == 2   # [above, below]
+        @test node.children[1].kind === NKChar   # above = 'f'
+        @test node.children[1].value == "f"
+        # below is wrapped in NKGroup
+        @test node.children[2].kind === NKGroup
+    end
+
+    @testset "\\xleftarrow is also NKXArrow" begin
+        tree = parse_latex(raw"\xleftarrow{n}")
+        node = tree.children[1]
+        @test node.kind  === NKXArrow
+        @test node.value == "\\xleftarrow"
+    end
+
 end

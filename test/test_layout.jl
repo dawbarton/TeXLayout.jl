@@ -1117,4 +1117,106 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test g_lcr[1].x <= g_ccc[1].x + 1e-6
     end
 
+    # ── Style overrides ────────────────────────────────────────────────────────
+
+    @testset "\\dfrac inside subscript renders at full scale" begin
+        # With plain \frac inside a subscript, the fraction is at script scale.
+        # With \dfrac the override forces Display style → scale = 1.0.
+        boxes_frac  = layout(parse_latex(raw"x_{\frac{a}{b}}"),  family, Text)
+        boxes_dfrac = layout(parse_latex(raw"x_{\dfrac{a}{b}}"), family, Text)
+
+        # Find all HRule elements (fraction bars); pick the one with largest width
+        # (the fraction bar rather than any overline).
+        rule_frac  = maximum(b.scale for b in find_hrules(boxes_frac);  init=0.0)
+        rule_dfrac = maximum(b.scale for b in find_hrules(boxes_dfrac); init=0.0)
+        @test rule_dfrac > rule_frac   # Display forces larger scale
+    end
+
+    @testset "\\displaystyle inside group overrides style" begin
+        # In a subscript without override the fraction bar is at sub scale.
+        # \displaystyle inside the sub forces Display.
+        boxes_default  = layout(parse_latex(raw"x_{\frac{a}{b}}"),           family, Text)
+        boxes_override = layout(parse_latex(raw"x_{\displaystyle \frac{a}{b}}"), family, Text)
+
+        rule_default  = maximum(b.scale for b in find_hrules(boxes_default);  init=0.0)
+        rule_override = maximum(b.scale for b in find_hrules(boxes_override); init=0.0)
+        @test rule_override > rule_default
+    end
+
+    @testset "\\textstyle inside display does not enlarge the fraction" begin
+        boxes_display  = layout(parse_latex(raw"\frac{a}{b}"),              family, Display)
+        boxes_textstyle = layout(parse_latex(raw"{\textstyle \frac{a}{b}}"), family, Display)
+        # In Display the numerator style is Text (scale=1); in Text style it is Script (scale<1).
+        # So \textstyle inside display should produce a smaller numerator glyph y-position.
+        top_display   = maximum(b.y + (b.element isa Glyph ? b.element.y_max / mt.upm * b.scale : 0.0)
+                                for b in layout(parse_latex(raw"\frac{a}{b}"), family, Display))
+        top_textstyle = maximum(b.y + (b.element isa Glyph ? b.element.y_max / mt.upm * b.scale : 0.0)
+                                for b in layout(parse_latex(raw"{\textstyle \frac{a}{b}}"), family, Display))
+        @test top_textstyle <= top_display + 1e-6
+    end
+
+    # ── Sizing commands ────────────────────────────────────────────────────────
+
+    @testset "\\large produces larger glyphs than \\normalsize" begin
+        boxes_normal = layout(parse_latex(raw"{\normalsize x}"), family, Text)
+        boxes_large  = layout(parse_latex(raw"{\large x}"),      family, Text)
+        scale_normal = find_glyphs(boxes_normal)[1].scale
+        scale_large  = find_glyphs(boxes_large)[1].scale
+        @test scale_large > scale_normal
+    end
+
+    @testset "\\tiny produces smaller glyphs than \\normalsize" begin
+        boxes_normal = layout(parse_latex(raw"{\normalsize x}"), family, Text)
+        boxes_tiny   = layout(parse_latex(raw"{\tiny x}"),       family, Text)
+        scale_normal = find_glyphs(boxes_normal)[1].scale
+        scale_tiny   = find_glyphs(boxes_tiny)[1].scale
+        @test scale_tiny < scale_normal
+    end
+
+    @testset "\\large scale is 1.2× base in Text style" begin
+        boxes = layout(parse_latex(raw"{\large x}"), family, Text)
+        g = find_glyphs(boxes)[1]
+        @test g.scale ≈ 1.2 * 1.0   # Text scale=1.0, large multiplier=1.2
+    end
+
+    # ── Extensible arrows ──────────────────────────────────────────────────────
+
+    @testset "\\xrightarrow{f} lays out without error" begin
+        boxes = layout(parse_latex(raw"\xrightarrow{f}"), family, Text)
+        @test !isempty(boxes)
+    end
+
+    @testset "\\xrightarrow arrow is centred on the math axis" begin
+        boxes = layout(parse_latex(raw"\xrightarrow{f}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        @test !isempty(glyphs)
+        # The arrow glyph(s) should straddle the math axis (some above, some below or at zero).
+        axis_em = mt.constants.axis_height / mt.upm
+        # At least one glyph in the arrow box should have its midpoint near the axis.
+        g = glyphs[1]
+        mid = g.y + (g.element.y_min + g.element.y_max) / (2.0 * mt.upm) * g.scale
+        @test abs(mid - axis_em) < 0.5   # within half-em of axis (coarse sanity check)
+    end
+
+    @testset "\\xrightarrow[g]{f} has more vertical extent than \\xrightarrow{f}" begin
+        boxes_above = layout(parse_latex(raw"\xrightarrow{f}"),    family, Text)
+        boxes_both  = layout(parse_latex(raw"\xrightarrow[g]{f}"), family, Text)
+        # Adding a below label should push the ink further below the baseline.
+        bot_above = minimum(b.y + (b.element isa Glyph ? b.element.y_min / mt.upm * b.scale : 0.0)
+                            for b in boxes_above)
+        bot_both  = minimum(b.y + (b.element isa Glyph ? b.element.y_min / mt.upm * b.scale : 0.0)
+                            for b in boxes_both)
+        @test bot_both <= bot_above
+    end
+
+    @testset "\\xrightarrow is wider when label is wide" begin
+        boxes_short = layout(parse_latex(raw"\xrightarrow{f}"),              family, Text)
+        boxes_long  = layout(parse_latex(raw"\xrightarrow{\text{long label}}"), family, Text)
+        w_short = maximum(b.x + (b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                                 b.element isa HRule ? b.element.width : 0.0) for b in boxes_short)
+        w_long  = maximum(b.x + (b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                                 b.element isa HRule ? b.element.width : 0.0) for b in boxes_long)
+        @test w_long > w_short
+    end
+
 end

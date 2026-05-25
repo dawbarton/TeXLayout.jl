@@ -52,7 +52,9 @@ using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
 using TeXLayout: NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
                  NKDecorated, NKFrac, NKSqrt, NKDelimited, NKAccent,
                  NKCommand, NKSpace, NKOperator, NKFontSwitch,
-                 NKHorizBrace, NKMatrix
+                 NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
+                 NKOverUnder, NKText,
+                 NKStyleOverride, NKSizing, NKXArrow
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and
