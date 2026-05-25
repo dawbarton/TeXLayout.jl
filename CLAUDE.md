@@ -261,11 +261,11 @@ A summary of major features and their status.
 | Accents (`\hat`, `\bar`, `\vec`, …) | ✓ | Rule 12; `MathTopAccentAttachment` alignment; 11 non-stretchy commands |
 | `\overline`, `\underline` | ✓ | Rules 9 & 10; gap and thickness from MATH table |
 | Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
-| Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
+| Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; `\mathrm` uses `_char_glyph` (math font codepoint); propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
 | Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double (`||`) vertical rules from colspec; two-pass grid layout centred on math axis |
 | `\middle` delimiter | ✓ | `NKMiddle`; auto-sized to the same height as the enclosing `\left`/`\right` pair; multiple `\middle` delimiters per group are supported |
-| `\text{}`, `\mbox{}` | ✓ | `NKText`; switches to upright (regular-font) glyph lookup via `_with_text_mode`; inter-atom spacing suppressed inside text fragments |
+| `\text{}`, `\mbox{}` | ✓ | `NKText`; switches to upright (regular-font) glyph lookup via `_with_text_mode`; spaces preserved as `Space` elements (word-space advance from font); inter-atom spacing suppressed inside text fragments |
 | `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
 
 ## Known limitations / future work

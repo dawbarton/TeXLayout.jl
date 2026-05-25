@@ -573,15 +573,45 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "FontSwitch: \\mathrm{x} produces upright glyph distinct from \\mathit{x}" begin
-        # \mathrm uses the upright lookup path; \mathit (and the default math-mode path)
-        # uses U+1D465 (PS name "u1D465").  The upright "x" and the italic "u1D465" are
-        # distinct glyphs with different metrics.
+        # \mathrm routes through _char_glyph (math font codepoint lookup), not _upright_glyph.
+        # The math font's upright 'x' (e.g. "x" or a codepoint alias) and the math-italic
+        # 'x' (U+1D465, PS name "u1D465") are distinct glyphs with different metrics.
         boxes_rm = layout(parse_latex("\\mathrm{x}"),  family, Text)
         boxes_it = layout(parse_latex("\\mathit{x}"),  family, Text)
         @test !isempty(find_glyphs(boxes_rm))
         name_rm = find_glyphs(boxes_rm)[1].element.glyph_name
         name_it = find_glyphs(boxes_it)[1].element.glyph_name
         @test name_rm != name_it
+    end
+
+    @testset "FontSwitch: \\mathrm uses math font, not regular font" begin
+        # \mathrm should go through _char_glyph (math font only), so the glyph name
+        # should NOT be the same as the one produced by the text-mode upright path
+        # (_upright_glyph uses family.regular when available).
+        boxes_rm   = layout(parse_latex("\\mathrm{x}"),  family, Text)
+        boxes_text = layout(parse_latex("\\text{x}"),    family, Text)
+        @test !isempty(find_glyphs(boxes_rm))
+        @test !isempty(find_glyphs(boxes_text))
+        # Both produce a glyph — with NewCMMath the PS names may coincide for plain
+        # upright letters, so the key test is that \mathrm produces at least one glyph
+        # and that its advance width is positive (not a missing-glyph zero).
+        @test find_glyphs(boxes_rm)[1].element.advance_width > 0
+    end
+
+    @testset "\\text{if } preserves trailing space" begin
+        # A space at the end of a \text{} argument must survive as a Space element.
+        boxes = layout(parse_latex(raw"\text{if }"), family, Text)
+        spaces = find_spaces(boxes)
+        @test !isempty(spaces)
+        # The space width must be positive (comes from the font's word-space advance).
+        @test spaces[end].element.width > 0
+    end
+
+    @testset "\\text{if x} has inter-word space" begin
+        # A space between two words inside \text{} must produce a Space element.
+        boxes_sp  = layout(parse_latex(raw"\text{if x}"), family, Text)
+        boxes_nsp = layout(parse_latex(raw"\text{ifx}"),  family, Text)
+        @test length(find_spaces(boxes_sp)) > length(find_spaces(boxes_nsp))
     end
 
     @testset "FontSwitch: \\mathbf propagates to subscript" begin

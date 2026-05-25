@@ -13,7 +13,7 @@
     TKRBrace      # }
     TKMathShift   # $
     TKAmpersand   # &
-    TKSpace       # explicit space (\ or ~ or whitespace run inside text mode)
+    TKSpace       # whitespace run or explicit space (\ ~); math-mode parser skips these
     TKEOF
 end
 
@@ -76,11 +76,13 @@ function tokenize(input::AbstractString)::Vector{Token}
         elseif c == '~'
             push!(tokens, Token(TKSpace, "~", i));  i = next
         elseif isspace(c)
-            # Spaces are insignificant in math mode; skip the entire run.
-            i = next
-            while i <= n && isspace(s[i])
-                i = nextind(s, i)
+            # Collapse the entire whitespace run into one TKSpace token.
+            # The parser decides whether spaces are significant (text mode) or not (math mode).
+            while next <= n && isspace(s[next])
+                next = nextind(s, next)
             end
+            push!(tokens, Token(TKSpace, " ", i))
+            i = next
         else
             # Everything else is an ordinary character (may be multi-byte UTF-8).
             push!(tokens, Token(TKChar, string(c), i));  i = next

@@ -254,6 +254,7 @@ function _parse_delimited_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
+        k === TKSpace && (_advance!(p); continue)
         (k === TKEOF || k === TKRBrace) && break
         k === TKCommand && _current(p).value == "\\right" && break
         if k === TKCommand && _current(p).value == "\\middle"
@@ -292,14 +293,46 @@ function _parse_group!(p::_Parser)::Node
 end
 
 # Parse atoms until '}' or EOF, returning the list of child nodes.
+# Whitespace tokens are skipped (math mode: spaces are insignificant).
 function _parse_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
         (k === TKEOF || k === TKRBrace) && break
+        k === TKSpace && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return children
+end
+
+# Like _parse_sequence_children! but preserves whitespace as NKChar(' ') nodes.
+# Used for the argument of \text{} and \mbox{}, where spaces are significant.
+function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
+    children = Node[]
+    while true
+        k = _current(p).kind
+        (k === TKEOF || k === TKRBrace) && break
+        if k === TKSpace
+            push!(children, Node(NKChar, " "))
+            _advance!(p)
+        else
+            push!(children, _parse_atom!(p))
+        end
+    end
+    return children
+end
+
+# Parse the braced argument of \text{} or \mbox{}, preserving spaces.
+function _parse_text_argument!(p::_Parser)::Node
+    if _current(p).kind === TKLBrace
+        _advance!(p)   # consume '{'
+        children = _parse_text_sequence_children!(p)
+        _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+        length(children) == 1 && return children[1]
+        return Node(NKSequence, children)
+    else
+        return _parse_primary!(p)
+    end
 end
 
 # Parse a single "atom": a primary optionally decorated with ^ and/or _.
@@ -444,6 +477,9 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String="")::
             end
             finish_row!()
 
+        elseif tok.kind === TKSpace
+            _advance!(p)   # skip whitespace in matrix bodies (math mode)
+
         else
             push!(current_cell, _parse_atom!(p))
         end
@@ -565,7 +601,7 @@ function _parse_command!(p::_Parser)::Node
         return space_node(0.0)
 
     elseif cmd == "\\text" || cmd == "\\mbox"
-        body = _parse_argument!(p)
+        body = _parse_text_argument!(p)
         return Node(NKText, [body])
 
     else

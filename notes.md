@@ -286,3 +286,46 @@
 - **Open questions / future work**:
   - The `font_family` argument to the overridden `generate_tex_elements` is currently ignored; TeXLayout always uses `default_font_family()`. Could honour caller-specified fonts in future.
   - `__precompile__(false)` adds ~1 s first-call compilation overhead; a more surgical fix (overloading on `str::LaTeXString` specifically to avoid the same-signature restriction) could restore precompilation, but requires investigation.
+
+## 2026-05-25T15:03+00:00 \middle auto-sizing and \text{}/\mbox{} upright font
+
+- **`\middle` auto-sizing** (NKMiddle):
+  - Added `NKMiddle` to `NodeKind` enum; value holds PS glyph name.
+  - `_parse_delimited_children!` now intercepts `\middle` tokens and emits `NKMiddle` nodes instead of falling through to the command branch.
+  - `_layout_delimited!` refactored to segment children at `NKMiddle` boundaries; measures combined content height across all segments; then calls `_layout_delim!` for left, each middle, and right delimiter with identical `required_du` — all delimiters auto-size to the same height.
+  - Multiple `\middle` delimiters per group are supported (n+1 segments for n middles).
+
+- **`\text{}`/`\mbox{}` upright rendering** (NKText):
+  - Parser previously had `NKText` in the enum but never produced it; `\text` fell through to the command error branch.
+  - Added explicit `cmd == "\\text" || cmd == "\\mbox"` case in `_parse_command!`; consumes brace argument, returns `Node(NKText, [body])`.
+  - `_with_text_mode` helper copies `_LayoutCtx` with `mode = :text`.
+  - `_layout_char!` uses `_upright_glyph` when `ctx.mode === :text` — regular font, no italic remapping.
+  - `_layout_text!` applies `_with_text_mode` and delegates to the child node.
+  - Dispatch added: `k === NKText && return _layout_text!(...)` in `_layout_node!`.
+  - Inter-atom spacing already suppressed inside text fragments (guard on `ctx.mode === :math`).
+
+- All 813 tests pass. Stress test PNG generated for visual verification.
+- Committed as `139bced`.
+
+## 2026-05-25T15:28+00:00 Fix \mathrm font path and \text{} space preservation
+
+- **Problem**: Both `\mathrm` and `\text{}` were routing through `_upright_glyph`, which is semantically wrong. `\mathrm` is a math-mode command and must use the math font's own codepoint lookup (`_char_glyph`), not the text font. `\text{}` correctly uses `_upright_glyph` (prefers `family.regular`).
+
+- **Fix 1 — `\mathrm` uses math font**: Removed the `:mathrm → _upright_glyph` early-return branch from `_variant_glyph` in `layout.jl`. The function now falls through to `_char_glyph` for `\mathrm`, which uses math-font codepoint lookup.
+
+- **Fix 2 — whitespace preserved as `TKSpace` tokens**: Lexer previously silently discarded all whitespace runs. Changed `lexer.jl` to emit `Token(TKSpace, " ", i)` for each whitespace run (collapsed to a single token). This enables the parser to see spaces and handle them mode-appropriately.
+
+- **Fix 3 — math-mode parser skips `TKSpace`**: Added `TKSpace` skip guards to:
+  - `_parse_sequence_children!` — skips `TKSpace` in math-mode groups.
+  - `_parse_delimited_children!` — skips `TKSpace` before `\right`/`\middle` check.
+  - `_parse_matrix_body!` — skips `TKSpace` as a handled token kind.
+  - `_parse_atom!` — already had a `while TKSpace` skip; reviewed and confirmed correct.
+
+- **Fix 4 — text-mode preserves spaces**: Added `_parse_text_sequence_children!` which converts `TKSpace` to `Node(NKChar, " ")`. Added `_parse_text_argument!` which uses this for `\text{}`/`\mbox{}` brace arguments.
+
+- **Fix 5 — `' '` in layout emits `Space` element**: In `_layout_char!`, added an early-return branch for `ctx.mode === :text && ch == ' '` that calls `glyph_metrics_upright(ctx.family, ' ')` to get the font's word-space advance and emits `LayoutBox(Space(w), x0, y0, scale)`.
+
+- **Semantic distinction documented**: `\mathrm` → math font (`_char_glyph`); `\text{}` → regular font (`_upright_glyph`). Both currently use the math font's PS name in the `Glyph` struct — acceptable for matched font families like NewCM.
+
+- 6 new tests added; 819 total, all pass.
+- Committed to `TeXLayout.jl`.

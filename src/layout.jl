@@ -848,11 +848,6 @@ function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph
                          m.x_min, m.y_min, m.x_max, m.y_max)
         end
     end
-    # :mathrm (and :boldsymbol for non-latin chars) fall back to upright rendering.
-    if variant === :mathrm
-        g = _upright_glyph(ctx, ch)
-        g !== nothing && return g
-    end
     return _char_glyph(ctx, ch)
 end
 
@@ -1692,7 +1687,13 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
              # Standard LaTeX renders math-mode letters italic; use the
              # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
              _variant_glyph(ctx, :mathit, ch)
-         elseif ctx.mode === :text
+         elseif ctx.mode === :text && ch == ' '
+             # Space in text mode: emit a Space element with the font's word-space advance.
+             m = glyph_metrics_upright(ctx.family, ' ')
+             w = m === nothing ? 0.25 : m.advance_width / ctx.upm * scale
+             push!(boxes, LayoutBox(Space(w), x0, y0, scale))
+             return w
+        elseif ctx.mode === :text
              # \text{}/\mbox{}: use upright (regular-font) glyph; no italic remapping.
              _upright_glyph(ctx, ch)
          else
