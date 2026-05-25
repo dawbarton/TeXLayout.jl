@@ -1674,8 +1674,499 @@ function _layout_matrix!(
     return left_w + content_w + right_w
 end
 
+# ── Per-kind layout helpers ──────────────────────────────────────────────────
+# Each `_layout_X!` takes the same signature and returns the horizontal advance
+# of the node in em units.  `_layout_node!` at the bottom dispatches on
+# `node.kind`.  This per-kind split keeps each rule small enough to read in one
+# screen and isolates changes to a single function.
+
+# Strip the leading '\' from a TKCommand value, returning the bare command name.
+@inline _command_name(cmd::AbstractString) =
+    startswith(cmd, '\\') ? cmd[2:end] : cmd
+
+function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
+    ch = only(node.value)
+    g  = if ctx.font_variant !== :default
+             _variant_glyph(ctx, ctx.font_variant, ch)
+         elseif ctx.mode === :math && isletter(ch)
+             # Standard LaTeX renders math-mode letters italic; use the
+             # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
+             _variant_glyph(ctx, :mathit, ch)
+         else
+             _char_glyph(ctx, ch)
+         end
+    g === nothing && return 0.0
+    push!(boxes, LayoutBox(g, x0, y0, scale))
+    return g.advance_width / ctx.upm * scale
+end
+
+function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    name = _command_name(node.value)
+    if haskey(_DISPLAY_OP_CODEPOINTS, name)
+        # Large operator: resolve glyph by codepoint so the correct PS name
+        # (e.g. "summation") is used instead of the bare command name ("sum").
+        ps = glyph_name_by_codepoint(ctx.family, _DISPLAY_OP_CODEPOINTS[name])
+        isempty(ps) && return 0.0
+        # In Display style, pick the smallest vert_constructions variant that
+        # meets or exceeds display_operator_min_height (in design units).
+        chosen = ps
+        if is_display(style) && haskey(ctx.vert_constructions, ps)
+            min_h = Float64(mc.display_operator_min_height)
+            for v in ctx.vert_constructions[ps].variants
+                if Float64(v.advance) >= min_h
+                    chosen = v.glyph_name
+                    break
+                end
+            end
+        end
+        g = _cmd_glyph(ctx, chosen)
+        g === nothing && return 0.0
+        # Centre large operator on the math axis (same logic as _layout_delim!).
+        glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
+        y_op = y0 + (mc.axis_height / upm - glyph_center) * scale
+        push!(boxes, LayoutBox(g, x0, y_op, scale))
+        return g.advance_width / upm * scale
+    end
+
+    # Ordinary symbols are resolved by codepoint via _SYMBOL_CODEPOINTS so the
+    # correct glyph is found regardless of font-specific PS naming.
+    cp = get(_SYMBOL_CODEPOINTS, name, nothing)
+    cp === nothing && return 0.0
+    g = try
+        m  = glyph_metrics_by_codepoint(ctx.family, cp)
+        ps = glyph_name_by_codepoint(ctx.family, cp)
+        Glyph(isempty(ps) ? name : ps,
+              m.advance_width, m.left_side_bearing,
+              m.x_min, m.y_min, m.x_max, m.y_max)
+    catch
+        return 0.0
+    end
+    push!(boxes, LayoutBox(g, x0, y0, scale))
+    return g.advance_width / upm * scale
+end
+
+function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
+    # Render each character of the operator name upright (roman).
+    cursor = x0
+    for ch in node.value
+        g = _upright_glyph(ctx, ch)
+        g === nothing && continue
+        push!(boxes, LayoutBox(g, cursor, y0, scale))
+        cursor += g.advance_width / ctx.upm * scale
+    end
+    return cursor - x0
+end
+
+function _layout_space!(node, ctx, style, x0, y0, scale, boxes)
+    iszero(node.width) && return 0.0
+    w = node.width * scale
+    push!(boxes, LayoutBox(Space(w), x0, y0, scale))
+    return w
+end
+
+function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
+    base, sup = node.children[1], node.children[2]
+    base.kind === NKHorizBrace &&
+        return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    sup_s     = sup_style(style);  sup_scale = size_scale(sup_s, mc)
+    if _use_limits(base, style)
+        # Limits placement: sup centred above base.
+        tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
+        base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+        sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+        base_top = _boxes_top(tmp_base, upm)
+        s = scale / upm
+        y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+                    y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
+        total_w = max(base_w, sup_w)
+        Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
+        # ±½ italic correction shifts superscript right over the slanted stroke.
+        Δsup += _base_italic_correction_em(tmp_base, ctx, scale) / 2
+        _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+        _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
+        return total_w
+    end
+
+    tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+    sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+    append!(boxes, tmp_base)
+    s = scale / upm
+    min_sup = is_cramped(style) ?
+        mc.superscript_shift_up_cramped * s :
+        mc.superscript_shift_up * s
+    # Rule 18a: for non-character bases (fractions, groups, …) the superscript
+    # baseline must not drop below base_top − supDrop (SuperscriptBaselineDropMax).
+    y_sup = _is_char_box(base) ? y0 + min_sup :
+        max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
+    # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
+    y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
+    _emit_shifted!(boxes, tmp_sup, x0 + base_adv, y_sup)
+    return base_adv + sup_adv + mc.space_after_script * s
+end
+
+function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
+    base, sub = node.children[1], node.children[2]
+    base.kind === NKHorizBrace &&
+        return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    sub_s     = sub_style(style);  sub_scale = size_scale(sub_s, mc)
+    if _use_limits(base, style)
+        # Limits placement: sub centred below base.
+        tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
+        base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+        sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+        base_bot = _boxes_bottom(tmp_base, upm)
+        s = scale / upm
+        y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+                    y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+        total_w = max(base_w, sub_w)
+        Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
+        # ±½ italic correction shifts subscript left under the slanted stroke.
+        Δsub -= _base_italic_correction_em(tmp_base, ctx, scale) / 2
+        _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+        _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
+        return total_w
+    end
+
+    tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+    sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+    append!(boxes, tmp_base)
+    s = scale / upm
+    min_sub = mc.subscript_shift_down * s
+    # Rule 18a: for non-character bases the subscript baseline must be placed
+    # no higher than base_bottom − subDrop (SubscriptBaselineDropMin, σ₁₉).
+    y_sub = _is_char_box(base) ? y0 - min_sub :
+        min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
+    # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
+    y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
+    # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
+    # shifted left by the full IC so it sits under the stroke, not the advance width.
+    # Matches KaTeX supsub.ts: marginLeft = makeEm(-italic_correction) on subscript.
+    ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
+    _emit_shifted!(boxes, tmp_sub, x0 + base_adv - ic_em, y_sub)
+    return base_adv + sub_adv + mc.space_after_script * s
+end
+
+function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
+    base, sub, sup = node.children[1], node.children[2], node.children[3]
+    base.kind === NKHorizBrace &&
+        return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    sub_s = sub_style(style);  sub_scale = size_scale(sub_s, mc)
+    sup_s = sup_style(style);  sup_scale = size_scale(sup_s, mc)
+    if _use_limits(base, style)
+        # Limits placement: sub centred below, sup centred above.
+        tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
+        base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
+        sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+        sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+        base_top = _boxes_top(tmp_base, upm)
+        base_bot = _boxes_bottom(tmp_base, upm)
+        s = scale / upm
+        y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+                    y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
+        y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+                    y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+        total_w = max(base_w, sub_w, sup_w)
+        Δbase = (total_w - base_w) / 2
+        Δsub  = (total_w - sub_w)  / 2
+        Δsup  = (total_w - sup_w)  / 2
+        # ±½ italic correction shifts sub/sup to track the slanted operator stroke.
+        ic_half = _base_italic_correction_em(tmp_base, ctx, scale) / 2
+        Δsub -= ic_half
+        Δsup += ic_half
+        _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
+        _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
+        _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
+        return total_w
+    end
+
+    tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
+    sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+    sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+    append!(boxes, tmp_base)
+    script_x = x0 + base_adv
+    # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
+    # shifted left by the full IC so it sits under the stroke, not the advance width.
+    # Superscript is not shifted. Matches KaTeX supsub.ts behaviour.
+    ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
+    s = scale / upm
+    min_sup = is_cramped(style) ?
+        mc.superscript_shift_up_cramped * s :
+        mc.superscript_shift_up * s
+    min_sub = mc.subscript_shift_down * s
+    # Rule 18a: for non-character bases apply supDrop/subDrop clamps (σ₁₈/σ₁₉).
+    y_sup = _is_char_box(base) ? y0 + min_sup :
+        max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
+    y_sub = _is_char_box(base) ? y0 - min_sub :
+        min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
+    # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
+    y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
+    # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
+    y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
+    # Rule 18e: enforce minimum gap between superscript bottom and subscript top.
+    sup_bot = y_sup + _boxes_bottom(tmp_sup, upm)
+    sub_top = y_sub + _boxes_top(tmp_sub, upm)
+    min_gap = mc.sub_superscript_gap_min * s
+    if sup_bot - sub_top < min_gap
+        y_sub = sup_bot - min_gap - _boxes_top(tmp_sub, upm)
+        # Psi redistribution: if the superscript bottom falls below
+        # SuperscriptBottomMaxWithSubscript, shift both scripts upward together
+        # so that it reaches exactly that threshold (gap remains min_gap).
+        psi = mc.superscript_bottom_max_with_subscript * s - sup_bot
+        if psi > 0.0
+            y_sup += psi
+            y_sub += psi
+        end
+    end
+    _emit_shifted!(boxes, tmp_sub, script_x - ic_em, y_sub)
+    _emit_shifted!(boxes, tmp_sup, script_x,         y_sup)
+    return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
+end
+
+function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    num_node, den_node = node.children[1], node.children[2]
+    num_s = frac_num_style(style);  num_scale = size_scale(num_s, mc)
+    den_s = frac_den_style(style);  den_scale = size_scale(den_s, mc)
+
+    rule_thickness = mc.fraction_rule_thickness / upm * scale
+    axis_em = mc.axis_height / upm * scale
+    # Rule centre at the math axis; rule.y is the bottom edge.
+    rule_y = y0 + axis_em - rule_thickness / 2
+
+    # Initial shifts and minimum gap constants from the MATH table.
+    if is_display(style)
+        num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
+        den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
+        num_gap   = mc.fraction_num_display_style_gap_min / upm * scale
+        den_gap   = mc.fraction_denom_display_style_gap_min / upm * scale
+    else
+        num_shift = mc.fraction_numerator_shift_up / upm * scale
+        den_shift = mc.fraction_denominator_shift_down / upm * scale
+        num_gap   = mc.fraction_numerator_gap_min / upm * scale
+        den_gap   = mc.fraction_denominator_gap_min / upm * scale
+    end
+
+    # Layout at y=0 to measure ink extents before applying shifts.
+    tmp_num = LayoutBox[];  tmp_den = LayoutBox[]
+    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
+    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
+
+    # Clamp shifts so the minimum gap between content and rule is respected
+    # (TeX Rule 15d/15e).  num_depth is how far the numerator ink extends below
+    # its own baseline; den_height is how far the denominator ink extends above.
+    num_depth  = max(0.0, -_boxes_bottom(tmp_num, upm))
+    den_height = max(0.0,  _boxes_top(tmp_den,    upm))
+    num_shift  = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
+    den_shift  = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
+
+    frac_w = max(num_w, den_w)
+    Δnum = (frac_w - num_w) / 2
+    Δden = (frac_w - den_w) / 2
+    _emit_shifted!(boxes, tmp_num, x0 + Δnum, y0 + num_shift)
+    _emit_shifted!(boxes, tmp_den, x0 + Δden, y0 - den_shift)
+    push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
+    return frac_w
+end
+
+function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    # \sqrt[degree]{body}: children are [body] or [degree, body].
+    body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
+    tmp = LayoutBox[]
+    # Rule 11: body is built in the cramped style (prevents superscripts inside
+    # the radicand from protruding above the rule bar).
+    body_w   = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
+    body_top = _boxes_top(tmp, upm)
+    body_bot = _boxes_bottom(tmp, upm)
+
+    gap            = is_display(style) ?
+        mc.radical_display_style_vertical_gap / upm * scale :
+        mc.radical_vertical_gap / upm * scale
+    rule_thickness = mc.radical_rule_thickness / upm * scale
+
+    # KaTeX Rule 11: when the radical hook extends significantly below the body,
+    # redistribute excess vertical space so it is shared equally above and below
+    # rather than entirely below.  Peek at the glyph that would be selected,
+    # measure its hook depth (−y_min), and increase the gap if needed.
+    let peek_du = (body_top + gap + rule_thickness - body_bot) / scale * upm
+        g = _peek_radical_glyph(ctx, peek_du)
+        if g !== nothing
+            delim_depth = -g.y_min / upm * scale
+            body_extent = body_top - body_bot
+            if delim_depth > body_extent + gap
+                gap = (gap + delim_depth - body_extent) / 2
+            end
+        end
+    end
+
+    rule_y_local   = body_top + gap           # bottom of rule bar (em, relative to y0)
+    rule_top_local = rule_y_local + rule_thickness
+
+    # required_du: vertical span from body bottom to rule top, in design units
+    # at scale=1 (matching the vert_constructions advance values).
+    required_du  = (rule_top_local - body_bot) / scale * upm
+    rule_top_em  = y0 + rule_top_local
+    rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
+
+    # When the selected radical variant is larger than the minimum required
+    # span, distribute the excess equally: shift the body DOWN by half the
+    # excess so it appears vertically centred in the hook area rather than
+    # crowded against the top bar.  The rule bar and radical stay in place.
+    body_shift = let g = _peek_radical_glyph(ctx, required_du)
+        if g !== nothing
+            excess = max(0.0, Float64(g.y_max - g.y_min) - required_du)
+            excess / (2.0 * upm) * scale
+        else
+            0.0
+        end
+    end
+
+    _emit_shifted!(boxes, tmp, x0 + rad_adv, y0 - body_shift)
+    push!(boxes, LayoutBox(HRule(body_w, rule_thickness),
+                           x0 + rad_adv, y0 + rule_y_local, scale))
+    return rad_adv + body_w
+end
+
+function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+    # \left…\right: size delimiters to the inner content, centred on the math axis.
+    # node.value encodes "left_ps_name\x00right_ps_name".
+    sep        = findfirst('\x00', node.value)
+    left_name  = sep === nothing ? node.value : node.value[1:sep-1]
+    right_name = sep === nothing ? ""          : node.value[sep+1:end]
+
+    # Lay out inner content in a scratch buffer to measure its vertical extent.
+    tmp       = LayoutBox[]
+    content_w = _layout_children!(node.children, ctx, style, x0, y0, scale, tmp)
+
+    # Vertical extent of the inner content (in em units relative to y0).
+    content_top = _boxes_top(tmp, upm)
+    content_bot = _boxes_bottom(tmp, upm)
+    # Ensure a sensible non-zero span when content has no glyph ink.
+    content_top = max(content_top, y0 + mc.axis_height / upm * scale)
+    content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
+
+    # Required delimiter advance: sized so the delimiter covers the content
+    # symmetrically around the math axis.  Converted to unscaled design units
+    # because GlyphVariant.advance and GlyphAssemblyPart.full_advance are both
+    # stored in unscaled design units.
+    axis_em     = y0 + mc.axis_height / upm * scale
+    h_above     = max(0.0, content_top - axis_em)
+    h_below     = max(0.0, axis_em - content_bot)
+    required_em = 2.0 * max(h_above, h_below)
+    required_du = required_em / scale * upm
+
+    # Place left delimiter (variant or assembly), then inner content, then right.
+    # _layout_children! placed `tmp` boxes in absolute coords starting at x0;
+    # shift them rightwards by left_w to make room for the left delimiter.
+    left_w  = _layout_delim!(ctx, left_name,  required_du, x0,           y0, scale, boxes)
+    _emit_shifted!(boxes, tmp, left_w, 0.0)
+    right_w = _layout_delim!(ctx, right_name, required_du,
+                             x0 + left_w + content_w, y0, scale, boxes)
+    return left_w + content_w + right_w
+end
+
+function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
+    # Switch the active font variant for all recursive calls within the body.
+    isempty(node.children) && return 0.0
+    new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
+                         ctx.horiz_constructions, ctx.top_accent_attachments,
+                         ctx.italic_corrections,
+                         ctx.min_connector_overlap, ctx.mode, Symbol(node.value))
+    return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
+end
+
+function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
+    # KaTeX Rule 12 (accent.ts).  Build base in cramped style, then place the
+    # accent glyph above it, aligned via MathTopAccentAttachment when available.
+    isempty(node.children) && return 0.0
+    mc, upm = ctx.mc, ctx.upm
+
+    # Build base in cramped style (Rule 12: base is typeset cramped).
+    tmp = LayoutBox[]
+    base_w   = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
+    base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
+    _emit_shifted!(boxes, tmp, x0, y0)
+
+    # Look up the accent glyph.  Return base-only if not present in the font.
+    accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
+    isempty(accent_ps) && return base_w
+    accent_m = glyph_metrics(ctx.family, accent_ps)
+
+    # Vertical placement: clearance = min(base_top, accent_base_height_em).
+    # This places the accent so it just clears a normal x-height character while
+    # riding higher above ascenders, matching the KaTeX clearance formula.
+    accent_base_h = mc.accent_base_height * scale / upm
+    accent_y = y0 + max(0.0, base_top - accent_base_h)
+
+    # Wide accents (\widehat, \widetilde) are placed using a horizontally
+    # extensible glyph centred over the base; no MathTopAccentAttachment alignment.
+    if node.value ∈ _WIDE_ACCENT_COMMANDS && haskey(ctx.horiz_constructions, accent_ps)
+        _layout_wide_accent!(ctx, accent_ps, base_w, accent_y, x0, scale, boxes)
+        return base_w
+    end
+
+    # Horizontal placement via MathTopAccentAttachment.  If the base is a single
+    # glyph with a known attachment point, align the attachment x of the accent
+    # to the attachment x of the base.  Fall back to centering when attachment
+    # data is unavailable.
+    base_attach_du = if length(tmp) == 1 && tmp[1].element isa Glyph
+        get(ctx.top_accent_attachments, (tmp[1].element::Glyph).glyph_name, nothing)
+    else
+        nothing
+    end
+    accent_attach_du = get(ctx.top_accent_attachments, accent_ps, nothing)
+
+    accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
+        x0 + (base_attach_du - accent_attach_du) * scale / upm
+    else
+        # Centre by ink midpoint rather than advance_width/2: handles zero-advance
+        # combining characters (adv_w=0, x_min/x_max negative).
+        x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
+    end
+
+    push!(boxes, LayoutBox(Glyph(accent_ps, accent_m.advance_width,
+                                 accent_m.left_side_bearing,
+                                 accent_m.x_min, accent_m.y_min,
+                                 accent_m.x_max, accent_m.y_max),
+                           accent_x, accent_y, scale))
+    return base_w
+end
+
+function _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
+    # Rules 9 & 10: \overline and \underline.
+    # \overline  (Rule 9):  body in cramped style; HRule above with gap from MATH table.
+    # \underline (Rule 10): body in current style; HRule below with gap from MATH table.
+    isempty(node.children) && return 0.0
+    mc, upm = ctx.mc, ctx.upm
+    is_over     = node.value == "overline"
+    child_style = is_over ? cramp_style(style) : style
+
+    tmp = LayoutBox[]
+    body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, tmp)
+
+    rule_t = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
+    gap    = (is_over ? mc.overbar_vertical_gap   : mc.underbar_vertical_gap)   / upm * scale
+    _emit_shifted!(boxes, tmp, x0, y0)
+
+    # Rule bottom at body_top + gap (over) or body_bot − gap − rule_t (under).
+    rule_y = is_over ?
+        y0 + _boxes_top(tmp, upm) + gap :
+        y0 + _boxes_bottom(tmp, upm) - gap - rule_t
+    push!(boxes, LayoutBox(HRule(body_w, rule_t), x0, rule_y, scale))
+    return body_w
+end
+
 # Lay out `node` into `boxes`, with the left-baseline anchor at (x0, y0) and
 # the given scale.  Returns the horizontal advance of the node in em units.
+# Dispatches per `node.kind` to a specialised `_layout_X!` helper above.
 function _layout_node!(
     node::Node,
     ctx::_LayoutCtx,
@@ -1685,501 +2176,28 @@ function _layout_node!(
     scale::Float64,
     boxes::Vector{LayoutBox},
 )::Float64
-    mc  = ctx.mc
-    upm = ctx.upm
-
-    if node.kind === NKChar
-        ch = only(node.value)
-        g  = if ctx.font_variant !== :default
-                 _variant_glyph(ctx, ctx.font_variant, ch)
-             elseif ctx.mode === :math && isletter(ch)
-                 # Standard LaTeX renders math-mode letters italic; use the
-                 # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
-                 _variant_glyph(ctx, :mathit, ch)
-             else
-                 _char_glyph(ctx, ch)
-             end
-        g === nothing && return 0.0
-        push!(boxes, LayoutBox(g, x0, y0, scale))
-        return g.advance_width / upm * scale
-
-    elseif node.kind === NKCommand
-        cmd  = node.value   # e.g. "\\alpha"
-        name = startswith(cmd, "\\") ? cmd[2:end] : cmd
-        if haskey(_DISPLAY_OP_CODEPOINTS, name)
-            # Large operator: resolve glyph by codepoint so the correct PS name
-            # (e.g. "summation") is used instead of the bare command name ("sum").
-            ps = glyph_name_by_codepoint(ctx.family, _DISPLAY_OP_CODEPOINTS[name])
-            isempty(ps) && return 0.0
-            # In Display style, pick the smallest vert_constructions variant that
-            # meets or exceeds display_operator_min_height (in design units).
-            chosen = ps
-            if is_display(style) && haskey(ctx.vert_constructions, ps)
-                min_h = Float64(mc.display_operator_min_height)
-                for v in ctx.vert_constructions[ps].variants
-                    if Float64(v.advance) >= min_h
-                        chosen = v.glyph_name
-                        break
-                    end
-                end
-            end
-            g = _cmd_glyph(ctx, chosen)
-            g === nothing && return 0.0
-            # Centre large operator on the math axis (same logic as _layout_delim!).
-            glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
-            y_op = y0 + (mc.axis_height / upm - glyph_center) * scale
-            push!(boxes, LayoutBox(g, x0, y_op, scale))
-            return g.advance_width / upm * scale
-        else
-            # All ordinary symbols are resolved by codepoint via _SYMBOL_CODEPOINTS
-            # so the correct glyph is found regardless of font-specific PS naming.
-            g = if haskey(_SYMBOL_CODEPOINTS, name)
-                    cp = _SYMBOL_CODEPOINTS[name]
-                    try
-                        m  = glyph_metrics_by_codepoint(ctx.family, cp)
-                        ps = glyph_name_by_codepoint(ctx.family, cp)
-                        Glyph(isempty(ps) ? name : ps,
-                              m.advance_width, m.left_side_bearing,
-                              m.x_min, m.y_min, m.x_max, m.y_max)
-                    catch
-                        nothing
-                    end
-                else
-                    nothing
-                end
-            g === nothing && return 0.0
-            push!(boxes, LayoutBox(g, x0, y0, scale))
-            return g.advance_width / upm * scale
-        end
-
-    elseif node.kind === NKLimitsOverride
-        # \limits / \nolimits override node: lay out the wrapped base normally.
-        # The script placement decision (limits vs. side) is made in the script branches.
-        return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
-
-    elseif node.kind === NKOperator
-        # Render each character of the operator name upright (roman).
-        cursor = x0
-        for ch in node.value
-            g = _upright_glyph(ctx, ch)
-            g === nothing && continue
-            push!(boxes, LayoutBox(g, cursor, y0, scale))
-            cursor += g.advance_width / upm * scale
-        end
-        return cursor - x0
-
-    elseif node.kind === NKSpace
-        iszero(node.width) && return 0.0
-        w = node.width * scale
-        push!(boxes, LayoutBox(Space(w), x0, y0, scale))
-        return w
-
-    elseif node.kind === NKSequence || node.kind === NKGroup
-        return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
-
-    elseif node.kind === NKSuperscript
-        base, sup = node.children[1], node.children[2]
-        base.kind === NKHorizBrace &&
-            return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
-        sup_s     = sup_style(style);  sup_scale = size_scale(sup_s, mc)
-        if _use_limits(base, style)
-            # Limits placement: sup centred above base.
-            tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
-            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-            sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
-            base_top = _boxes_top(tmp_base, upm)
-            s = scale / upm
-            y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
-                        y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
-            total_w = max(base_w, sup_w)
-            Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
-            # ±½ italic correction shifts superscript right over the slanted stroke.
-            Δsup += _base_italic_correction_em(tmp_base, ctx, scale) / 2
-            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-            _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
-            return total_w
-        else
-            tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-            sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
-            append!(boxes, tmp_base)
-            s = scale / upm
-            min_sup = is_cramped(style) ?
-                mc.superscript_shift_up_cramped * s :
-                mc.superscript_shift_up * s
-            # Rule 18a: for non-character bases (fractions, groups, …) the superscript
-            # baseline must not drop below base_top − supDrop (SuperscriptBaselineDropMax).
-            y_sup = _is_char_box(base) ? y0 + min_sup :
-                max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
-            # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
-            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
-            _emit_shifted!(boxes, tmp_sup, x0 + base_adv, y_sup)
-            return base_adv + sup_adv + mc.space_after_script * s
-        end
-
-    elseif node.kind === NKSubscript
-        base, sub = node.children[1], node.children[2]
-        base.kind === NKHorizBrace &&
-            return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
-        sub_s     = sub_style(style);  sub_scale = size_scale(sub_s, mc)
-        if _use_limits(base, style)
-            # Limits placement: sub centred below base.
-            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
-            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-            sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-            base_bot = _boxes_bottom(tmp_base, upm)
-            s = scale / upm
-            y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
-                        y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
-            total_w = max(base_w, sub_w)
-            Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
-            # ±½ italic correction shifts subscript left under the slanted stroke.
-            Δsub -= _base_italic_correction_em(tmp_base, ctx, scale) / 2
-            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-            _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
-            return total_w
-        else
-            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-            sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-            append!(boxes, tmp_base)
-            s = scale / upm
-            min_sub = mc.subscript_shift_down * s
-            # Rule 18a: for non-character bases the subscript baseline must be placed
-            # no higher than base_bottom − subDrop (SubscriptBaselineDropMin, σ₁₉).
-            y_sub = _is_char_box(base) ? y0 - min_sub :
-                min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
-            # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
-            y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
-            # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
-            # shifted left by the full IC so it sits under the stroke, not the advance width.
-            # Matches KaTeX supsub.ts: marginLeft = makeEm(-italic_correction) on subscript.
-            ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
-            _emit_shifted!(boxes, tmp_sub, x0 + base_adv - ic_em, y_sub)
-            return base_adv + sub_adv + mc.space_after_script * s
-        end
-
-    elseif node.kind === NKDecorated
-        base, sub, sup = node.children[1], node.children[2], node.children[3]
-        base.kind === NKHorizBrace &&
-            return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
-        sub_s = sub_style(style);  sub_scale = size_scale(sub_s, mc)
-        sup_s = sup_style(style);  sup_scale = size_scale(sup_s, mc)
-        if _use_limits(base, style)
-            # Limits placement: sub centred below, sup centred above.
-            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
-            base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-            sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-            sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
-            base_top = _boxes_top(tmp_base, upm)
-            base_bot = _boxes_bottom(tmp_base, upm)
-            s = scale / upm
-            y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
-                        y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
-            y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
-                        y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
-            total_w = max(base_w, sub_w, sup_w)
-            Δbase = (total_w - base_w) / 2
-            Δsub  = (total_w - sub_w)  / 2
-            Δsup  = (total_w - sup_w)  / 2
-            # ±½ italic correction shifts sub/sup to track the slanted operator stroke.
-            ic_half = _base_italic_correction_em(tmp_base, ctx, scale) / 2
-            Δsub -= ic_half
-            Δsup += ic_half
-            _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-            _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
-            _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
-            return total_w
-        else
-            tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
-            base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-            sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-            sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
-            append!(boxes, tmp_base)
-            script_x = x0 + base_adv
-            # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
-            # shifted left by the full IC so it sits under the stroke, not the advance width.
-            # Superscript is not shifted. Matches KaTeX supsub.ts behaviour.
-            ic_em = _base_italic_correction_em(tmp_base, ctx, scale)
-            s = scale / upm
-            min_sup = is_cramped(style) ?
-                mc.superscript_shift_up_cramped * s :
-                mc.superscript_shift_up * s
-            min_sub = mc.subscript_shift_down * s
-            # Rule 18a: for non-character bases apply supDrop/subDrop clamps (σ₁₈/σ₁₉).
-            y_sup = _is_char_box(base) ? y0 + min_sup :
-                max(y0 + min_sup, _boxes_top(tmp_base, upm) - mc.superscript_baseline_drop_max * s)
-            y_sub = _is_char_box(base) ? y0 - min_sub :
-                min(y0 - min_sub, _boxes_bottom(tmp_base, upm) - mc.subscript_baseline_drop_min * s)
-            # Rule 18c: superscript bottom must clear SuperscriptBottomMin above baseline.
-            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sup, upm))
-            # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
-            y_sub = min(y_sub, y0 - _boxes_top(tmp_sub, upm) + mc.subscript_top_max * s)
-            # Rule 18e: enforce minimum gap between superscript bottom and subscript top.
-            sup_bot = y_sup + _boxes_bottom(tmp_sup, upm)
-            sub_top = y_sub + _boxes_top(tmp_sub, upm)
-            min_gap = mc.sub_superscript_gap_min * s
-            if sup_bot - sub_top < min_gap
-                y_sub = sup_bot - min_gap - _boxes_top(tmp_sub, upm)
-                # Psi redistribution: if the superscript bottom falls below
-                # SuperscriptBottomMaxWithSubscript, shift both scripts upward together
-                # so that it reaches exactly that threshold (gap remains min_gap).
-                psi = mc.superscript_bottom_max_with_subscript * s - sup_bot
-                if psi > 0.0
-                    y_sup += psi
-                    y_sub += psi
-                end
-            end
-            _emit_shifted!(boxes, tmp_sub, script_x - ic_em, y_sub)
-            _emit_shifted!(boxes, tmp_sup, script_x,         y_sup)
-            return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
-        end
-
-    elseif node.kind === NKFrac
-        num_node, den_node = node.children[1], node.children[2]
-        num_s = frac_num_style(style);  num_scale = size_scale(num_s, mc)
-        den_s = frac_den_style(style);  den_scale = size_scale(den_s, mc)
-
-        rule_thickness = mc.fraction_rule_thickness / upm * scale
-        axis_em = mc.axis_height / upm * scale
-        # Rule centre at the math axis; rule.y is the bottom edge.
-        rule_y = y0 + axis_em - rule_thickness / 2
-
-        # Initial shifts and minimum gap constants from the MATH table.
-        if is_display(style)
-            num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
-            den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
-            num_gap   = mc.fraction_num_display_style_gap_min / upm * scale
-            den_gap   = mc.fraction_denom_display_style_gap_min / upm * scale
-        else
-            num_shift = mc.fraction_numerator_shift_up / upm * scale
-            den_shift = mc.fraction_denominator_shift_down / upm * scale
-            num_gap   = mc.fraction_numerator_gap_min / upm * scale
-            den_gap   = mc.fraction_denominator_gap_min / upm * scale
-        end
-
-        # Layout at y=0 to measure ink extents before applying shifts.
-        tmp_num = LayoutBox[];  tmp_den = LayoutBox[]
-        num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
-        den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
-
-        # Clamp shifts so the minimum gap between content and rule is respected
-        # (TeX Rule 15d/15e).  num_depth is how far the numerator ink extends
-        # below its own baseline; den_height is how far the denominator ink
-        # extends above its own baseline.
-        num_depth  = max(0.0, -_boxes_bottom(tmp_num, upm))
-        den_height = max(0.0,  _boxes_top(tmp_den,    upm))
-        num_shift  = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
-        den_shift  = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
-
-        frac_w = max(num_w, den_w)
-        num_y  = y0 + num_shift
-        den_y  = y0 - den_shift
-
-        Δnum = (frac_w - num_w) / 2
-        Δden = (frac_w - den_w) / 2
-        _emit_shifted!(boxes, tmp_num, x0 + Δnum, num_y)
-        _emit_shifted!(boxes, tmp_den, x0 + Δden, den_y)
-        push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
-        return frac_w
-
-    elseif node.kind === NKSqrt
-        # \sqrt[degree]{body}: children are [body] or [degree, body].
-        body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
-        tmp = LayoutBox[]
-        # Rule 11: body is built in the cramped style (prevents superscripts inside
-        # the radicand from protruding above the rule bar).
-        body_w   = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
-        body_top = _boxes_top(tmp, upm)
-        body_bot = _boxes_bottom(tmp, upm)
-
-        gap            = is_display(style) ?
-            mc.radical_display_style_vertical_gap / upm * scale :
-            mc.radical_vertical_gap / upm * scale
-        rule_thickness = mc.radical_rule_thickness / upm * scale
-
-        # KaTeX Rule 11: when the radical hook extends significantly below the
-        # body, redistribute excess vertical space so it is shared equally above
-        # and below rather than entirely below.  We peek at which glyph would be
-        # selected, measure its hook depth (−y_min), and increase the gap if
-        # the hook would overshoot the body by more than the initial clearance.
-        let peek_du = (body_top + gap + rule_thickness - body_bot) / scale * upm
-            g = _peek_radical_glyph(ctx, peek_du)
-            if g !== nothing
-                delim_depth = -g.y_min / upm * scale
-                body_extent = body_top - body_bot
-                if delim_depth > body_extent + gap
-                    gap = (gap + delim_depth - body_extent) / 2
-                end
-            end
-        end
-
-        rule_y_local   = body_top + gap           # bottom of rule bar (em, relative to y0)
-        rule_top_local = rule_y_local + rule_thickness
-
-        # required_du: vertical span from body bottom to rule top, in design
-        # units at scale=1 (matching the vert_constructions advance values).
-        required_du  = (rule_top_local - body_bot) / scale * upm
-        rule_top_em  = y0 + rule_top_local
-        rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
-
-        # When the selected radical variant is larger than the minimum required
-        # span, distribute the excess equally: shift the body DOWN by half the
-        # excess so it appears vertically centred in the hook area rather than
-        # crowded against the top bar.  The rule bar and radical stay in place.
-        body_shift = let g = _peek_radical_glyph(ctx, required_du)
-            if g !== nothing
-                excess = max(0.0, Float64(g.y_max - g.y_min) - required_du)
-                excess / (2.0 * upm) * scale
-            else
-                0.0
-            end
-        end
-
-        _emit_shifted!(boxes, tmp, x0 + rad_adv, y0 - body_shift)
-        push!(boxes, LayoutBox(HRule(body_w, rule_thickness), x0 + rad_adv, y0 + rule_y_local, scale))
-        return rad_adv + body_w
-
-    elseif node.kind === NKDelimited
-        # \left…\right: size delimiters to the inner content, centred on the math axis.
-        # node.value encodes "left_ps_name\x00right_ps_name".
-        sep        = findfirst('\x00', node.value)
-        left_name  = sep === nothing ? node.value : node.value[1:sep-1]
-        right_name = sep === nothing ? ""          : node.value[sep+1:end]
-
-        # Lay out inner content in a scratch buffer to measure its vertical extent.
-        tmp       = LayoutBox[]
-        content_w = _layout_children!(node.children, ctx, style, x0, y0, scale, tmp)
-
-        # Vertical extent of the inner content (in em units relative to y0).
-        content_top = _boxes_top(tmp, upm)
-        content_bot = _boxes_bottom(tmp, upm)
-        # Ensure a sensible non-zero span when content has no glyph ink.
-        content_top = max(content_top, y0 + mc.axis_height / upm * scale)
-        content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
-
-        # Required delimiter advance: sized so the delimiter covers the content
-        # symmetrically around the math axis.  Converted to unscaled design units
-        # because GlyphVariant.advance and GlyphAssemblyPart.full_advance are
-        # both stored in unscaled design units.
-        axis_em     = y0 + mc.axis_height / upm * scale
-        h_above     = max(0.0, content_top - axis_em)
-        h_below     = max(0.0, axis_em - content_bot)
-        required_em = 2.0 * max(h_above, h_below)
-        required_du = required_em / scale * upm
-
-        # Place left delimiter (variant or assembly), then inner content, then right.
-        # _layout_children! placed `tmp` boxes in absolute coords starting at x0;
-        # shift them rightwards by left_w to make room for the left delimiter.
-        left_w  = _layout_delim!(ctx, left_name,  required_du, x0,           y0, scale, boxes)
-        _emit_shifted!(boxes, tmp, left_w, 0.0)
-        right_w = _layout_delim!(ctx, right_name, required_du, x0 + left_w + content_w, y0, scale, boxes)
-
-        return left_w + content_w + right_w
-
-    elseif node.kind === NKFontSwitch
-        # Switch the active font variant for all recursive calls within the body.
-        new_ctx = _LayoutCtx(ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions,
-                             ctx.horiz_constructions, ctx.top_accent_attachments,
-                             ctx.italic_corrections,
-                             ctx.min_connector_overlap, ctx.mode, Symbol(node.value))
-        isempty(node.children) && return 0.0
-        return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
-
-    elseif node.kind === NKAccent
-        # KaTeX Rule 12 (accent.ts).  Build base in cramped style, then place the
-        # accent glyph above it, aligned via MathTopAccentAttachment when available.
-        isempty(node.children) && return 0.0
-        upm = ctx.upm; mc = ctx.mc; s = scale
-
-        # Build base in cramped style (Rule 12: base is typeset cramped).
-        tmp = LayoutBox[]
-        base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, s, tmp)
-        base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
-
-        # Emit base at (x0, y0).
-        _emit_shifted!(boxes, tmp, x0, y0)
-
-        # Look up the accent glyph.  Return base-only if not present in the font.
-        accent_ps = glyph_name_by_codepoint(ctx.family, _ACCENT_CODEPOINTS[node.value])
-        isempty(accent_ps) && return base_w
-        accent_m = glyph_metrics(ctx.family, accent_ps)
-
-        # Vertical placement: clearance = min(base_top, accent_base_height_em).
-        # This places the accent so it just clears a normal x-height character while
-        # riding higher above ascenders, matching the KaTeX clearance formula.
-        accent_base_h = mc.accent_base_height * s / upm
-        accent_y = y0 + max(0.0, base_top - accent_base_h)
-
-        # Wide accents (\widehat, \widetilde) are placed using a horizontally
-        # extensible glyph centred over the base; no MathTopAccentAttachment alignment.
-        if node.value ∈ _WIDE_ACCENT_COMMANDS && haskey(ctx.horiz_constructions, accent_ps)
-            _layout_wide_accent!(ctx, accent_ps, base_w, accent_y, x0, s, boxes)
-            return base_w
-        end
-
-        # Horizontal placement via MathTopAccentAttachment.
-        # If the base is a single glyph with a known attachment point, align the
-        # attachment x of the accent to the attachment x of the base.
-        # Fall back to centering when attachment data is unavailable.
-        base_attach_du = if length(tmp) == 1 && tmp[1].element isa Glyph
-            get(ctx.top_accent_attachments, (tmp[1].element::Glyph).glyph_name, nothing)
-        else
-            nothing
-        end
-        accent_attach_du = get(ctx.top_accent_attachments, accent_ps, nothing)
-
-        accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
-            x0 + (base_attach_du - accent_attach_du) * s / upm
-        else
-            # Centre by ink midpoint rather than advance_width/2: handles
-            # zero-advance combining characters (adv_w=0, x_min/x_max negative).
-            x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * s / (2.0 * upm)
-        end
-
-        push!(boxes, LayoutBox(Glyph(accent_ps, accent_m.advance_width,
-                                     accent_m.left_side_bearing,
-                                     accent_m.x_min, accent_m.y_min,
-                                     accent_m.x_max, accent_m.y_max),
-                               accent_x, accent_y, s))
-        return base_w
-
-    elseif node.kind === NKOverUnder
-        # Rules 9 & 10: \overline and \underline.
-        # \overline  (Rule 9): body in cramped style; HRule above with gap from MATH table.
-        # \underline (Rule 10): body in current style; HRule below with gap from MATH table.
-        isempty(node.children) && return 0.0
-        is_over = node.value == "overline"
-        child_style = is_over ? cramp_style(style) : style
-
-        tmp = LayoutBox[]
-        body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, tmp)
-
-        rule_t  = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
-        gap     = (is_over ? mc.overbar_vertical_gap   : mc.underbar_vertical_gap)   / upm * scale
-
-        _emit_shifted!(boxes, tmp, x0, y0)
-
-        if is_over
-            # Rule bottom sits at body_top + gap; rule top = body_top + gap + rule_t.
-            rule_y = y0 + _boxes_top(tmp, upm) + gap
-        else
-            # Rule top sits at body_bottom − gap; rule.y (bottom edge) = body_bottom − gap − rule_t.
-            rule_y = y0 + _boxes_bottom(tmp, upm) - gap - rule_t
-        end
-        push!(boxes, LayoutBox(HRule(body_w, rule_t), x0, rule_y, scale))
-        return body_w
-
-    elseif node.kind === NKHorizBrace
-        # Standalone brace with no script: body + brace only, no note.
+    k = node.kind
+    k === NKChar           && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKCommand        && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKOperator       && return _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKSpace          && return _layout_space!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKSequence       && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NKGroup          && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NKSuperscript    && return _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKSubscript      && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKDecorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKFrac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKSqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKDelimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKFontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKAccent         && return _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKOverUnder      && return _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKHorizBrace     &&
         return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
-
-    elseif node.kind === NKMatrix
-        return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
-
-    else
-        return 0.0   # NKText and unrecognised nodes: emit nothing
-    end
+    k === NKMatrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKLimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
+    # NKText and any unrecognised kind: emit nothing.
+    return 0.0
 end
 
 # ── Public API ────────────────────────────────────────────────────────────────
