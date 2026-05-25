@@ -4,8 +4,8 @@
 
 using TeXLayout, MathTeXEngine, LaTeXStrings, CairoMakie
 
-fig = Figure(size=(800, 700), backgroundcolor=:white)
-ax  = Axis(fig[1,1]; title="TeXLayout.jl — matrix environments")
+fig = Figure(size = (800, 700), backgroundcolor = :white)
+ax = Axis(fig[1, 1]; title = "TeXLayout.jl — matrix environments")
 CairoMakie.hidespines!(ax)
 CairoMakie.hidedecorations!(ax)
 
@@ -17,7 +17,7 @@ formulas = [
 ]
 
 for (x, y, formula) in formulas
-    text!(ax, x, y; text=formula, fontsize=26, align=(:center, :center))
+    text!(ax, x, y; text = formula, fontsize = 26, align = (:center, :center))
 end
 
 xlims!(ax, 0, 1); ylims!(ax, 0, 1)

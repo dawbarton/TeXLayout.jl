@@ -31,13 +31,13 @@ Lex a LaTeX math-mode string into a flat token stream.
 The input should not include surrounding dollar-sign delimiters.
 """
 function tokenize(input::AbstractString)::Vector{Token}
-    s      = String(input)
-    n      = ncodeunits(s)
+    s = String(input)
+    n = ncodeunits(s)
     tokens = Token[]
-    i      = 1
+    i = 1
 
     while i <= n
-        c    = s[i]
+        c = s[i]
         next = nextind(s, i)
 
         if c == '\\'

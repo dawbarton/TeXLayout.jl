@@ -9,16 +9,18 @@
 # Defaults: expression = "\\frac{a}{b}", output = "output.png"
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
+Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
 
-const BASE_PX  = 100   # pixels per em at Text scale (box.scale = 1.0)
-const MARGIN   = 20    # canvas border in pixels
+const BASE_PX = 100   # pixels per em at Text scale (box.scale = 1.0)
+const MARGIN = 20    # canvas border in pixels
 
-const FONT_PATH = joinpath(@__DIR__, "..", "..", "external",
+const FONT_PATH = joinpath(
+    @__DIR__, "..", "..", "external",
     "MathTeXEngine.jl", "assets", "fonts", "NewComputerModern",
-    "NewCMMath-Regular.otf")
+    "NewCMMath-Regular.otf"
+)
 
 # ── Canvas helpers ─────────────────────────────────────────────────────────────
 
@@ -52,17 +54,17 @@ end
 @inline function composite!(canvas, ry, cx, alpha::UInt8)
     1 <= ry <= size(canvas, 1) && 1 <= cx <= size(canvas, 2) || return
     old = Int(canvas[ry, cx])
-    a   = Int(alpha)
-    canvas[ry, cx] = UInt8(old * (255 - a) ÷ 255)
+    a = Int(alpha)
+    return canvas[ry, cx] = UInt8(old * (255 - a) ÷ 255)
 end
 
 # Fill a rectangle on the canvas with value `val` (0 = black).
-function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8=0x00)
+function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8 = 0x00)
     r1c = clamp(r1, 1, size(canvas, 1))
     r2c = clamp(r2, 1, size(canvas, 1))
     c1c = clamp(c1, 1, size(canvas, 2))
     c2c = clamp(c2, 1, size(canvas, 2))
-    canvas[r1c:r2c, c1c:c2c] .= val
+    return canvas[r1c:r2c, c1c:c2c] .= val
 end
 
 # Draw a horizontal line (1-pixel thick) with value `val`.
@@ -70,7 +72,7 @@ function hline!(canvas, row, c1, c2, val::UInt8)
     r = clamp(row, 1, size(canvas, 1))
     c1c = clamp(c1, 1, size(canvas, 2))
     c2c = clamp(c2, 1, size(canvas, 2))
-    canvas[r, c1c:c2c] .= val
+    return canvas[r, c1c:c2c] .= val
 end
 
 # ── Image output ─────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ end
 # PNG uses ImageMagick's `convert` via a pipe; no extra Julia packages needed.
 function write_image(path, canvas::Matrix{UInt8})
     H, W = size(canvas)
-    if endswith(path, ".png")
+    return if endswith(path, ".png")
         open(`convert pgm:- png:$path`, "w") do io
             write(io, "P5\n$W $H\n255\n")
             for row in 1:H
@@ -97,14 +99,14 @@ end
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 function main()
-    expr  = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
-    outf  = length(ARGS) >= 2 ? ARGS[2] : "output.png"
+    expr = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
+    outf = length(ARGS) >= 2 ? ARGS[2] : "output.png"
     style = TeXLayout.Display
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
     family = FontFamily(FONT_PATH)
-    mt     = TeXLayout.load_math_table(FONT_PATH)
-    boxes  = layout(parse_latex(expr), family, style)
+    mt = TeXLayout.load_math_table(FONT_PATH)
+    boxes = layout(parse_latex(expr), family, style)
 
     if isempty(boxes)
         @warn "No layout boxes produced for expression: $expr"
@@ -156,7 +158,7 @@ function main()
             by_px = round(Int, ext.horizontal_bearing[2])  # top bearing (pixels above baseline)
 
             # Top-left of bitmap on canvas
-            bmp_top  = pen_cy - by_px
+            bmp_top = pen_cy - by_px
             bmp_left = pen_cx + bx_px
 
             # bmp is indexed as bmp[col, row] (x first, then y)
@@ -185,7 +187,7 @@ function main()
     end
 
     write_image(outf, canvas)
-    println("Written $outf  ($(W)×$(H) px, $(length(boxes)) boxes)")
+    return println("Written $outf  ($(W)×$(H) px, $(length(boxes)) boxes)")
 end
 
 main()

@@ -17,15 +17,15 @@ using TeXLayout
 # ── Style enum values ─────────────────────────────────────────────────────────
 # Brought in as const aliases rather than `using TeXLayout: Display` because
 # Display, Text, and MathConstants conflict with Base exports.
-const Display             = TeXLayout.Display
-const CrampedDisplay      = TeXLayout.CrampedDisplay
-const Text                = TeXLayout.Text
-const CrampedText         = TeXLayout.CrampedText
-const Script              = TeXLayout.Script
-const CrampedScript       = TeXLayout.CrampedScript
-const ScriptScript        = TeXLayout.ScriptScript
+const Display = TeXLayout.Display
+const CrampedDisplay = TeXLayout.CrampedDisplay
+const Text = TeXLayout.Text
+const CrampedText = TeXLayout.CrampedText
+const Script = TeXLayout.Script
+const CrampedScript = TeXLayout.CrampedScript
+const ScriptScript = TeXLayout.ScriptScript
 const CrampedScriptScript = TeXLayout.CrampedScriptScript
-const MathConstants       = TeXLayout.MathConstants
+const MathConstants = TeXLayout.MathConstants
 
 # ── Internal names used by the test suite ────────────────────────────────────
 # These are not part of the public API but are exercised directly in tests that
@@ -37,24 +37,24 @@ using TeXLayout: load_math_table, MathTable
 
 # Glyph metrics
 using TeXLayout: GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint,
-                 glyph_metrics_upright
+    glyph_metrics_upright
 
 # Style helpers
 using TeXLayout: is_cramped, is_display, is_script, is_script_script,
-                 sup_style, sub_style, frac_num_style, frac_den_style,
-                 cramp_style, size_scale
+    sup_style, sub_style, frac_num_style, frac_den_style,
+    cramp_style, size_scale
 
 # Lexer
 using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
-                 TKLBrace, TKRBrace, TKMathShift, TKEOF
+    TKLBrace, TKRBrace, TKMathShift, TKEOF
 
 # Parser / AST node kinds
 using TeXLayout: NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
-                 NKDecorated, NKFrac, NKSqrt, NKDelimited, NKAccent,
-                 NKCommand, NKSpace, NKOperator, NKFontSwitch,
-                 NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
-                 NKOverUnder, NKText,
-                 NKStyleOverride, NKSizing, NKXArrow
+    NKDecorated, NKFrac, NKSqrt, NKDelimited, NKAccent,
+    NKCommand, NKSpace, NKOperator, NKFontSwitch,
+    NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
+    NKOverUnder, NKText,
+    NKStyleOverride, NKSizing, NKXArrow
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and

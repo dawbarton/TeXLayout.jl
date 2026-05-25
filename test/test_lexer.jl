@@ -8,9 +8,9 @@
     @testset "Single character" begin
         toks = tokenize("x")
         @test length(toks) == 2         # char + EOF
-        @test toks[1].kind  === TKChar
+        @test toks[1].kind === TKChar
         @test toks[1].value == "x"
-        @test toks[1].pos   == 1
+        @test toks[1].pos == 1
         @test toks[end].kind === TKEOF
     end
 
@@ -34,15 +34,17 @@
 
     @testset "Command: \\alpha" begin
         toks = tokenize("\\alpha")
-        @test toks[1].kind  === TKCommand
+        @test toks[1].kind === TKCommand
         @test toks[1].value == "\\alpha"
     end
 
     @testset "Command with argument: \\frac{a}{b}" begin
         toks = tokenize("\\frac{a}{b}")
         kinds = [t.kind for t in toks if t.kind !== TKEOF]
-        @test kinds == [TKCommand, TKLBrace, TKChar, TKRBrace,
-                        TKLBrace, TKChar, TKRBrace]
+        @test kinds == [
+            TKCommand, TKLBrace, TKChar, TKRBrace,
+            TKLBrace, TKChar, TKRBrace,
+        ]
         @test toks[1].value == "\\frac"
         @test toks[3].value == "a"
         @test toks[6].value == "b"
@@ -57,13 +59,13 @@
     @testset "Multi-letter command followed by letter: \\alphax" begin
         # \\alphax is the command \alphax (greedy match), not \alpha followed by x.
         toks = tokenize("\\alphax")
-        @test toks[1].kind  === TKCommand
+        @test toks[1].kind === TKCommand
         @test toks[1].value == "\\alphax"
     end
 
     @testset "Single-char special command: \\{" begin
         toks = tokenize("\\{")
-        @test toks[1].kind  === TKCommand
+        @test toks[1].kind === TKCommand
         @test toks[1].value == "\\{"
     end
 
@@ -79,8 +81,10 @@
     @testset "Mixed expression: x_i^{2} + y" begin
         toks = tokenize("x_i^{2}+y")
         kinds = [t.kind for t in toks if t.kind !== TKEOF]
-        @test kinds == [TKChar, TKSub, TKChar, TKSup,
-                        TKLBrace, TKChar, TKRBrace, TKChar, TKChar]
+        @test kinds == [
+            TKChar, TKSub, TKChar, TKSup,
+            TKLBrace, TKChar, TKRBrace, TKChar, TKChar,
+        ]
         @test toks[1].value == "x"
         @test toks[7].value == "}"
         @test toks[8].value == "+"

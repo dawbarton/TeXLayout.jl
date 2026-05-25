@@ -9,7 +9,7 @@
         tree = parse_latex("x")
         @test tree.kind === NKSequence
         @test length(tree.children) == 1
-        @test tree.children[1].kind  === NKChar
+        @test tree.children[1].kind === NKChar
         @test tree.children[1].value == "x"
     end
 
@@ -19,9 +19,9 @@
         sup = tree.children[1]
         @test sup.kind === NKSuperscript
         @test length(sup.children) == 2   # [base, exponent]
-        @test sup.children[1].kind  === NKChar
+        @test sup.children[1].kind === NKChar
         @test sup.children[1].value == "x"
-        @test sup.children[2].kind  === NKChar
+        @test sup.children[2].kind === NKChar
         @test sup.children[2].value == "2"
     end
 
@@ -107,14 +107,14 @@
     @testset "Named operator: \\sin" begin
         tree = parse_latex("\\sin")
         op = tree.children[1]
-        @test op.kind  === NKOperator
+        @test op.kind === NKOperator
         @test op.value == "sin"
     end
 
     @testset "\\operatorname{myop}" begin
         tree = parse_latex("\\operatorname{myop}")
         op = tree.children[1]
-        @test op.kind  === NKOperator
+        @test op.kind === NKOperator
         @test op.value == "myop"
     end
 
@@ -136,25 +136,25 @@
         @test length(tree.children) == 3
         sp = tree.children[2]
         @test sp.kind === NKSpace
-        @test sp.width ≈ 3/18
+        @test sp.width ≈ 3 / 18
     end
 
     @testset "Medium space: \\:" begin
         sp = parse_latex("a\\:b").children[2]
         @test sp.kind === NKSpace
-        @test sp.width ≈ 4/18
+        @test sp.width ≈ 4 / 18
     end
 
     @testset "Thick space: \\;" begin
         sp = parse_latex("a\\;b").children[2]
         @test sp.kind === NKSpace
-        @test sp.width ≈ 5/18
+        @test sp.width ≈ 5 / 18
     end
 
     @testset "Negative thin space: \\!" begin
         sp = parse_latex("a\\!b").children[2]
         @test sp.kind === NKSpace
-        @test sp.width ≈ -3/18
+        @test sp.width ≈ -3 / 18
     end
 
     @testset "Aliases: \\quad, \\qquad, \\enspace" begin
@@ -164,9 +164,9 @@
     end
 
     @testset "Aliases: \\thinspace, \\medspace, \\thickspace" begin
-        @test parse_latex("a\\thinspace b").children[2].width ≈ 3/18
-        @test parse_latex("a\\medspace b").children[2].width ≈ 4/18
-        @test parse_latex("a\\thickspace b").children[2].width ≈ 5/18
+        @test parse_latex("a\\thinspace b").children[2].width ≈ 3 / 18
+        @test parse_latex("a\\medspace b").children[2].width ≈ 4 / 18
+        @test parse_latex("a\\thickspace b").children[2].width ≈ 5 / 18
     end
 
     @testset "Kern: \\kern1em (unbraced)" begin
@@ -200,10 +200,10 @@
     end
 
     @testset "\\left(…\\right) stores glyph names in value" begin
-        node  = parse_latex("\\left( x \\right)")
+        node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NKDelimited
-        parts = split(delim.value, "\x00", limit=2)
+        parts = split(delim.value, "\x00", limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"
         # \right is consumed — only x remains as an inner child
@@ -212,19 +212,19 @@
     end
 
     @testset "\\left.…\\right) null left delimiter" begin
-        node  = parse_latex("\\left. x \\right)")
+        node = parse_latex("\\left. x \\right)")
         delim = node.children[1]
         @test delim.kind === NKDelimited
-        parts = split(delim.value, "\x00", limit=2)
+        parts = split(delim.value, "\x00", limit = 2)
         @test parts[1] == ""          # null delimiter maps to empty string
         @test parts[2] == "parenright"
     end
 
     @testset "\\left\\{…\\right\\} brace delimiters" begin
-        node  = parse_latex("\\left\\{ x \\right\\}")
+        node = parse_latex("\\left\\{ x \\right\\}")
         delim = node.children[1]
         @test delim.kind === NKDelimited
-        parts = split(delim.value, "\x00", limit=2)
+        parts = split(delim.value, "\x00", limit = 2)
         @test parts[1] == "braceleft"
         @test parts[2] == "braceright"
     end
@@ -234,26 +234,28 @@
     @testset "\\mathbf{x}: NKFontSwitch with variant mathbf" begin
         tree = parse_latex("\\mathbf{x}")
         fs = tree.children[1]
-        @test fs.kind  === NKFontSwitch
+        @test fs.kind === NKFontSwitch
         @test fs.value == "mathbf"
         @test length(fs.children) == 1
-        @test fs.children[1].kind  === NKChar
+        @test fs.children[1].kind === NKChar
         @test fs.children[1].value == "x"
     end
 
     @testset "\\mathit, \\mathrm, \\mathbb, \\mathcal, \\mathfrak produce NKFontSwitch" begin
-        for (cmd, variant) in (("\\mathit",  "mathit"),  ("\\mathrm",  "mathrm"),
-                                ("\\mathbb",  "mathbb"),  ("\\mathcal",  "mathcal"),
-                                ("\\mathfrak","mathfrak"), ("\\mathsf",  "mathsf"),
-                                ("\\mathtt",  "mathtt"))
+        for (cmd, variant) in (
+                ("\\mathit", "mathit"), ("\\mathrm", "mathrm"),
+                ("\\mathbb", "mathbb"), ("\\mathcal", "mathcal"),
+                ("\\mathfrak", "mathfrak"), ("\\mathsf", "mathsf"),
+                ("\\mathtt", "mathtt"),
+            )
             node = parse_latex("$(cmd){A}").children[1]
-            @test node.kind  === NKFontSwitch
+            @test node.kind === NKFontSwitch
             @test node.value == variant
         end
     end
 
     @testset "Aliases: \\Bbb, \\bold, \\frak produce NKFontSwitch" begin
-        @test parse_latex("\\Bbb{A}").children[1].value  == "mathbb"
+        @test parse_latex("\\Bbb{A}").children[1].value == "mathbb"
         @test parse_latex("\\bold{x}").children[1].value == "mathbf"
         @test parse_latex("\\frak{A}").children[1].value == "mathfrak"
         for alias in ("\\Bbb", "\\bold", "\\frak")
@@ -263,7 +265,7 @@
 
     @testset "\\boldsymbol and \\bm are aliases for boldsymbol" begin
         @test parse_latex("\\boldsymbol{x}").children[1].value == "boldsymbol"
-        @test parse_latex("\\bm{x}").children[1].value         == "boldsymbol"
+        @test parse_latex("\\bm{x}").children[1].value == "boldsymbol"
     end
 
     @testset "\\mathbf{x_i}: font switch wraps a subscript" begin
@@ -273,9 +275,9 @@
         @test fs.kind === NKFontSwitch
         body = fs.children[1]
         @test body.kind === NKSubscript
-        @test body.children[1].kind  === NKChar
+        @test body.children[1].kind === NKChar
         @test body.children[1].value == "x"
-        @test body.children[2].kind  === NKChar
+        @test body.children[2].kind === NKChar
         @test body.children[2].value == "i"
     end
 
@@ -293,8 +295,8 @@
 
     @testset "\\widehat{x}: produces NKAccent with value \\widehat" begin
         tree = parse_latex("\\widehat{x}")
-        acc  = tree.children[1]
-        @test acc.kind  === NKAccent
+        acc = tree.children[1]
+        @test acc.kind === NKAccent
         @test acc.value == "\\widehat"
         @test length(acc.children) == 1
         @test acc.children[1].kind === NKChar
@@ -302,8 +304,8 @@
 
     @testset "\\widetilde{x}: produces NKAccent with value \\widetilde" begin
         tree = parse_latex("\\widetilde{x}")
-        acc  = tree.children[1]
-        @test acc.kind  === NKAccent
+        acc = tree.children[1]
+        @test acc.kind === NKAccent
         @test acc.value == "\\widetilde"
         @test length(acc.children) == 1
         @test acc.children[1].kind === NKChar
@@ -311,8 +313,8 @@
 
     @testset "\\widehat{xyz}: wide accent over multi-char base" begin
         tree = parse_latex("\\widehat{xyz}")
-        acc  = tree.children[1]
-        @test acc.kind  === NKAccent
+        acc = tree.children[1]
+        @test acc.kind === NKAccent
         @test acc.value == "\\widehat"
         # {xyz} becomes a group or sequence with three NKChar children.
         body = acc.children[1]
@@ -323,7 +325,7 @@
     @testset "\\overbrace{x}: produces NKHorizBrace with command in value" begin
         tree = parse_latex("\\overbrace{x}")
         brace = tree.children[1]
-        @test brace.kind  === NKHorizBrace
+        @test brace.kind === NKHorizBrace
         @test brace.value == "\\overbrace"
         @test length(brace.children) == 1
         @test brace.children[1].kind === NKChar
@@ -331,25 +333,25 @@
     end
 
     @testset "\\underbrace{x}: produces NKHorizBrace" begin
-        tree  = parse_latex("\\underbrace{x}")
+        tree = parse_latex("\\underbrace{x}")
         brace = tree.children[1]
-        @test brace.kind  === NKHorizBrace
+        @test brace.kind === NKHorizBrace
         @test brace.value == "\\underbrace"
         @test length(brace.children) == 1
     end
 
     @testset "\\overbracket / \\underbracket / \\overparen / \\underparen" begin
         for cmd in ("\\overbracket", "\\underbracket", "\\overparen", "\\underparen")
-            tree  = parse_latex("$(cmd){x}")
+            tree = parse_latex("$(cmd){x}")
             brace = tree.children[1]
-            @test brace.kind  === NKHorizBrace
+            @test brace.kind === NKHorizBrace
             @test brace.value == cmd
         end
     end
 
     @testset "\\overbrace{x}^{n}: NKSuperscript with NKHorizBrace base" begin
         tree = parse_latex("\\overbrace{x}^{n}")
-        sup  = tree.children[1]
+        sup = tree.children[1]
         @test sup.kind === NKSuperscript
         @test sup.children[1].kind === NKHorizBrace
         @test sup.children[2].kind === NKChar
@@ -358,7 +360,7 @@
 
     @testset "\\underbrace{x}_{n}: NKSubscript with NKHorizBrace base" begin
         tree = parse_latex("\\underbrace{x}_{n}")
-        sub  = tree.children[1]
+        sub = tree.children[1]
         @test sub.kind === NKSubscript
         @test sub.children[1].kind === NKHorizBrace
         @test sub.children[2].kind === NKChar
@@ -367,7 +369,7 @@
 
     @testset "\\overbrace{x}^{n}_{m}: NKDecorated with NKHorizBrace base" begin
         tree = parse_latex("\\overbrace{x}^{n}_{m}")
-        dec  = tree.children[1]
+        dec = tree.children[1]
         @test dec.kind === NKDecorated
         @test dec.children[1].kind === NKHorizBrace   # base
         # children[2] = sub, children[3] = sup
@@ -440,7 +442,7 @@
         mat = tree.children[1]
         @test mat.kind === NKMatrix
         # value encodes env, nrow, and the raw colspec
-        parts = split(mat.value, "\x00"; limit=3)
+        parts = split(mat.value, "\x00"; limit = 3)
         @test parts[1] == "array"
         @test parts[2] == "2"
         @test parts[3] == "lcr"
@@ -454,7 +456,7 @@
         tree = parse_latex(raw"\begin{array}{|l|c|r|} x & y & z \end{array}")
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        parts = split(mat.value, "\x00"; limit=3)
+        parts = split(mat.value, "\x00"; limit = 3)
         @test parts[1] == "array"
         @test parts[3] == "|l|c|r|"
         @test length(mat.children) == 3
@@ -464,7 +466,7 @@
         tree = parse_latex(raw"\begin{array}{ll} f(x) & x > 0 \\ 0 & \text{else}\end{array}")
         mat = tree.children[1]
         @test mat.kind === NKMatrix
-        parts = split(mat.value, "\x00"; limit=3)
+        parts = split(mat.value, "\x00"; limit = 3)
         @test parts[3] == "ll"
         @test length(mat.children) == 4
     end
@@ -474,7 +476,7 @@
     @testset "\\dfrac wraps NKFrac in NKStyleOverride(Display)" begin
         tree = parse_latex(raw"\dfrac{a}{b}")
         node = tree.children[1]
-        @test node.kind  === NKStyleOverride
+        @test node.kind === NKStyleOverride
         @test node.value == "Display"
         @test length(node.children) == 1
         @test node.children[1].kind === NKFrac
@@ -483,17 +485,17 @@
     @testset "\\tfrac wraps NKFrac in NKStyleOverride(Text)" begin
         tree = parse_latex(raw"\tfrac{x}{y}")
         node = tree.children[1]
-        @test node.kind  === NKStyleOverride
+        @test node.kind === NKStyleOverride
         @test node.value == "Text"
         @test node.children[1].kind === NKFrac
     end
 
     @testset "\\displaystyle consumes rest of group" begin
         tree = parse_latex(raw"{\displaystyle a + b}")
-        grp  = tree.children[1]
+        grp = tree.children[1]
         @test grp.kind === NKGroup
         node = grp.children[1]
-        @test node.kind  === NKStyleOverride
+        @test node.kind === NKStyleOverride
         @test node.value == "Display"
         # children[1] is an NKSequence wrapping [a, +, b]
         @test node.children[1].kind === NKSequence
@@ -503,7 +505,7 @@
     @testset "\\scriptstyle has correct style name" begin
         tree = parse_latex(raw"{\scriptstyle x}")
         node = tree.children[1].children[1]
-        @test node.kind  === NKStyleOverride
+        @test node.kind === NKStyleOverride
         @test node.value == "Script"
     end
 
@@ -535,7 +537,7 @@
     @testset "\\xrightarrow{f} produces NKXArrow with above label" begin
         tree = parse_latex(raw"\xrightarrow{f}")
         node = tree.children[1]
-        @test node.kind  === NKXArrow
+        @test node.kind === NKXArrow
         @test node.value == "\\xrightarrow"
         @test length(node.children) == 1   # above only
     end
@@ -554,7 +556,7 @@
     @testset "\\xleftarrow is also NKXArrow" begin
         tree = parse_latex(raw"\xleftarrow{n}")
         node = tree.children[1]
-        @test node.kind  === NKXArrow
+        @test node.kind === NKXArrow
         @test node.value == "\\xleftarrow"
     end
 

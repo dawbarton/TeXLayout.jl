@@ -163,7 +163,11 @@ end
 
     # Returns true if parse_latex completes without throwing, false otherwise.
     # Used for tests where a crash is the current (broken) behaviour.
-    no_crash(expr) = try; parse_latex(expr); true; catch; false; end
+    no_crash(expr) = try
+        parse_latex(expr); true
+    catch
+        false
+    end
 
     @testset "superscript inside closing brace" begin
         # KaTeX error: "Expected group after '^'".
@@ -235,7 +239,7 @@ end
 
     @testset "nested superscripts" begin
         # x^{y^z}: the exponent argument is itself an NKSuperscript.
-        node  = parse_latex("x^{y^z}")
+        node = parse_latex("x^{y^z}")
         outer = node.children[1]
         @test outer.kind === NKSuperscript
         inner = outer.children[2]
@@ -246,7 +250,7 @@ end
 
     @testset "sqrt containing frac" begin
         # \sqrt{\frac{a}{b}}: the body of the radical is an NKFrac node.
-        node      = parse_latex("\\sqrt{\\frac{a}{b}}")
+        node = parse_latex("\\sqrt{\\frac{a}{b}}")
         sqrt_node = node.children[1]
         @test sqrt_node.kind === NKSqrt
         frac_node = sqrt_node.children[1]
@@ -259,11 +263,11 @@ end
         # \left( x \right): top-level child is NKDelimited.  The value field
         # encodes the delimiter glyph names; inner children contain only the
         # interior content (no \right command node).
-        node  = parse_latex("\\left( x \\right)")
+        node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NKDelimited
         @test any(c -> c.kind === NKChar && c.value == "x", delim.children)
-        parts = split(delim.value, "\x00", limit=2)
+        parts = split(delim.value, "\x00", limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"
     end

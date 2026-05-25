@@ -14,28 +14,31 @@ ff = default_font_family()
 
 # Teach Makie to use the same text fonts.  The :bolditalic key matches
 # Makie's theme convention (FontFamily.bolditalic → theme :bolditalic).
-set_theme!(fonts = (;
-    regular     = ff.regular,
-    bold        = ff.bold,
-    italic      = ff.italic,
-    bolditalic  = ff.bolditalic,
-))
+set_theme!(
+    fonts = (;
+        regular = ff.regular,
+        bold = ff.bold,
+        italic = ff.italic,
+        bolditalic = ff.bolditalic,
+    )
+)
 
 # ── Build figure ──────────────────────────────────────────────────────────────
 
 fig = Figure(size = (800, 500), backgroundcolor = :white)
 
-ax = Axis(fig[1, 1];
-    title  = "New Computer Modern — text and math in the same typeface",
+ax = Axis(
+    fig[1, 1];
+    title = "New Computer Modern — text and math in the same typeface",
     xlabel = L"x",
     ylabel = L"f(x)",
 )
 
 x = LinRange(0, 2π, 400)
 
-lines!(ax, x, sin.(x);            label = L"\sin(x)")
-lines!(ax, x, cos.(x);            label = L"\cos(x)")
-lines!(ax, x, exp.(-x/4).*sin.(3x); label = L"e^{-x/4}\sin(3x)")
+lines!(ax, x, sin.(x); label = L"\sin(x)")
+lines!(ax, x, cos.(x); label = L"\cos(x)")
+lines!(ax, x, exp.(-x / 4) .* sin.(3x); label = L"e^{-x/4}\sin(3x)")
 
 axislegend(ax; position = :rt)
 

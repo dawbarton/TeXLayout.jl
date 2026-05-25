@@ -114,7 +114,7 @@ end
 """All construction data for one stretchable glyph."""
 struct GlyphConstruction
     variants::Vector{GlyphVariant}           # pre-built size variants (may be empty)
-    assembly::Union{GlyphAssembly,Nothing}   # extensible assembly (may be nothing)
+    assembly::Union{GlyphAssembly, Nothing}   # extensible assembly (may be nothing)
 end
 
 # ── Full MATH table ────────────────────────────────────────────────────────────
@@ -123,12 +123,12 @@ end
 struct MathTable
     upm::Int                                          # units per em
     constants::MathConstants
-    italic_corrections::Dict{String,Int}              # glyph name → design units
-    top_accent_attachments::Dict{String,Int}          # glyph name → x position (design units)
+    italic_corrections::Dict{String, Int}              # glyph name → design units
+    top_accent_attachments::Dict{String, Int}          # glyph name → x position (design units)
     extended_shapes::Set{String}                      # glyph names with extended-shape flag
     min_connector_overlap::Int                        # MathVariants.MinConnectorOverlap
-    vert_constructions::Dict{String,GlyphConstruction}
-    horiz_constructions::Dict{String,GlyphConstruction}
+    vert_constructions::Dict{String, GlyphConstruction}
+    horiz_constructions::Dict{String, GlyphConstruction}
 end
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -138,23 +138,23 @@ end
 # ── Low-level big-endian readers ──────────────────────────────────────────────
 # p is always a 1-based Julia array index.
 
-@inline _u16(d::Vector{UInt8}, p::Int) = (UInt16(d[p]) << 8) | UInt16(d[p+1])
+@inline _u16(d::Vector{UInt8}, p::Int) = (UInt16(d[p]) << 8) | UInt16(d[p + 1])
 
 @inline _i16(d::Vector{UInt8}, p::Int) = reinterpret(Int16, _u16(d, p))
 
 @inline function _u32(d::Vector{UInt8}, p::Int)
-    (UInt32(d[p]) << 24) | (UInt32(d[p+1]) << 16) |
-    (UInt32(d[p+2]) << 8)  | UInt32(d[p+3])
+    return (UInt32(d[p]) << 24) | (UInt32(d[p + 1]) << 16) |
+        (UInt32(d[p + 2]) << 8) | UInt32(d[p + 3])
 end
 
 # ── sfnt table directory ──────────────────────────────────────────────────────
 
 # Returns (1-based start position, byte length) of the named 4-char table tag.
-function _find_table(data::Vector{UInt8}, tag::String)::Tuple{Int,Int}
+function _find_table(data::Vector{UInt8}, tag::String)::Tuple{Int, Int}
     n = Int(_u16(data, 5))   # numTables at sfnt offset 4
-    for i in 0:(n-1)
-        r = 13 + 16*i        # 1-based start of i-th TableRecord
-        String(data[r:r+3]) == tag || continue
+    for i in 0:(n - 1)
+        r = 13 + 16 * i        # 1-based start of i-th TableRecord
+        String(data[r:(r + 3)]) == tag || continue
         return Int(_u32(data, r + 8)) + 1, Int(_u32(data, r + 12))
     end
     error("Font table '$tag' not found")
@@ -164,15 +164,15 @@ end
 
 function _parse_upm(data::Vector{UInt8})::Int
     hs, _ = _find_table(data, "head")
-    Int(_u16(data, hs + 18))   # unitsPerEm at head offset 18
+    return Int(_u16(data, hs + 18))   # unitsPerEm at head offset 18
 end
 
 # Like _find_table but returns nothing if the tag is absent rather than erroring.
-function _find_table_opt(data::Vector{UInt8}, tag::String)::Union{Tuple{Int,Int}, Nothing}
+function _find_table_opt(data::Vector{UInt8}, tag::String)::Union{Tuple{Int, Int}, Nothing}
     n = Int(_u16(data, 5))
-    for i in 0:(n-1)
-        r = 13 + 16*i
-        String(data[r:r+3]) == tag || continue
+    for i in 0:(n - 1)
+        r = 13 + 16 * i
+        String(data[r:(r + 3)]) == tag || continue
         return Int(_u32(data, r + 8)) + 1, Int(_u32(data, r + 12))
     end
     return nothing
@@ -238,10 +238,10 @@ const _CFF_STD_STRINGS = [
 function _cff_skip_index(data::Vector{UInt8}, p::Int)::Int
     count = Int(_u16(data, p))
     count == 0 && return p + 2
-    off_size     = Int(data[p + 2])
+    off_size = Int(data[p + 2])
     last_off_pos = p + 3 + off_size * count    # position of the last offset entry
     last_off = 0
-    for j in 0:(off_size-1)
+    for j in 0:(off_size - 1)
         last_off = (last_off << 8) | Int(data[last_off_pos + j])
     end
     data_start = p + 3 + off_size * (count + 1)
@@ -255,12 +255,12 @@ function _cff_read_index(data::Vector{UInt8}, p::Int)::Tuple{Int, Vector{Vector{
     if count == 0
         return p + 2, Vector{Vector{UInt8}}()
     end
-    off_size   = Int(data[p + 2])
+    off_size = Int(data[p + 2])
     data_start = p + 3 + off_size * (count + 1)
 
     read_off(i::Int) = let q = p + 3 + off_size * i  # 0-indexed i
         v = 0
-        for j in 0:(off_size-1)
+        for j in 0:(off_size - 1)
             v = (v << 8) | Int(data[q + j])
         end
         v
@@ -271,7 +271,7 @@ function _cff_read_index(data::Vector{UInt8}, p::Int)::Tuple{Int, Vector{Vector{
         o1 = read_off(i - 1)
         o2 = read_off(i)
         # CFF offsets are 1-based within the data section
-        entries[i] = data[data_start + o1 - 1 : data_start + o2 - 2]
+        entries[i] = data[(data_start + o1 - 1):(data_start + o2 - 2)]
     end
     return data_start + read_off(count) - 1, entries
 end
@@ -284,14 +284,14 @@ function _cff_top_dict_charset_offset(dict_bytes::Vector{UInt8})::Int
     while i <= length(dict_bytes)
         b = Int(dict_bytes[i])
         if b == 28                     # int16
-            v = (Int(dict_bytes[i+1]) << 8) | Int(dict_bytes[i+2])
-            v >= 0x8000 && (v -= 0x10000)
+            v = (Int(dict_bytes[i + 1]) << 8) | Int(dict_bytes[i + 2])
+            v >= 0x8000 && (v -= 0x00010000)
             push!(operands, v);  i += 3
         elseif b == 29                 # int32
-            v = (Int(dict_bytes[i+1]) << 24) | (Int(dict_bytes[i+2]) << 16) |
-                (Int(dict_bytes[i+3]) << 8)  |  Int(dict_bytes[i+4])
+            v = (Int(dict_bytes[i + 1]) << 24) | (Int(dict_bytes[i + 2]) << 16) |
+                (Int(dict_bytes[i + 3]) << 8) | Int(dict_bytes[i + 4])
             # 0x100000000 is UInt64; subtract as Int to avoid UInt64 promotion.
-            v >= 0x80000000 && (v -= Int(0x100000000))
+            v >= 0x80000000 && (v -= Int(0x0000000100000000))
             push!(operands, v);  i += 5
         elseif b == 30                 # real — skip to 0xF end nibble
             i += 1
@@ -302,9 +302,9 @@ function _cff_top_dict_charset_offset(dict_bytes::Vector{UInt8})::Int
         elseif 32 <= b <= 246
             push!(operands, b - 139);  i += 1
         elseif 247 <= b <= 250
-            push!(operands, (b - 247) * 256 + Int(dict_bytes[i+1]) + 108);  i += 2
+            push!(operands, (b - 247) * 256 + Int(dict_bytes[i + 1]) + 108);  i += 2
         elseif 251 <= b <= 254
-            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i+1]) - 108);  i += 2
+            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i + 1]) - 108);  i += 2
         elseif b == 12                 # two-byte escape operator
             empty!(operands);  i += 2
         else                           # single-byte operator
@@ -320,52 +320,52 @@ end
 # Parse glyph names from the CFF table for post-table version 3.0 fonts.
 function _parse_cff_glyph_names(data::Vector{UInt8}, cff_start::Int)::Vector{String}
     maxp_start, _ = _find_table(data, "maxp")
-    num_glyphs    = Int(_u16(data, maxp_start + 4))
+    num_glyphs = Int(_u16(data, maxp_start + 4))
 
     # CFF header: major(1) minor(1) hdrSize(1) offSize(1)
     hdr_size = Int(data[cff_start + 2])
 
     # Navigate: Name INDEX → Top DICT INDEX → String INDEX
-    name_idx_start     = cff_start + hdr_size
-    top_dict_start     = _cff_skip_index(data, name_idx_start)
+    name_idx_start = cff_start + hdr_size
+    top_dict_start = _cff_skip_index(data, name_idx_start)
     top_dict_end, top_dict_entries = _cff_read_index(data, top_dict_start)
-    string_idx_start   = top_dict_end
+    string_idx_start = top_dict_end
 
     charset_off = isempty(top_dict_entries) ? 0 :
         _cff_top_dict_charset_offset(top_dict_entries[1])
 
     # Build String INDEX lookup: SID 391+ → custom glyph names
-    _, string_raw    = _cff_read_index(data, string_idx_start)
-    string_entries   = [String(e) for e in string_raw]
+    _, string_raw = _cff_read_index(data, string_idx_start)
+    string_entries = [String(e) for e in string_raw]
 
     function sid_to_name(sid::Int)::String
         sid < 391 && return _CFF_STD_STRINGS[sid + 1]
         idx = sid - 391 + 1
-        idx <= length(string_entries) ? string_entries[idx] : ".notdef"
+        return idx <= length(string_entries) ? string_entries[idx] : ".notdef"
     end
 
-    names    = Vector{String}(undef, num_glyphs)
+    names = Vector{String}(undef, num_glyphs)
     names[1] = ".notdef"   # GID 0 is always .notdef
 
     if charset_off <= 2
         # Built-in charset (0=ISOAdobe, 1=Expert, 2=ExpertSubset): SID ≈ GID
-        for gid in 1:(num_glyphs-1)
+        for gid in 1:(num_glyphs - 1)
             names[gid + 1] = sid_to_name(gid)
         end
     else
-        cs  = cff_start + charset_off
+        cs = cff_start + charset_off
         fmt = Int(data[cs])
         if fmt == 0
             # Flat array: uint16 SID per GID 1..num_glyphs-1
-            for gid in 1:(num_glyphs-1)
-                sid = Int(_u16(data, cs + 1 + 2*(gid-1)))
+            for gid in 1:(num_glyphs - 1)
+                sid = Int(_u16(data, cs + 1 + 2 * (gid - 1)))
                 names[gid + 1] = sid_to_name(sid)
             end
         elseif fmt == 1
             # Ranges with uint8 numLeft
             gid = 1;  p = cs + 1
             while gid < num_glyphs
-                sid    = Int(_u16(data, p))
+                sid = Int(_u16(data, p))
                 n_left = Int(data[p + 2])
                 for k in 0:n_left
                     gid >= num_glyphs && break
@@ -376,7 +376,7 @@ function _parse_cff_glyph_names(data::Vector{UInt8}, cff_start::Int)::Vector{Str
         else  # fmt == 2: ranges with uint16 numLeft
             gid = 1;  p = cs + 1
             while gid < num_glyphs
-                sid    = Int(_u16(data, p))
+                sid = Int(_u16(data, p))
                 n_left = Int(_u16(data, p + 2))
                 for k in 0:n_left
                     gid >= num_glyphs && break
@@ -447,7 +447,7 @@ function _parse_glyph_names(data::Vector{UInt8})::Vector{String}
     elseif version == 0x00020000  # 2.0 — custom names via glyphNameIndex + Pascal strings
         # post header is 32 bytes; numGlyphs follows immediately
         n = Int(_u16(data, ps + 32))
-        indices = [Int(_u16(data, ps + 34 + 2*(i-1))) for i in 1:n]
+        indices = [Int(_u16(data, ps + 34 + 2 * (i - 1))) for i in 1:n]
 
         # Determine how many custom Pascal strings we must read
         n_custom = 0
@@ -456,11 +456,11 @@ function _parse_glyph_names(data::Vector{UInt8})::Vector{String}
         end
 
         custom = String[]
-        p = ps + 34 + 2*n          # first Pascal string
+        p = ps + 34 + 2 * n          # first Pascal string
         post_end = ps + tlen - 1
         while length(custom) < n_custom && p <= post_end
             len = Int(data[p]);  p += 1
-            push!(custom, len > 0 ? String(data[p:p+len-1]) : "")
+            push!(custom, len > 0 ? String(data[p:(p + len - 1)]) : "")
             p += len
         end
 
@@ -491,14 +491,14 @@ function _read_coverage(data::Vector{UInt8}, p::Int)::Vector{Int}
     fmt = Int(_u16(data, p))
     if fmt == 1
         n = Int(_u16(data, p + 2))
-        return [Int(_u16(data, p + 4 + 2*(i-1))) for i in 1:n]
+        return [Int(_u16(data, p + 4 + 2 * (i - 1))) for i in 1:n]
     elseif fmt == 2
         n_ranges = Int(_u16(data, p + 2))
         glyphs = Int[]
-        for i in 0:(n_ranges-1)
-            rp = p + 4 + 6*i
+        for i in 0:(n_ranges - 1)
+            rp = p + 4 + 6 * i
             g_start = Int(_u16(data, rp))
-            g_end   = Int(_u16(data, rp + 2))
+            g_end = Int(_u16(data, rp + 2))
             append!(glyphs, g_start:g_end)
         end
         return glyphs
@@ -511,68 +511,69 @@ end
 
 function _parse_math_constants(data::Vector{UInt8}, p::Int)::MathConstants
     # Fields 1–4: plain int16 / uint16 (NOT MathValueRecord)
-    script_percent          = Int(_i16(data, p));     p += 2
-    script_script_percent   = Int(_i16(data, p));     p += 2
-    delim_min_h             = Int(_u16(data, p));     p += 2
-    display_op_min_h        = Int(_u16(data, p));     p += 2
+    script_percent = Int(_i16(data, p));     p += 2
+    script_script_percent = Int(_i16(data, p));     p += 2
+    delim_min_h = Int(_u16(data, p));     p += 2
+    display_op_min_h = Int(_u16(data, p));     p += 2
 
     # Fields 5–55: MathValueRecord = int16 value + Offset16 device table.
     # We read only the signed value and skip the device-table offset (2 bytes).
     function mv()::Int
-        v = Int(_i16(data, p)); p += 4; v
+        v = Int(_i16(data, p)); p += 4
+        return v
     end
 
-    math_leading                        = mv()
-    axis_height                         = mv()
-    accent_base_height                  = mv()
-    flattened_accent_base_height        = mv()
-    subscript_shift_down                = mv()
-    subscript_top_max                   = mv()
-    subscript_baseline_drop_min         = mv()
-    superscript_shift_up                = mv()
-    superscript_shift_up_cramped        = mv()
-    superscript_bottom_min              = mv()
-    superscript_baseline_drop_max       = mv()
-    sub_superscript_gap_min             = mv()
+    math_leading = mv()
+    axis_height = mv()
+    accent_base_height = mv()
+    flattened_accent_base_height = mv()
+    subscript_shift_down = mv()
+    subscript_top_max = mv()
+    subscript_baseline_drop_min = mv()
+    superscript_shift_up = mv()
+    superscript_shift_up_cramped = mv()
+    superscript_bottom_min = mv()
+    superscript_baseline_drop_max = mv()
+    sub_superscript_gap_min = mv()
     superscript_bottom_max_with_subscript = mv()
-    space_after_script                  = mv()
-    upper_limit_gap_min                 = mv()
-    upper_limit_baseline_rise_min       = mv()
-    lower_limit_gap_min                 = mv()
-    lower_limit_baseline_drop_min       = mv()
-    stack_top_shift_up                  = mv()
-    stack_top_display_style_shift_up    = mv()
-    stack_bottom_shift_down             = mv()
+    space_after_script = mv()
+    upper_limit_gap_min = mv()
+    upper_limit_baseline_rise_min = mv()
+    lower_limit_gap_min = mv()
+    lower_limit_baseline_drop_min = mv()
+    stack_top_shift_up = mv()
+    stack_top_display_style_shift_up = mv()
+    stack_bottom_shift_down = mv()
     stack_bottom_display_style_shift_down = mv()
-    stack_gap_min                       = mv()
-    stack_display_style_gap_min         = mv()
-    stretch_stack_top_shift_up          = mv()
-    stretch_stack_bottom_shift_down     = mv()
-    stretch_stack_gap_above_min         = mv()
-    stretch_stack_gap_below_min         = mv()
-    fraction_numerator_shift_up         = mv()
+    stack_gap_min = mv()
+    stack_display_style_gap_min = mv()
+    stretch_stack_top_shift_up = mv()
+    stretch_stack_bottom_shift_down = mv()
+    stretch_stack_gap_above_min = mv()
+    stretch_stack_gap_below_min = mv()
+    fraction_numerator_shift_up = mv()
     fraction_numerator_display_style_shift_up = mv()
-    fraction_denominator_shift_down     = mv()
+    fraction_denominator_shift_down = mv()
     fraction_denominator_display_style_shift_down = mv()
-    fraction_numerator_gap_min          = mv()
-    fraction_num_display_style_gap_min  = mv()
-    fraction_rule_thickness             = mv()
-    fraction_denominator_gap_min        = mv()
+    fraction_numerator_gap_min = mv()
+    fraction_num_display_style_gap_min = mv()
+    fraction_rule_thickness = mv()
+    fraction_denominator_gap_min = mv()
     fraction_denom_display_style_gap_min = mv()
-    skewed_fraction_horizontal_gap      = mv()
-    skewed_fraction_vertical_gap        = mv()
-    overbar_vertical_gap                = mv()
-    overbar_rule_thickness              = mv()
-    overbar_extra_ascender              = mv()
-    underbar_vertical_gap               = mv()
-    underbar_rule_thickness             = mv()
-    underbar_extra_descender            = mv()
-    radical_vertical_gap                = mv()
-    radical_display_style_vertical_gap  = mv()
-    radical_rule_thickness              = mv()
-    radical_extra_ascender              = mv()
-    radical_kern_before_degree          = mv()
-    radical_kern_after_degree           = mv()
+    skewed_fraction_horizontal_gap = mv()
+    skewed_fraction_vertical_gap = mv()
+    overbar_vertical_gap = mv()
+    overbar_rule_thickness = mv()
+    overbar_extra_ascender = mv()
+    underbar_vertical_gap = mv()
+    underbar_rule_thickness = mv()
+    underbar_extra_descender = mv()
+    radical_vertical_gap = mv()
+    radical_display_style_vertical_gap = mv()
+    radical_rule_thickness = mv()
+    radical_extra_ascender = mv()
+    radical_kern_before_degree = mv()
+    radical_kern_after_degree = mv()
 
     # Field 56: plain int16 (NOT MathValueRecord)
     radical_degree_bottom_raise_percent = Int(_i16(data, p))
@@ -611,36 +612,40 @@ end
 
 # Parses italic corrections and top-accent attachments from a MathItalicsCorrection-
 # or MathTopAccentAttachment-style sub-table (they share the same layout).
-function _parse_math_value_coverage(data::Vector{UInt8}, subtable_start::Int,
-                                     glyph_names::Vector{String})::Dict{String,Int}
+function _parse_math_value_coverage(
+        data::Vector{UInt8}, subtable_start::Int,
+        glyph_names::Vector{String}
+    )::Dict{String, Int}
     cov_off = Int(_u16(data, subtable_start))
-    count   = Int(_u16(data, subtable_start + 2))
-    glyphs  = _read_coverage(data, subtable_start + cov_off)
-    result  = Dict{String,Int}()
+    count = Int(_u16(data, subtable_start + 2))
+    glyphs = _read_coverage(data, subtable_start + cov_off)
+    result = Dict{String, Int}()
     for i in 1:min(count, length(glyphs))
-        gid  = glyphs[i] + 1   # 0-based glyph ID → 1-based index into glyph_names
+        gid = glyphs[i] + 1   # 0-based glyph ID → 1-based index into glyph_names
         gid <= length(glyph_names) || continue
         name = glyph_names[gid]
         isempty(name) && continue
-        value = Int(_i16(data, subtable_start + 4 + 4*(i-1)))
+        value = Int(_i16(data, subtable_start + 4 + 4 * (i - 1)))
         result[name] = value
     end
     return result
 end
 
-function _parse_math_glyph_info(data::Vector{UInt8}, info_start::Int,
-                                  glyph_names::Vector{String})
-    italic_off   = Int(_u16(data, info_start))
-    accent_off   = Int(_u16(data, info_start + 2))
-    ext_off      = Int(_u16(data, info_start + 4))
+function _parse_math_glyph_info(
+        data::Vector{UInt8}, info_start::Int,
+        glyph_names::Vector{String}
+    )
+    italic_off = Int(_u16(data, info_start))
+    accent_off = Int(_u16(data, info_start + 2))
+    ext_off = Int(_u16(data, info_start + 4))
 
-    italic_corrections    = italic_off != 0 ?
+    italic_corrections = italic_off != 0 ?
         _parse_math_value_coverage(data, info_start + italic_off, glyph_names) :
-        Dict{String,Int}()
+        Dict{String, Int}()
 
     top_accent_attachments = accent_off != 0 ?
         _parse_math_value_coverage(data, info_start + accent_off, glyph_names) :
-        Dict{String,Int}()
+        Dict{String, Int}()
 
     extended_shapes = Set{String}()
     if ext_off != 0
@@ -656,14 +661,16 @@ end
 
 # ── MathVariants ──────────────────────────────────────────────────────────────
 
-function _parse_glyph_construction(data::Vector{UInt8}, con_start::Int,
-                                    glyph_names::Vector{String})::GlyphConstruction
-    asm_off      = Int(_u16(data, con_start))
+function _parse_glyph_construction(
+        data::Vector{UInt8}, con_start::Int,
+        glyph_names::Vector{String}
+    )::GlyphConstruction
+    asm_off = Int(_u16(data, con_start))
     variant_count = Int(_u16(data, con_start + 2))
 
     variants = GlyphVariant[]
-    for i in 0:(variant_count-1)
-        vp  = con_start + 4 + 4*i
+    for i in 0:(variant_count - 1)
+        vp = con_start + 4 + 4 * i
         gid = Int(_u16(data, vp)) + 1
         adv = Int(_u16(data, vp + 2))
         gid <= length(glyph_names) || continue
@@ -672,21 +679,25 @@ function _parse_glyph_construction(data::Vector{UInt8}, con_start::Int,
 
     assembly = nothing
     if asm_off != 0
-        ap          = con_start + asm_off
-        ital_corr   = Int(_i16(data, ap))      # MathValueRecord: int16 + skip 2
-        part_count  = Int(_u16(data, ap + 4))
-        parts       = GlyphAssemblyPart[]
-        for i in 0:(part_count-1)
-            pp           = ap + 6 + 10*i
-            gid          = Int(_u16(data, pp)) + 1
-            start_con    = Int(_u16(data, pp + 2))
-            end_con      = Int(_u16(data, pp + 4))
-            full_adv     = Int(_u16(data, pp + 6))
-            flags        = Int(_u16(data, pp + 8))
-            is_extender  = (flags & 0x01) != 0
+        ap = con_start + asm_off
+        ital_corr = Int(_i16(data, ap))      # MathValueRecord: int16 + skip 2
+        part_count = Int(_u16(data, ap + 4))
+        parts = GlyphAssemblyPart[]
+        for i in 0:(part_count - 1)
+            pp = ap + 6 + 10 * i
+            gid = Int(_u16(data, pp)) + 1
+            start_con = Int(_u16(data, pp + 2))
+            end_con = Int(_u16(data, pp + 4))
+            full_adv = Int(_u16(data, pp + 6))
+            flags = Int(_u16(data, pp + 8))
+            is_extender = (flags & 0x01) != 0
             gid <= length(glyph_names) || continue
-            push!(parts, GlyphAssemblyPart(glyph_names[gid], full_adv,
-                                           start_con, end_con, is_extender))
+            push!(
+                parts, GlyphAssemblyPart(
+                    glyph_names[gid], full_adv,
+                    start_con, end_con, is_extender
+                )
+            )
         end
         assembly = GlyphAssembly(ital_corr, parts)
     end
@@ -694,21 +705,23 @@ function _parse_glyph_construction(data::Vector{UInt8}, con_start::Int,
     return GlyphConstruction(variants, assembly)
 end
 
-function _parse_math_variants(data::Vector{UInt8}, var_start::Int,
-                               glyph_names::Vector{String})
-    min_overlap  = Int(_u16(data, var_start))
+function _parse_math_variants(
+        data::Vector{UInt8}, var_start::Int,
+        glyph_names::Vector{String}
+    )
+    min_overlap = Int(_u16(data, var_start))
     vert_cov_off = Int(_u16(data, var_start + 2))
     horiz_cov_off = Int(_u16(data, var_start + 4))
-    vert_count   = Int(_u16(data, var_start + 6))
-    horiz_count  = Int(_u16(data, var_start + 8))
+    vert_count = Int(_u16(data, var_start + 6))
+    horiz_count = Int(_u16(data, var_start + 8))
 
     function build_constructions(cov_off, count, con_offsets_start)
-        result = Dict{String,GlyphConstruction}()
+        result = Dict{String, GlyphConstruction}()
         cov_off == 0 && return result
         glyphs = _read_coverage(data, var_start + cov_off)
         for i in 1:count
-            con_off = Int(_u16(data, con_offsets_start + 2*(i-1)))
-            con     = _parse_glyph_construction(data, var_start + con_off, glyph_names)
+            con_off = Int(_u16(data, con_offsets_start + 2 * (i - 1)))
+            con = _parse_glyph_construction(data, var_start + con_off, glyph_names)
             i <= length(glyphs) || continue
             gid = glyphs[i] + 1
             gid <= length(glyph_names) || continue
@@ -719,13 +732,17 @@ function _parse_math_variants(data::Vector{UInt8}, var_start::Int,
     end
 
     # Vert construction offsets start at byte 10 of MathVariants; horiz follow after
-    vert_con_offsets_start  = var_start + 10
-    horiz_con_offsets_start = var_start + 10 + 2*vert_count
+    vert_con_offsets_start = var_start + 10
+    horiz_con_offsets_start = var_start + 10 + 2 * vert_count
 
-    vert_constructions  = build_constructions(vert_cov_off,  vert_count,
-                                              vert_con_offsets_start)
-    horiz_constructions = build_constructions(horiz_cov_off, horiz_count,
-                                              horiz_con_offsets_start)
+    vert_constructions = build_constructions(
+        vert_cov_off, vert_count,
+        vert_con_offsets_start
+    )
+    horiz_constructions = build_constructions(
+        horiz_cov_off, horiz_count,
+        horiz_con_offsets_start
+    )
 
     return min_overlap, vert_constructions, horiz_constructions
 end
@@ -738,15 +755,15 @@ end
 Parse the MATH table from an OpenType font file.
 """
 function load_math_table(font_path::AbstractString)::MathTable
-    data        = read(font_path)
-    upm         = _parse_upm(data)
+    data = read(font_path)
+    upm = _parse_upm(data)
     glyph_names = _parse_glyph_names(data)
 
     math_start, _ = _find_table(data, "MATH")
     # MATH header: uint16 major + uint16 minor + three Offset16 sub-table pointers
-    mc_off   = Int(_u16(data, math_start + 4))
+    mc_off = Int(_u16(data, math_start + 4))
     info_off = Int(_u16(data, math_start + 6))
-    var_off  = Int(_u16(data, math_start + 8))
+    var_off = Int(_u16(data, math_start + 8))
 
     constants = _parse_math_constants(data, math_start + mc_off)
 
@@ -756,6 +773,8 @@ function load_math_table(font_path::AbstractString)::MathTable
     min_overlap, vert_constructions, horiz_constructions =
         _parse_math_variants(data, math_start + var_off, glyph_names)
 
-    return MathTable(upm, constants, italic_corrections, top_accent_attachments,
-                     extended_shapes, min_overlap, vert_constructions, horiz_constructions)
+    return MathTable(
+        upm, constants, italic_corrections, top_accent_attachments,
+        extended_shapes, min_overlap, vert_constructions, horiz_constructions
+    )
 end

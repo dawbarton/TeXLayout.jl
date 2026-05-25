@@ -11,48 +11,48 @@
 #   julia tools/demo_sheet.jl /path/to/Math.otf out.png # custom font path
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
+Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
 
-const BASE_PX   = 100   # pixels per em for math content
-const MARGIN    = 14    # canvas border in pixels
-const EXPR_GAP  = 34    # horizontal gap between side-by-side expressions (px)
-const ROW_GAP   = 10    # vertical gap between strips (px)
-const SEC_H     = 22    # section-header strip height (px)
-const TITLE_H   = 30    # title-bar strip height (px)
-const SEC_PX    = 13    # FreeType pixel size for section-header text
-const TITLE_PX  = 16    # FreeType pixel size for title text
+const BASE_PX = 100   # pixels per em for math content
+const MARGIN = 14    # canvas border in pixels
+const EXPR_GAP = 34    # horizontal gap between side-by-side expressions (px)
+const ROW_GAP = 10    # vertical gap between strips (px)
+const SEC_H = 22    # section-header strip height (px)
+const TITLE_H = 30    # title-bar strip height (px)
+const SEC_PX = 13    # FreeType pixel size for section-header text
+const TITLE_PX = 16    # FreeType pixel size for title text
 
 # ── Canvas helpers ────────────────────────────────────────────────────────────
 
 @inline function composite!(canvas, ry, cx, alpha::UInt8)
     1 <= ry <= size(canvas, 1) && 1 <= cx <= size(canvas, 2) || return
     old = Int(canvas[ry, cx])
-    canvas[ry, cx] = UInt8(old * (255 - Int(alpha)) ÷ 255)
+    return canvas[ry, cx] = UInt8(old * (255 - Int(alpha)) ÷ 255)
 end
 
 # Composite a white foreground glyph (white-on-dark, used for headers).
 @inline function composite_white!(canvas, ry, cx, alpha::UInt8)
     1 <= ry <= size(canvas, 1) && 1 <= cx <= size(canvas, 2) || return
     old = Int(canvas[ry, cx])
-    canvas[ry, cx] = UInt8(old + (255 - old) * Int(alpha) ÷ 255)
+    return canvas[ry, cx] = UInt8(old + (255 - old) * Int(alpha) ÷ 255)
 end
 
-function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8=0x00)
+function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8 = 0x00)
     r1 = clamp(r1, 1, size(canvas, 1)); r2 = clamp(r2, 1, size(canvas, 1))
     c1 = clamp(c1, 1, size(canvas, 2)); c2 = clamp(c2, 1, size(canvas, 2))
-    r1 > r2 || c1 > c2 || (canvas[r1:r2, c1:c2] .= val)
+    return r1 > r2 || c1 > c2 || (canvas[r1:r2, c1:c2] .= val)
 end
 
 function hline!(canvas, row, c1, c2, val::UInt8)
     r = clamp(row, 1, size(canvas, 1))
-    canvas[r, clamp(c1,1,size(canvas,2)):clamp(c2,1,size(canvas,2))] .= val
+    return canvas[r, clamp(c1, 1, size(canvas, 2)):clamp(c2, 1, size(canvas, 2))] .= val
 end
 
 # ── Bounding box in em units ──────────────────────────────────────────────────
 
-function em_bbox(boxes, upm; pad=0.10)
+function em_bbox(boxes, upm; pad = 0.1)
     bx1 = bx2 = by1 = by2 = 0.0
     for box in boxes
         el = box.element
@@ -79,9 +79,11 @@ end
 
 # ── Render one LaTeX expression to a canvas ───────────────────────────────────
 
-function render_expr(expr::String, family, mt, face_math,
-                     face_regular=nothing,
-                     style=TeXLayout.Display)::Matrix{UInt8}
+function render_expr(
+        expr::String, family, mt, face_math,
+        face_regular = nothing,
+        style = TeXLayout.Display
+    )::Matrix{UInt8}
     local boxes
     try
         boxes = layout(parse_latex(expr), family, style)
@@ -109,7 +111,7 @@ function render_expr(expr::String, family, mt, face_math,
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_x(box.x); pen_cy = em_y(box.y)
             face = (el.font_slot === :regular && face_regular !== nothing) ?
-                       face_regular : face_math
+                face_regular : face_math
             local bmp, ext
             try
                 bmp, ext = renderface(face, el.glyph_name, pixel_size)
@@ -118,20 +120,24 @@ function render_expr(expr::String, family, mt, face_math,
             end
             bx_px = round(Int, ext.horizontal_bearing[1])
             by_px = round(Int, ext.horizontal_bearing[2])
-            bmp_top  = pen_cy - by_px
+            bmp_top = pen_cy - by_px
             bmp_left = pen_cx + bx_px
             for row in axes(bmp, 2), col in axes(bmp, 1)
                 alpha = bmp[col, row]; alpha == 0x00 && continue
                 composite!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
             end
         elseif el isa HRule
-            fill_rect!(canvas,
+            fill_rect!(
+                canvas,
                 em_y(box.y + el.thickness), em_x(box.x),
-                em_y(box.y),               em_x(box.x + el.width))
+                em_y(box.y), em_x(box.x + el.width)
+            )
         elseif el isa VRule
-            fill_rect!(canvas,
+            fill_rect!(
+                canvas,
                 em_y(box.y + el.height), em_x(box.x),
-                em_y(box.y),             em_x(box.x + el.thickness))
+                em_y(box.y), em_x(box.x + el.thickness)
+            )
         end
     end
     return canvas
@@ -142,8 +148,10 @@ end
 # Render ASCII text onto a pre-filled canvas using the given FreeType face and
 # pixel size.  `fg` controls the glyph colour: :black renders dark-on-light,
 # :white renders light-on-dark (for header strips).
-function render_text!(canvas, face, text::String, x0::Int, px::Int,
-                      fg::Symbol=:black)
+function render_text!(
+        canvas, face, text::String, x0::Int, px::Int,
+        fg::Symbol = :black
+    )
     H = size(canvas, 1)
     x = x0
     for ch in text
@@ -155,7 +163,7 @@ function render_text!(canvas, face, text::String, x0::Int, px::Int,
         end
         bx_px = round(Int, ext.horizontal_bearing[1])
         by_px = round(Int, ext.horizontal_bearing[2])
-        top  = H ÷ 2 - by_px ÷ 2 + 2
+        top = H ÷ 2 - by_px ÷ 2 + 2
         left = x + bx_px
         for row in axes(bmp, 2), col in axes(bmp, 1)
             alpha = bmp[col, row]; alpha == 0x00 && continue
@@ -169,6 +177,7 @@ function render_text!(canvas, face, text::String, x0::Int, px::Int,
         x += round(Int, ext.advance[1] / 64)
         x > size(canvas, 2) - MARGIN && break
     end
+    return
 end
 
 # ── Header strips ─────────────────────────────────────────────────────────────
@@ -181,7 +190,7 @@ end
 
 function render_section_header(face, text::String, W::Int)::Matrix{UInt8}
     # Narrow dark band above, then the section label strip.
-    band  = fill(UInt8(0x55), 3, W)
+    band = fill(UInt8(0x55), 3, W)
     strip = fill(UInt8(0x44), SEC_H, W)
     render_text!(strip, face, text, MARGIN, SEC_PX, :white)
     return vcat(band, strip)
@@ -190,7 +199,7 @@ end
 # ── Composition helpers ───────────────────────────────────────────────────────
 
 # Place canvases side by side, vertically centred, separated by `gap` pixels.
-function hcat_canvases(cs::Vector{Matrix{UInt8}}, gap::Int=EXPR_GAP)::Matrix{UInt8}
+function hcat_canvases(cs::Vector{Matrix{UInt8}}, gap::Int = EXPR_GAP)::Matrix{UInt8}
     isempty(cs) && return fill(0xff, 40, 40)
     H = maximum(size(c, 1) for c in cs)
     W = sum(size(c, 2) for c in cs) + gap * (length(cs) - 1)
@@ -199,7 +208,7 @@ function hcat_canvases(cs::Vector{Matrix{UInt8}}, gap::Int=EXPR_GAP)::Matrix{UIn
     for c in cs
         h, w = size(c)
         r = (H - h) ÷ 2
-        out[r+1:r+h, x:x+w-1] .= c
+        out[(r + 1):(r + h), x:(x + w - 1)] .= c
         x += w + gap
     end
     return out
@@ -210,12 +219,12 @@ function pad_to_width(c::Matrix{UInt8}, W::Int)::Matrix{UInt8}
     h, w = size(c)
     w >= W && return c
     out = fill(0xff, h, W)
-    out[:, MARGIN+1:min(W, MARGIN+w)] .= c[:, 1:min(w, W-MARGIN)]
+    out[:, (MARGIN + 1):min(W, MARGIN + w)] .= c[:, 1:min(w, W - MARGIN)]
     return out
 end
 
 # Stack rows of canvases vertically with `gap` pixels of white space between them.
-function vstack(rows::Vector{Matrix{UInt8}}, gap::Int=ROW_GAP)::Matrix{UInt8}
+function vstack(rows::Vector{Matrix{UInt8}}, gap::Int = ROW_GAP)::Matrix{UInt8}
     isempty(rows) && return fill(0xff, 40, 40)
     W = maximum(size(r, 2) for r in rows)
     parts = Matrix{UInt8}[]
@@ -281,7 +290,7 @@ function write_png(path, canvas::Matrix{UInt8})
             write(io, view(canvas, row, :))
         end
     end
-    println("Written $path  ($(W)×$(H) px)")
+    return println("Written $path  ($(W)×$(H) px)")
 end
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -303,11 +312,11 @@ function main()
         font_family(font_spec)
     end
 
-    math_path    = family.math
-    mt           = TeXLayout.load_math_table(math_path)
-    face_math    = FTFont(math_path)
+    math_path = family.math
+    mt = TeXLayout.load_math_table(math_path)
+    face_math = FTFont(math_path)
     face_regular = family.regular !== nothing ? FTFont(family.regular) : nothing
-    font_name    = FreeTypeAbstraction.family_name(face_math)
+    font_name = FreeTypeAbstraction.family_name(face_math)
 
     # Collect all per-section expression canvases.
     section_strips = Matrix{UInt8}[]
@@ -334,7 +343,7 @@ function main()
         expr_canvas = pad_to_width(section_strips[i], W)
         h, w = size(expr_canvas)
         padded = fill(0xff, h, W)
-        padded[:, MARGIN+1:min(W, MARGIN+w)] .= expr_canvas[:, 1:min(w, W-MARGIN)]
+        padded[:, (MARGIN + 1):min(W, MARGIN + w)] .= expr_canvas[:, 1:min(w, W - MARGIN)]
         push!(all_rows, padded)
     end
 
@@ -342,7 +351,7 @@ function main()
     push!(all_rows, fill(UInt8(0x1a), 4, W))
 
     sheet = vstack(all_rows, 0)
-    write_png(outf, sheet)
+    return write_png(outf, sheet)
 end
 
 main()

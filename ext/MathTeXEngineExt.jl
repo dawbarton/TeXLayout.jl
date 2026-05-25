@@ -28,7 +28,7 @@ using LaTeXStrings: LaTeXString
 # L"x^2" stores "$x^2$" internally; TeXLayout's parser expects no delimiters.
 function _strip_math_delimiters(s::AbstractString)
     str = String(s)
-    length(str) >= 2 && str[1] == '$' && str[end] == '$' && return str[2:end-1]
+    length(str) >= 2 && str[1] == '$' && str[end] == '$' && return str[2:(end - 1)]
     return str
 end
 
@@ -51,7 +51,7 @@ function _glyph_index(font, name::String)::Culong
     # "uni{HHHH}" or "uni{HHHHHH}" encoding used by some math fonts.
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
     if m !== nothing
-        gid = FreeTypeAbstraction.glyph_index(font, Char(parse(UInt32, m.captures[1], base=16)))
+        gid = FreeTypeAbstraction.glyph_index(font, Char(parse(UInt32, m.captures[1], base = 16)))
         gid > 0 && return Culong(gid)
     end
 
@@ -66,7 +66,7 @@ function _represented_char(name::String)::Char
     chars = collect(name)
     length(chars) == 1 && return chars[1]
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
-    m !== nothing && return Char(parse(UInt32, m.captures[1], base=16))
+    m !== nothing && return Char(parse(UInt32, m.captures[1], base = 16))
     return '?'
 end
 
@@ -75,17 +75,19 @@ end
 # font data as TeXLayout's layout engine.
 function _mte_font_family(tl_family::TeXLayout.FontFamily)
     math_path = tl_family.math
-    reg_path  = something(tl_family.regular, math_path)
-    it_path   = something(tl_family.italic, reg_path)
-    bd_path   = something(tl_family.bold, reg_path)
+    reg_path = something(tl_family.regular, math_path)
+    it_path = something(tl_family.italic, reg_path)
+    bd_path = something(tl_family.bold, reg_path)
     bdit_path = something(tl_family.bolditalic, it_path)
-    MathTeXEngine.FontFamily(Dict(
-        :regular    => reg_path,
-        :italic     => it_path,
-        :bold       => bd_path,
-        :bolditalic => bdit_path,
-        :math       => math_path,
-    ))
+    return MathTeXEngine.FontFamily(
+        Dict(
+            :regular => reg_path,
+            :italic => it_path,
+            :bold => bd_path,
+            :bolditalic => bdit_path,
+            :math => math_path,
+        )
+    )
 end
 
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
@@ -93,16 +95,17 @@ end
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
 # `font_slot` field selects which one to use for glyph-index resolution.
 function _box_to_mte(box, math_font, reg_font, mte_ff)
-    pos   = Point2f(box.x, box.y)
+    pos = Point2f(box.x, box.y)
     scale = Float64(box.scale)
-    el    = box.element
+    el = box.element
 
     if el isa TeXLayout.Glyph
         chosen = el.font_slot === :regular ? reg_font : math_font
         gid = _glyph_index(chosen, el.glyph_name)
         gid == 0 && return nothing
         tc = MathTeXEngine.TeXChar(
-            gid, chosen, mte_ff, false, _represented_char(el.glyph_name))
+            gid, chosen, mte_ff, false, _represented_char(el.glyph_name)
+        )
         return (tc, pos, scale)
     elseif el isa TeXLayout.HRule
         return (MathTeXEngine.HLine(Float32(el.width), Float32(el.thickness)), pos, scale)
@@ -129,17 +132,17 @@ priority via normal dispatch specificity.
 The `font_family` argument is accepted for API compatibility but is currently
 ignored; TeXLayout's `default_font_family()` is used instead.
 """
-function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family=MathTeXEngine.FontFamily())
+function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = MathTeXEngine.FontFamily())
     tl_family = TeXLayout.default_font_family()
 
     input = _strip_math_delimiters(str)
-    node  = TeXLayout.parse_latex(input)
+    node = TeXLayout.parse_latex(input)
     boxes = TeXLayout.layout(node, tl_family, TeXLayout.Display)
 
     math_font, _ = TeXLayout._load_font(tl_family.math)
-    reg_path      = something(tl_family.regular, tl_family.math)
-    reg_font, _   = TeXLayout._load_font(reg_path)
-    mte_ff        = _mte_font_family(tl_family)
+    reg_path = something(tl_family.regular, tl_family.math)
+    reg_font, _ = TeXLayout._load_font(reg_path)
+    mte_ff = _mte_font_family(tl_family)
 
     result = Tuple[]
     for box in boxes

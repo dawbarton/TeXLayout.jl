@@ -71,10 +71,10 @@ struct _LayoutCtx
     family::FontFamily
     mc::MathConstants
     upm::Float64
-    vert_constructions::Dict{String,GlyphConstruction}
-    horiz_constructions::Dict{String,GlyphConstruction}  # for \widehat, \widetilde
-    top_accent_attachments::Dict{String,Int}  # PS glyph name → x position (design units)
-    italic_corrections::Dict{String,Int}      # PS glyph name → design units (from MATH table)
+    vert_constructions::Dict{String, GlyphConstruction}
+    horiz_constructions::Dict{String, GlyphConstruction}  # for \widehat, \widetilde
+    top_accent_attachments::Dict{String, Int}  # PS glyph name → x position (design units)
+    italic_corrections::Dict{String, Int}      # PS glyph name → design units (from MATH table)
     min_connector_overlap::Int
     mode::Symbol          # :math | :text
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
@@ -98,8 +98,10 @@ end
 #
 # Because size_scale only returns 1.0, ~0.7, or ~0.5 (never zero), the
 # division is always safe.
-@inline _scale_for_child(scale::Float64, parent_s::TexStyle, child_s::TexStyle,
-                         mc::MathConstants) =
+@inline _scale_for_child(
+    scale::Float64, parent_s::TexStyle, child_s::TexStyle,
+    mc::MathConstants
+) =
     scale * (size_scale(child_s, mc) / size_scale(parent_s, mc))
 
 # Return a copy of `ctx` with mode set to :text, preserving all other fields.
@@ -113,7 +115,7 @@ end
 
 # Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
 # glyph.  Applied only in :math mode; text mode uses the literal codepoint.
-const _MATH_CHAR_REMAP = Dict{Char,Char}(
+const _MATH_CHAR_REMAP = Dict{Char, Char}(
     '-' => '−',   # U+002D HYPHEN-MINUS  → U+2212 MINUS SIGN
     '*' => '∗',   # U+002A ASTERISK      → U+2217 ASTERISK OPERATOR
 )
@@ -123,374 +125,378 @@ const _MATH_CHAR_REMAP = Dict{Char,Char}(
 # Inter-atom spacing follows TeX's eight atom classes (Knuth, Chapter 17) and
 # KaTeX's spacingData.ts.  Characters/commands not listed default to :ord.
 # _MATH_CHAR_REMAP is applied before char lookup so '-' and '−' both yield :bin.
-const _CHAR_ATOM_CLASS = Dict{Char,Symbol}(
+const _CHAR_ATOM_CLASS = Dict{Char, Symbol}(
     # Binary operators
     '+' => :bin,
     '-' => :bin,    # U+002D (also remapped to U+2212 for glyph lookup)
     '−' => :bin,    # U+2212 MINUS SIGN
     '*' => :bin,    # U+002A (remapped to U+2217)
     '∗' => :bin,    # U+2217 ASTERISK OPERATOR
-    '×' => :bin,    '÷' => :bin,
-    '·' => :bin,    '±' => :bin,
-    '∓' => :bin,    '∧' => :bin,
-    '∨' => :bin,    '∩' => :bin,
-    '∪' => :bin,    '⊕' => :bin,
-    '⊖' => :bin,    '⊗' => :bin,
-    '⊘' => :bin,    '⊙' => :bin,
-    '∘' => :bin,    '•' => :bin,
-    '⋆' => :bin,    '†' => :bin,
+    '×' => :bin, '÷' => :bin,
+    '·' => :bin, '±' => :bin,
+    '∓' => :bin, '∧' => :bin,
+    '∨' => :bin, '∩' => :bin,
+    '∪' => :bin, '⊕' => :bin,
+    '⊖' => :bin, '⊗' => :bin,
+    '⊘' => :bin, '⊙' => :bin,
+    '∘' => :bin, '•' => :bin,
+    '⋆' => :bin, '†' => :bin,
     '‡' => :bin,
     # Relations
-    '=' => :rel,    '<' => :rel,
-    '>' => :rel,    ':' => :rel,
-    '≤' => :rel,    '≥' => :rel,
-    '≠' => :rel,    '≈' => :rel,
-    '∼' => :rel,    '≃' => :rel,
-    '≅' => :rel,    '∝' => :rel,
-    '⊥' => :rel,    '∥' => :rel,
-    '∣' => :rel,    '⊂' => :rel,
-    '⊃' => :rel,    '⊆' => :rel,
-    '⊇' => :rel,    '∈' => :rel,
-    '∉' => :rel,    '∋' => :rel,
-    '→' => :rel,    '←' => :rel,
-    '↔' => :rel,    '⇒' => :rel,
-    '⇐' => :rel,    '⇔' => :rel,
-    '↦' => :rel,    '≡' => :rel,
-    '≺' => :rel,    '≻' => :rel,
-    '≪' => :rel,    '≫' => :rel,
-    '⊢' => :rel,    '⊣' => :rel,
-    '⊨' => :rel,    '↑' => :rel,
-    '↓' => :rel,    '⇑' => :rel,
+    '=' => :rel, '<' => :rel,
+    '>' => :rel, ':' => :rel,
+    '≤' => :rel, '≥' => :rel,
+    '≠' => :rel, '≈' => :rel,
+    '∼' => :rel, '≃' => :rel,
+    '≅' => :rel, '∝' => :rel,
+    '⊥' => :rel, '∥' => :rel,
+    '∣' => :rel, '⊂' => :rel,
+    '⊃' => :rel, '⊆' => :rel,
+    '⊇' => :rel, '∈' => :rel,
+    '∉' => :rel, '∋' => :rel,
+    '→' => :rel, '←' => :rel,
+    '↔' => :rel, '⇒' => :rel,
+    '⇐' => :rel, '⇔' => :rel,
+    '↦' => :rel, '≡' => :rel,
+    '≺' => :rel, '≻' => :rel,
+    '≪' => :rel, '≫' => :rel,
+    '⊢' => :rel, '⊣' => :rel,
+    '⊨' => :rel, '↑' => :rel,
+    '↓' => :rel, '⇑' => :rel,
     '⇓' => :rel,
     # Open delimiters
-    '(' => :open,   '[' => :open,
+    '(' => :open, '[' => :open,
     # Close delimiters
-    ')' => :close,  ']' => :close,
+    ')' => :close, ']' => :close,
     '!' => :close,
     # Punctuation
-    ',' => :punct,  ';' => :punct,
+    ',' => :punct, ';' => :punct,
     # Inner (ellipses)
-    '…' => :inner,  '⋯' => :inner,
+    '…' => :inner, '⋯' => :inner,
     '⋱' => :inner,
 )
 
 # Atom class by command name (bare, without leading backslash).
-const _CMD_ATOM_CLASS = Dict{String,Symbol}(
+const _CMD_ATOM_CLASS = Dict{String, Symbol}(
     # ── Binary operators ────────────────────────────────────────────────────
-    "pm"                => :bin,  "mp"                => :bin,
-    "times"             => :bin,  "div"               => :bin,
-    "cdot"              => :bin,  "ast"               => :bin,
-    "star"              => :bin,  "circ"              => :bin,
-    "bullet"            => :bin,
-    "cap"               => :bin,  "cup"               => :bin,
-    "sqcap"             => :bin,  "sqcup"             => :bin,
-    "wedge"             => :bin,  "land"              => :bin,
-    "vee"               => :bin,  "lor"               => :bin,
-    "setminus"          => :bin,  "smallsetminus"     => :bin,
-    "oplus"             => :bin,  "ominus"            => :bin,
-    "otimes"            => :bin,  "oslash"            => :bin,
-    "odot"              => :bin,
-    "boxplus"           => :bin,  "boxminus"          => :bin,
-    "boxtimes"          => :bin,  "boxdot"            => :bin,
-    "ltimes"            => :bin,  "rtimes"            => :bin,
-    "wr"                => :bin,  "amalg"             => :bin,
-    "dagger"            => :bin,  "ddagger"           => :bin,
-    "dag"               => :bin,  "ddag"              => :bin,
-    "triangleleft"      => :bin,  "triangleright"     => :bin,
-    "barwedge"          => :bin,  "curlywedge"        => :bin,
-    "curlyvee"          => :bin,  "intercal"          => :bin,
-    "dotplus"           => :bin,  "leftthreetimes"    => :bin,
-    "rightthreetimes"   => :bin,  "doublebarwedge"    => :bin,
-    "divideontimes"     => :bin,
+    "pm" => :bin, "mp" => :bin,
+    "times" => :bin, "div" => :bin,
+    "cdot" => :bin, "ast" => :bin,
+    "star" => :bin, "circ" => :bin,
+    "bullet" => :bin,
+    "cap" => :bin, "cup" => :bin,
+    "sqcap" => :bin, "sqcup" => :bin,
+    "wedge" => :bin, "land" => :bin,
+    "vee" => :bin, "lor" => :bin,
+    "setminus" => :bin, "smallsetminus" => :bin,
+    "oplus" => :bin, "ominus" => :bin,
+    "otimes" => :bin, "oslash" => :bin,
+    "odot" => :bin,
+    "boxplus" => :bin, "boxminus" => :bin,
+    "boxtimes" => :bin, "boxdot" => :bin,
+    "ltimes" => :bin, "rtimes" => :bin,
+    "wr" => :bin, "amalg" => :bin,
+    "dagger" => :bin, "ddagger" => :bin,
+    "dag" => :bin, "ddag" => :bin,
+    "triangleleft" => :bin, "triangleright" => :bin,
+    "barwedge" => :bin, "curlywedge" => :bin,
+    "curlyvee" => :bin, "intercal" => :bin,
+    "dotplus" => :bin, "leftthreetimes" => :bin,
+    "rightthreetimes" => :bin, "doublebarwedge" => :bin,
+    "divideontimes" => :bin,
 
     # ── Relations ───────────────────────────────────────────────────────────
-    "leq"               => :rel,  "le"                => :rel,
-    "geq"               => :rel,  "ge"                => :rel,
-    "neq"               => :rel,  "ne"                => :rel,
-    "equiv"             => :rel,  "approx"            => :rel,
-    "sim"               => :rel,  "simeq"             => :rel,
-    "cong"              => :rel,  "propto"            => :rel,
-    "perp"              => :rel,  "parallel"          => :rel,
-    "mid"               => :rel,  "nmid"              => :rel,
-    "subset"            => :rel,  "supset"            => :rel,
-    "subseteq"          => :rel,  "supseteq"          => :rel,
-    "sqsubseteq"        => :rel,  "sqsupseteq"        => :rel,
-    "in"                => :rel,  "notin"             => :rel,
-    "ni"                => :rel,  "owns"              => :rel,
-    "prec"              => :rel,  "succ"              => :rel,
-    "preceq"            => :rel,  "succeq"            => :rel,
-    "ll"                => :rel,  "gg"                => :rel,
-    "lll"               => :rel,  "ggg"               => :rel,
-    "to"                => :rel,
-    "leftarrow"         => :rel,  "rightarrow"        => :rel,
-    "Leftarrow"         => :rel,  "Rightarrow"        => :rel,
-    "leftrightarrow"    => :rel,  "Leftrightarrow"    => :rel,
-    "longleftarrow"     => :rel,  "longrightarrow"    => :rel,
-    "Longleftarrow"     => :rel,  "Longrightarrow"    => :rel,
+    "leq" => :rel, "le" => :rel,
+    "geq" => :rel, "ge" => :rel,
+    "neq" => :rel, "ne" => :rel,
+    "equiv" => :rel, "approx" => :rel,
+    "sim" => :rel, "simeq" => :rel,
+    "cong" => :rel, "propto" => :rel,
+    "perp" => :rel, "parallel" => :rel,
+    "mid" => :rel, "nmid" => :rel,
+    "subset" => :rel, "supset" => :rel,
+    "subseteq" => :rel, "supseteq" => :rel,
+    "sqsubseteq" => :rel, "sqsupseteq" => :rel,
+    "in" => :rel, "notin" => :rel,
+    "ni" => :rel, "owns" => :rel,
+    "prec" => :rel, "succ" => :rel,
+    "preceq" => :rel, "succeq" => :rel,
+    "ll" => :rel, "gg" => :rel,
+    "lll" => :rel, "ggg" => :rel,
+    "to" => :rel,
+    "leftarrow" => :rel, "rightarrow" => :rel,
+    "Leftarrow" => :rel, "Rightarrow" => :rel,
+    "leftrightarrow" => :rel, "Leftrightarrow" => :rel,
+    "longleftarrow" => :rel, "longrightarrow" => :rel,
+    "Longleftarrow" => :rel, "Longrightarrow" => :rel,
     "longleftrightarrow" => :rel, "Longleftrightarrow" => :rel,
-    "iff"               => :rel,  "implies"           => :rel,
-    "mapsto"            => :rel,  "longmapsto"        => :rel,
-    "hookleftarrow"     => :rel,  "hookrightarrow"    => :rel,
-    "uparrow"           => :rel,  "downarrow"         => :rel,
-    "Uparrow"           => :rel,  "Downarrow"         => :rel,
-    "updownarrow"       => :rel,  "Updownarrow"       => :rel,
-    "nearrow"           => :rel,  "searrow"           => :rel,
-    "swarrow"           => :rel,  "nwarrow"           => :rel,
-    "vdash"             => :rel,  "dashv"             => :rel,
-    "models"            => :rel,
-    "smile"             => :rel,  "frown"             => :rel,
-    "asymp"             => :rel,  "bowtie"            => :rel,
-    "Join"              => :rel,  "not"               => :rel,
-    "nleq"              => :rel,  "ngeq"              => :rel,
-    "nless"             => :rel,  "ngtr"              => :rel,
-    "nsim"              => :rel,  "nparallel"         => :rel,
-    "nsubseteq"         => :rel,  "nsupseteq"         => :rel,
-    "subsetneq"         => :rel,  "supsetneq"         => :rel,
-    "varsubsetneq"      => :rel,  "varsupsetneq"      => :rel,
-    "lneq"              => :rel,  "gneq"              => :rel,
-    "lnsim"             => :rel,  "gnsim"             => :rel,
-    "preccurlyeq"       => :rel,  "succcurlyeq"       => :rel,
-    "curlyeqprec"       => :rel,  "curlyeqsucc"       => :rel,
-    "sqsubset"          => :rel,  "sqsupset"          => :rel,
-    "Supset"            => :rel,  "Subset"            => :rel,
-    "trianglelefteq"    => :rel,  "trianglerighteq"   => :rel,
-    "vartriangleleft"   => :rel,  "vartriangleright"  => :rel,
-    "blacktriangleleft" => :rel,  "blacktriangleright" => :rel,
-    "leqq"              => :rel,  "geqq"              => :rel,
-    "leqslant"          => :rel,  "geqslant"          => :rel,
-    "eqslantless"       => :rel,  "eqslantgtr"        => :rel,
-    "lesssim"           => :rel,  "gtrsim"            => :rel,
-    "lessapprox"        => :rel,  "gtrapprox"         => :rel,
-    "approxeq"          => :rel,
-    "lessdot"           => :rel,  "gtrdot"            => :rel,
-    "lessgtr"           => :rel,  "gtrless"           => :rel,
-    "lesseqgtr"         => :rel,  "gtreqless"         => :rel,
-    "lesseqqgtr"        => :rel,  "gtreqqless"        => :rel,
-    "doteq"             => :rel,  "doteqdot"          => :rel,
-    "risingdotseq"      => :rel,  "fallingdotseq"     => :rel,
-    "backsim"           => :rel,  "backsimeq"         => :rel,
-    "eqcirc"            => :rel,  "circeq"            => :rel,
-    "triangleq"         => :rel,
-    "bumpeq"            => :rel,  "Bumpeq"            => :rel,
-    "thicksim"          => :rel,  "thickapprox"       => :rel,
-    "supseteqq"         => :rel,  "subseteqq"         => :rel,
-    "shortparallel"     => :rel,  "between"           => :rel,
-    "pitchfork"         => :rel,  "therefore"         => :rel,
-    "because"           => :rel,  "shortmid"          => :rel,
-    "backepsilon"       => :rel,  "varpropto"         => :rel,
-    "nleqslant"         => :rel,  "ngeqslant"         => :rel,
-    "nleqq"             => :rel,  "ngeqq"             => :rel,
-    "lvertneqq"         => :rel,  "gvertneqq"         => :rel,
-    "nprec"             => :rel,  "nsucc"             => :rel,
-    "npreceq"           => :rel,  "nsucceq"           => :rel,
+    "iff" => :rel, "implies" => :rel,
+    "mapsto" => :rel, "longmapsto" => :rel,
+    "hookleftarrow" => :rel, "hookrightarrow" => :rel,
+    "uparrow" => :rel, "downarrow" => :rel,
+    "Uparrow" => :rel, "Downarrow" => :rel,
+    "updownarrow" => :rel, "Updownarrow" => :rel,
+    "nearrow" => :rel, "searrow" => :rel,
+    "swarrow" => :rel, "nwarrow" => :rel,
+    "vdash" => :rel, "dashv" => :rel,
+    "models" => :rel,
+    "smile" => :rel, "frown" => :rel,
+    "asymp" => :rel, "bowtie" => :rel,
+    "Join" => :rel, "not" => :rel,
+    "nleq" => :rel, "ngeq" => :rel,
+    "nless" => :rel, "ngtr" => :rel,
+    "nsim" => :rel, "nparallel" => :rel,
+    "nsubseteq" => :rel, "nsupseteq" => :rel,
+    "subsetneq" => :rel, "supsetneq" => :rel,
+    "varsubsetneq" => :rel, "varsupsetneq" => :rel,
+    "lneq" => :rel, "gneq" => :rel,
+    "lnsim" => :rel, "gnsim" => :rel,
+    "preccurlyeq" => :rel, "succcurlyeq" => :rel,
+    "curlyeqprec" => :rel, "curlyeqsucc" => :rel,
+    "sqsubset" => :rel, "sqsupset" => :rel,
+    "Supset" => :rel, "Subset" => :rel,
+    "trianglelefteq" => :rel, "trianglerighteq" => :rel,
+    "vartriangleleft" => :rel, "vartriangleright" => :rel,
+    "blacktriangleleft" => :rel, "blacktriangleright" => :rel,
+    "leqq" => :rel, "geqq" => :rel,
+    "leqslant" => :rel, "geqslant" => :rel,
+    "eqslantless" => :rel, "eqslantgtr" => :rel,
+    "lesssim" => :rel, "gtrsim" => :rel,
+    "lessapprox" => :rel, "gtrapprox" => :rel,
+    "approxeq" => :rel,
+    "lessdot" => :rel, "gtrdot" => :rel,
+    "lessgtr" => :rel, "gtrless" => :rel,
+    "lesseqgtr" => :rel, "gtreqless" => :rel,
+    "lesseqqgtr" => :rel, "gtreqqless" => :rel,
+    "doteq" => :rel, "doteqdot" => :rel,
+    "risingdotseq" => :rel, "fallingdotseq" => :rel,
+    "backsim" => :rel, "backsimeq" => :rel,
+    "eqcirc" => :rel, "circeq" => :rel,
+    "triangleq" => :rel,
+    "bumpeq" => :rel, "Bumpeq" => :rel,
+    "thicksim" => :rel, "thickapprox" => :rel,
+    "supseteqq" => :rel, "subseteqq" => :rel,
+    "shortparallel" => :rel, "between" => :rel,
+    "pitchfork" => :rel, "therefore" => :rel,
+    "because" => :rel, "shortmid" => :rel,
+    "backepsilon" => :rel, "varpropto" => :rel,
+    "nleqslant" => :rel, "ngeqslant" => :rel,
+    "nleqq" => :rel, "ngeqq" => :rel,
+    "lvertneqq" => :rel, "gvertneqq" => :rel,
+    "nprec" => :rel, "nsucc" => :rel,
+    "npreceq" => :rel, "nsucceq" => :rel,
 
     # ── Large operators ─────────────────────────────────────────────────────
-    "int"               => :op,   "iint"              => :op,
-    "iiint"             => :op,   "iiiint"            => :op,
-    "oint"              => :op,   "oiint"             => :op,
-    "oiiint"            => :op,
-    "sum"               => :op,   "prod"              => :op,
-    "coprod"            => :op,
-    "bigcap"            => :op,   "bigcup"            => :op,
-    "bigsqcup"          => :op,   "bigsqcap"          => :op,
-    "bigwedge"          => :op,   "bigvee"            => :op,
-    "bigoplus"          => :op,   "bigotimes"         => :op,
-    "bigodot"           => :op,   "biguplus"          => :op,
-    "bigplus"           => :op,
+    "int" => :op, "iint" => :op,
+    "iiint" => :op, "iiiint" => :op,
+    "oint" => :op, "oiint" => :op,
+    "oiiint" => :op,
+    "sum" => :op, "prod" => :op,
+    "coprod" => :op,
+    "bigcap" => :op, "bigcup" => :op,
+    "bigsqcup" => :op, "bigsqcap" => :op,
+    "bigwedge" => :op, "bigvee" => :op,
+    "bigoplus" => :op, "bigotimes" => :op,
+    "bigodot" => :op, "biguplus" => :op,
+    "bigplus" => :op,
 
     # ── Manual delimiter sizing ──────────────────────────────────────────────
-    "bigl"              => :open,  "Bigl"             => :open,
-    "biggl"             => :open,  "Biggl"            => :open,
-    "bigr"              => :close, "Bigr"             => :close,
-    "biggr"             => :close, "Biggr"            => :close,
-    "bigm"              => :rel,   "Bigm"             => :rel,
-    "biggm"             => :rel,   "Biggm"            => :rel,
+    "bigl" => :open, "Bigl" => :open,
+    "biggl" => :open, "Biggl" => :open,
+    "bigr" => :close, "Bigr" => :close,
+    "biggr" => :close, "Biggr" => :close,
+    "bigm" => :rel, "Bigm" => :rel,
+    "biggm" => :rel, "Biggm" => :rel,
 
     # ── Open delimiters ─────────────────────────────────────────────────────
-    "{"                 => :open,
-    "langle"            => :open,
-    "lfloor"            => :open,
-    "lceil"             => :open,
-    "lvert"             => :open,
-    "lVert"             => :open,
-    "lgroup"            => :open,
-    "lmoustache"        => :open,
-    "llbracket"         => :open,
+    "{" => :open,
+    "langle" => :open,
+    "lfloor" => :open,
+    "lceil" => :open,
+    "lvert" => :open,
+    "lVert" => :open,
+    "lgroup" => :open,
+    "lmoustache" => :open,
+    "llbracket" => :open,
 
     # ── Close delimiters ────────────────────────────────────────────────────
-    "}"                 => :close,
-    "rangle"            => :close,
-    "rfloor"            => :close,
-    "rceil"             => :close,
-    "rvert"             => :close,
-    "rVert"             => :close,
-    "rgroup"            => :close,
-    "rmoustache"        => :close,
-    "rrbracket"         => :close,
+    "}" => :close,
+    "rangle" => :close,
+    "rfloor" => :close,
+    "rceil" => :close,
+    "rvert" => :close,
+    "rVert" => :close,
+    "rgroup" => :close,
+    "rmoustache" => :close,
+    "rrbracket" => :close,
 
     # ── Punctuation ─────────────────────────────────────────────────────────
-    "colon"             => :punct,
-    "cdotp"             => :punct,
-    "ldotp"             => :punct,
+    "colon" => :punct,
+    "cdotp" => :punct,
+    "ldotp" => :punct,
 
     # ── Inner (ellipses, \bmod, \pmod) ──────────────────────────────────────
-    "ldots"             => :inner,
-    "cdots"             => :inner,
-    "ddots"             => :inner,
-    "dots"              => :inner,
-    "dotsb"             => :inner,
-    "dotsc"             => :inner,
-    "dotsi"             => :inner,
-    "dotsm"             => :inner,
-    "dotso"             => :inner,
-    "bmod"              => :inner,
-    "pmod"              => :inner,
+    "ldots" => :inner,
+    "cdots" => :inner,
+    "ddots" => :inner,
+    "dots" => :inner,
+    "dotsb" => :inner,
+    "dotsc" => :inner,
+    "dotsi" => :inner,
+    "dotsm" => :inner,
+    "dotso" => :inner,
+    "bmod" => :inner,
+    "pmod" => :inner,
 
     # ── Ordinary symbols ────────────────────────────────────────────────────
     # Greek lowercase
-    "alpha"             => :ord,  "beta"              => :ord,
-    "gamma"             => :ord,  "delta"             => :ord,
-    "epsilon"           => :ord,  "varepsilon"        => :ord,
-    "zeta"              => :ord,  "eta"               => :ord,
-    "theta"             => :ord,  "vartheta"          => :ord,
-    "iota"              => :ord,  "kappa"             => :ord,
-    "lambda"            => :ord,  "mu"                => :ord,
-    "nu"                => :ord,  "xi"                => :ord,
-    "pi"                => :ord,  "varpi"             => :ord,
-    "rho"               => :ord,  "varrho"            => :ord,
-    "sigma"             => :ord,  "varsigma"          => :ord,
-    "tau"               => :ord,  "upsilon"           => :ord,
-    "phi"               => :ord,  "varphi"            => :ord,
-    "chi"               => :ord,  "psi"               => :ord,
-    "omega"             => :ord,
+    "alpha" => :ord, "beta" => :ord,
+    "gamma" => :ord, "delta" => :ord,
+    "epsilon" => :ord, "varepsilon" => :ord,
+    "zeta" => :ord, "eta" => :ord,
+    "theta" => :ord, "vartheta" => :ord,
+    "iota" => :ord, "kappa" => :ord,
+    "lambda" => :ord, "mu" => :ord,
+    "nu" => :ord, "xi" => :ord,
+    "pi" => :ord, "varpi" => :ord,
+    "rho" => :ord, "varrho" => :ord,
+    "sigma" => :ord, "varsigma" => :ord,
+    "tau" => :ord, "upsilon" => :ord,
+    "phi" => :ord, "varphi" => :ord,
+    "chi" => :ord, "psi" => :ord,
+    "omega" => :ord,
     # Greek uppercase
-    "Gamma"             => :ord,  "Delta"             => :ord,
-    "Theta"             => :ord,  "Lambda"            => :ord,
-    "Xi"                => :ord,  "Pi"                => :ord,
-    "Sigma"             => :ord,  "Upsilon"           => :ord,
-    "Phi"               => :ord,  "Psi"               => :ord,
-    "Omega"             => :ord,
+    "Gamma" => :ord, "Delta" => :ord,
+    "Theta" => :ord, "Lambda" => :ord,
+    "Xi" => :ord, "Pi" => :ord,
+    "Sigma" => :ord, "Upsilon" => :ord,
+    "Phi" => :ord, "Psi" => :ord,
+    "Omega" => :ord,
     # Miscellaneous ordinary symbols
-    "infty"             => :ord,  "partial"           => :ord,
-    "nabla"             => :ord,  "forall"            => :ord,
-    "exists"            => :ord,  "nexists"           => :ord,
-    "emptyset"          => :ord,  "varnothing"        => :ord,
-    "angle"             => :ord,  "measuredangle"     => :ord,
-    "sphericalangle"    => :ord,
-    "ell"               => :ord,
-    "imath"             => :ord,  "jmath"             => :ord,
-    "hbar"              => :ord,  "hslash"            => :ord,
-    "Re"                => :ord,  "Im"                => :ord,
-    "wp"                => :ord,
-    "aleph"             => :ord,  "beth"              => :ord,
-    "gimel"             => :ord,  "daleth"            => :ord,
-    "prime"             => :ord,  "backprime"         => :ord,
-    "complement"        => :ord,
-    "surd"              => :ord,
-    "top"               => :ord,  "bot"               => :ord,
-    "flat"              => :ord,  "natural"           => :ord,
-    "sharp"             => :ord,
-    "diagup"            => :ord,  "diagdown"          => :ord,
-    "eth"               => :ord,
-    "Finv"              => :ord,  "Game"              => :ord,
-    "Bbbk"              => :ord,
-    "triangle"          => :ord,  "triangledown"      => :ord,
-    "square"            => :ord,  "blacksquare"       => :ord,
-    "lozenge"           => :ord,  "blacklozenge"      => :ord,
-    "bigstar"           => :ord,
-    "clubsuit"          => :ord,  "diamondsuit"       => :ord,
-    "heartsuit"         => :ord,  "spadesuit"         => :ord,
-    "checkmark"         => :ord,
-    "vert"              => :ord,  "Vert"              => :ord,
-    "backslash"         => :ord,
-    "S"                 => :ord,  "P"                 => :ord,
-    "copyright"         => :ord,  "circledR"          => :ord,
-    "maltese"           => :ord,
-    "yen"               => :ord,  "pounds"            => :ord,
-    "mho"               => :ord,  "Angstrom"          => :ord,
-    "digamma"           => :ord,  "varkappa"          => :ord,
-    "circledS"          => :ord,  "degree"            => :ord,
-    "textdollar"        => :ord,
-    "vdots"             => :ord,  # vertical — ordinary, not inner like \cdots
+    "infty" => :ord, "partial" => :ord,
+    "nabla" => :ord, "forall" => :ord,
+    "exists" => :ord, "nexists" => :ord,
+    "emptyset" => :ord, "varnothing" => :ord,
+    "angle" => :ord, "measuredangle" => :ord,
+    "sphericalangle" => :ord,
+    "ell" => :ord,
+    "imath" => :ord, "jmath" => :ord,
+    "hbar" => :ord, "hslash" => :ord,
+    "Re" => :ord, "Im" => :ord,
+    "wp" => :ord,
+    "aleph" => :ord, "beth" => :ord,
+    "gimel" => :ord, "daleth" => :ord,
+    "prime" => :ord, "backprime" => :ord,
+    "complement" => :ord,
+    "surd" => :ord,
+    "top" => :ord, "bot" => :ord,
+    "flat" => :ord, "natural" => :ord,
+    "sharp" => :ord,
+    "diagup" => :ord, "diagdown" => :ord,
+    "eth" => :ord,
+    "Finv" => :ord, "Game" => :ord,
+    "Bbbk" => :ord,
+    "triangle" => :ord, "triangledown" => :ord,
+    "square" => :ord, "blacksquare" => :ord,
+    "lozenge" => :ord, "blacklozenge" => :ord,
+    "bigstar" => :ord,
+    "clubsuit" => :ord, "diamondsuit" => :ord,
+    "heartsuit" => :ord, "spadesuit" => :ord,
+    "checkmark" => :ord,
+    "vert" => :ord, "Vert" => :ord,
+    "backslash" => :ord,
+    "S" => :ord, "P" => :ord,
+    "copyright" => :ord, "circledR" => :ord,
+    "maltese" => :ord,
+    "yen" => :ord, "pounds" => :ord,
+    "mho" => :ord, "Angstrom" => :ord,
+    "digamma" => :ord, "varkappa" => :ord,
+    "circledS" => :ord, "degree" => :ord,
+    "textdollar" => :ord,
+    "vdots" => :ord,  # vertical — ordinary, not inner like \cdots
     # Accents (base is an ordinary atom in terms of spacing)
-    "hat"               => :ord,  "bar"               => :ord,
-    "vec"               => :ord,  "dot"               => :ord,
-    "ddot"              => :ord,  "tilde"             => :ord,
-    "widehat"           => :ord,  "widetilde"         => :ord,
-    "overline"          => :ord,  "underline"         => :ord,
+    "hat" => :ord, "bar" => :ord,
+    "vec" => :ord, "dot" => :ord,
+    "ddot" => :ord, "tilde" => :ord,
+    "widehat" => :ord, "widetilde" => :ord,
+    "overline" => :ord, "underline" => :ord,
     # Font-mode selectors: the result is an ordinary atom
-    "mathbf"            => :ord,  "mathrm"            => :ord,
-    "mathit"            => :ord,  "mathbb"            => :ord,
-    "mathcal"           => :ord,  "mathfrak"          => :ord,
-    "mathsf"            => :ord,  "mathtt"            => :ord,
-    "boldsymbol"        => :ord,  "text"              => :ord,
-    "mbox"              => :ord,
+    "mathbf" => :ord, "mathrm" => :ord,
+    "mathit" => :ord, "mathbb" => :ord,
+    "mathcal" => :ord, "mathfrak" => :ord,
+    "mathsf" => :ord, "mathtt" => :ord,
+    "boldsymbol" => :ord, "text" => :ord,
+    "mbox" => :ord,
 )
 
 # Spacing amounts in em (18-mu convention: thin = 3 mu, medium = 4 mu, thick = 5 mu).
-const _THIN   = 3 / 18
+const _THIN = 3 / 18
 const _MEDIUM = 4 / 18
-const _THICK  = 5 / 18
+const _THICK = 5 / 18
 
 # Automatic inter-atom spacing for Display/Text style: (prev, next) → em.
 # Derived from KaTeX spacingData.ts; pairs with no entry have zero spacing.
-const _SPACINGS = Dict{Tuple{Symbol,Symbol},Float64}(
-    (:ord,   :op)    => _THIN,   (:ord,   :bin)   => _MEDIUM,
-    (:ord,   :rel)   => _THICK,  (:ord,   :inner) => _THIN,
-    (:op,    :ord)   => _THIN,   (:op,    :op)    => _THIN,
-    (:op,    :rel)   => _THICK,  (:op,    :inner) => _THIN,
-    (:bin,   :ord)   => _MEDIUM, (:bin,   :op)    => _MEDIUM,
-    (:bin,   :open)  => _MEDIUM, (:bin,   :inner) => _MEDIUM,
-    (:rel,   :ord)   => _THICK,  (:rel,   :op)    => _THICK,
-    (:rel,   :open)  => _THICK,  (:rel,   :inner) => _THICK,
+const _SPACINGS = Dict{Tuple{Symbol, Symbol}, Float64}(
+    (:ord, :op) => _THIN, (:ord, :bin) => _MEDIUM,
+    (:ord, :rel) => _THICK, (:ord, :inner) => _THIN,
+    (:op, :ord) => _THIN, (:op, :op) => _THIN,
+    (:op, :rel) => _THICK, (:op, :inner) => _THIN,
+    (:bin, :ord) => _MEDIUM, (:bin, :op) => _MEDIUM,
+    (:bin, :open) => _MEDIUM, (:bin, :inner) => _MEDIUM,
+    (:rel, :ord) => _THICK, (:rel, :op) => _THICK,
+    (:rel, :open) => _THICK, (:rel, :inner) => _THICK,
     # :open has no outgoing entries
-    (:close, :op)    => _THIN,   (:close, :bin)   => _MEDIUM,
-    (:close, :rel)   => _THICK,  (:close, :inner) => _THIN,
-    (:punct, :ord)   => _THIN,   (:punct, :op)    => _THIN,
-    (:punct, :rel)   => _THICK,  (:punct, :open)  => _THIN,
-    (:punct, :close) => _THIN,   (:punct, :punct) => _THIN,
+    (:close, :op) => _THIN, (:close, :bin) => _MEDIUM,
+    (:close, :rel) => _THICK, (:close, :inner) => _THIN,
+    (:punct, :ord) => _THIN, (:punct, :op) => _THIN,
+    (:punct, :rel) => _THICK, (:punct, :open) => _THIN,
+    (:punct, :close) => _THIN, (:punct, :punct) => _THIN,
     (:punct, :inner) => _THIN,
-    (:inner, :ord)   => _THIN,   (:inner, :op)    => _THIN,
-    (:inner, :bin)   => _MEDIUM, (:inner, :rel)   => _THICK,
-    (:inner, :open)  => _THIN,   (:inner, :punct) => _THIN,
+    (:inner, :ord) => _THIN, (:inner, :op) => _THIN,
+    (:inner, :bin) => _MEDIUM, (:inner, :rel) => _THICK,
+    (:inner, :open) => _THIN, (:inner, :punct) => _THIN,
     (:inner, :inner) => _THIN,
 )
 
 # Tight spacing for Script/ScriptScript: only thin spaces survive (KaTeX tightSpacings).
-const _TIGHT_SPACINGS = Dict{Tuple{Symbol,Symbol},Float64}(
-    (:ord,   :op) => _THIN,
-    (:op,    :ord) => _THIN,  (:op,    :op)  => _THIN,
-    (:close, :op)  => _THIN,
-    (:inner, :op)  => _THIN,
+const _TIGHT_SPACINGS = Dict{Tuple{Symbol, Symbol}, Float64}(
+    (:ord, :op) => _THIN,
+    (:op, :ord) => _THIN, (:op, :op) => _THIN,
+    (:close, :op) => _THIN,
+    (:inner, :op) => _THIN,
 )
 
 # NKOperator names that use limits placement in Display style (\lim, \max, etc.).
-const _LIMITS_OPERATORS = Set{String}([
-    "lim", "limsup", "liminf",
-    "det", "gcd", "inf", "sup", "max", "min", "Pr",
-])
+const _LIMITS_OPERATORS = Set{String}(
+    [
+        "lim", "limsup", "liminf",
+        "det", "gcd", "inf", "sup", "max", "min", "Pr",
+    ]
+)
 
 # Unicode codepoints for all large-operator symbols rendered via NKCommand.
 # These are looked up by codepoint (not PS name) so the correct glyph is found.
-const _DISPLAY_OP_CODEPOINTS = Dict{String,UInt32}(
-    "sum"       => 0x2211,  "prod"      => 0x220F,  "coprod"    => 0x2210,
-    "int"       => 0x222B,  "iint"      => 0x222C,  "iiint"     => 0x222D,
-    "oint"      => 0x222E,  "oiint"     => 0x222F,  "oiiint"    => 0x2230,
-    "iiiint"    => 0x2A0C,
-    "bigcap"    => 0x22C2,  "bigcup"    => 0x22C3,
-    "bigsqcup"  => 0x2A06,  "bigsqcap"  => 0x2A05,
-    "bigwedge"  => 0x22C0,  "bigvee"    => 0x22C1,
-    "bigoplus"  => 0x2A01,  "bigotimes" => 0x2A02,
-    "bigodot"   => 0x2A00,  "biguplus"  => 0x2A04,
+const _DISPLAY_OP_CODEPOINTS = Dict{String, UInt32}(
+    "sum" => 0x2211, "prod" => 0x220F, "coprod" => 0x2210,
+    "int" => 0x222B, "iint" => 0x222C, "iiint" => 0x222D,
+    "oint" => 0x222E, "oiint" => 0x222F, "oiiint" => 0x2230,
+    "iiiint" => 0x2A0C,
+    "bigcap" => 0x22C2, "bigcup" => 0x22C3,
+    "bigsqcup" => 0x2A06, "bigsqcap" => 0x2A05,
+    "bigwedge" => 0x22C0, "bigvee" => 0x22C1,
+    "bigoplus" => 0x2A01, "bigotimes" => 0x2A02,
+    "bigodot" => 0x2A00, "biguplus" => 0x2A04,
 )
 
 # Subset of _DISPLAY_OP_CODEPOINTS that also use limits placement in Display style.
-const _LIMITS_OP_COMMANDS = Set{String}([
-    "sum", "prod", "coprod",
-    "bigcap", "bigcup", "bigsqcup", "bigsqcap",
-    "bigwedge", "bigvee",
-    "bigoplus", "bigotimes", "bigodot", "biguplus",
-])
+const _LIMITS_OP_COMMANDS = Set{String}(
+    [
+        "sum", "prod", "coprod",
+        "bigcap", "bigcup", "bigsqcup", "bigsqcap",
+        "bigwedge", "bigvee",
+        "bigoplus", "bigotimes", "bigodot", "biguplus",
+    ]
+)
 
 # Accent commands that are horizontally extensible (selected from horiz_constructions).
 # These share codepoints with their fixed-size counterparts but the layout engine
@@ -501,56 +507,56 @@ const _WIDE_ACCENT_COMMANDS = Set{String}(["\\widehat", "\\widetilde"])
 # than spacing modifier letters.  Fonts such as Luciole Math carry these glyphs
 # at the combining codepoints instead of the spacing modifier codepoints used in
 # _ACCENT_CODEPOINTS, so we try these when the primary lookup returns nothing.
-const _ACCENT_FALLBACK_CODEPOINTS = Dict{String,UInt32}(
-    "\\hat"      => 0x0302,   # ̂  COMBINING CIRCUMFLEX ACCENT
-    "\\acute"    => 0x0301,   # ́  COMBINING ACUTE ACCENT
-    "\\tilde"    => 0x0303,   # ̃  COMBINING TILDE
-    "\\breve"    => 0x0306,   # ̆  COMBINING BREVE
-    "\\check"    => 0x030C,   # ̌  COMBINING CARON
-    "\\dot"      => 0x0307,   # ̇  COMBINING DOT ABOVE
+const _ACCENT_FALLBACK_CODEPOINTS = Dict{String, UInt32}(
+    "\\hat" => 0x0302,   # ̂  COMBINING CIRCUMFLEX ACCENT
+    "\\acute" => 0x0301,   # ́  COMBINING ACUTE ACCENT
+    "\\tilde" => 0x0303,   # ̃  COMBINING TILDE
+    "\\breve" => 0x0306,   # ̆  COMBINING BREVE
+    "\\check" => 0x030C,   # ̌  COMBINING CARON
+    "\\dot" => 0x0307,   # ̇  COMBINING DOT ABOVE
     "\\mathring" => 0x030A,   # ̊  COMBINING RING ABOVE
-    "\\ddot"     => 0x0308,   # ̈  COMBINING DIAERESIS
-    "\\grave"    => 0x0300,   # ̀  COMBINING GRAVE ACCENT
-    "\\bar"      => 0x0305,   # ̅  COMBINING OVERLINE
+    "\\ddot" => 0x0308,   # ̈  COMBINING DIAERESIS
+    "\\grave" => 0x0300,   # ̀  COMBINING GRAVE ACCENT
+    "\\bar" => 0x0305,   # ̅  COMBINING OVERLINE
 )
 
 # Horizontal brace/bracket/paren commands mapped to their PS glyph names in
 # horiz_constructions.  Over-variants sit entirely above the baseline; under-
 # variants sit entirely below — see the formulae in _layout_horiz_brace!.
-const _HORIZ_BRACE_GLYPHS = Dict{String,String}(
-    "\\overbrace"    => "uni23DE",   # ⏞ TOP CURLY BRACKET
-    "\\underbrace"   => "uni23DF",   # ⏟ BOTTOM CURLY BRACKET
-    "\\overbracket"  => "uni23B4",   # ⎴ TOP SQUARE BRACKET
+const _HORIZ_BRACE_GLYPHS = Dict{String, String}(
+    "\\overbrace" => "uni23DE",   # ⏞ TOP CURLY BRACKET
+    "\\underbrace" => "uni23DF",   # ⏟ BOTTOM CURLY BRACKET
+    "\\overbracket" => "uni23B4",   # ⎴ TOP SQUARE BRACKET
     "\\underbracket" => "uni23B5",   # ⎵ BOTTOM SQUARE BRACKET
-    "\\overparen"    => "uni23DC",   # ⏜ TOP PARENTHESIS
-    "\\underparen"   => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
+    "\\overparen" => "uni23DC",   # ⏜ TOP PARENTHESIS
+    "\\underparen" => "uni23DD",   # ⏝ BOTTOM PARENTHESIS
 )
 
 # Spacing constants for extensible arrow labels (amsmath xarrow conventions).
 const _XARROW_KERN = 0.111   # em gap between arrow body and each label (≈ 2 mu)
-const _XARROW_PAD  = 0.3     # minimum em padding added on each side of the widest label
+const _XARROW_PAD = 0.3     # minimum em padding added on each side of the widest label
 
 # Extensible arrow commands mapped to their Unicode codepoints.
 # The layout engine resolves codepoint → uni-name → horiz_constructions key.
-const _XARROW_CODEPOINTS = Dict{String,UInt32}(
-    "\\xleftarrow"         => 0x2190,  # ←
-    "\\xrightarrow"        => 0x2192,  # →
-    "\\xLeftarrow"         => 0x21D0,  # ⇐
-    "\\xRightarrow"        => 0x21D2,  # ⇒
-    "\\xleftrightarrow"    => 0x2194,  # ↔
-    "\\xLeftrightarrow"    => 0x21D4,  # ⇔
-    "\\xhookleftarrow"     => 0x21A9,  # ↩
-    "\\xhookrightarrow"    => 0x21AA,  # ↪
-    "\\xmapsto"            => 0x21A6,  # ↦
-    "\\xrightharpoondown"  => 0x21C1,  # ⇁
-    "\\xrightharpoonup"    => 0x21C0,  # ⇀
-    "\\xleftharpoondown"   => 0x21BD,  # ↽
-    "\\xleftharpoonup"     => 0x21BC,  # ↼
+const _XARROW_CODEPOINTS = Dict{String, UInt32}(
+    "\\xleftarrow" => 0x2190,  # ←
+    "\\xrightarrow" => 0x2192,  # →
+    "\\xLeftarrow" => 0x21D0,  # ⇐
+    "\\xRightarrow" => 0x21D2,  # ⇒
+    "\\xleftrightarrow" => 0x2194,  # ↔
+    "\\xLeftrightarrow" => 0x21D4,  # ⇔
+    "\\xhookleftarrow" => 0x21A9,  # ↩
+    "\\xhookrightarrow" => 0x21AA,  # ↪
+    "\\xmapsto" => 0x21A6,  # ↦
+    "\\xrightharpoondown" => 0x21C1,  # ⇁
+    "\\xrightharpoonup" => 0x21C0,  # ⇀
+    "\\xleftharpoondown" => 0x21BD,  # ↽
+    "\\xleftharpoonup" => 0x21BC,  # ↼
     "\\xrightleftharpoons" => 0x21CC,  # ⇌
     "\\xleftrightharpoons" => 0x21CB,  # ⇋
     "\\xtwoheadrightarrow" => 0x21A0,  # ↠
-    "\\xtwoheadleftarrow"  => 0x219E,  # ↞
-    "\\xlongequal"         => 0x003D,  # = (plain equals; extensible via horiz_constructions)
+    "\\xtwoheadleftarrow" => 0x219E,  # ↞
+    "\\xlongequal" => 0x003D,  # = (plain equals; extensible via horiz_constructions)
 )
 
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
@@ -560,23 +566,23 @@ const _XARROW_CODEPOINTS = Dict{String,UInt32}(
 #      present in vert_constructions for the current font.
 #   2. _cmd_glyph: codepoint fallback when the canonical PS name lookup fails.
 const _CANONICAL_CODEPOINTS = Dict{String, UInt32}(
-    "parenleft"      => 0x0028,
-    "parenright"     => 0x0029,
-    "bracketleft"    => 0x005B,
-    "bracketright"   => 0x005D,
-    "braceleft"      => 0x007B,
-    "braceright"     => 0x007D,
-    "bar"            => 0x007C,
-    "slash"          => 0x002F,
-    "backslash"      => 0x005C,
-    "radical"        => 0x221A,
+    "parenleft" => 0x0028,
+    "parenright" => 0x0029,
+    "bracketleft" => 0x005B,
+    "bracketright" => 0x005D,
+    "braceleft" => 0x007B,
+    "braceright" => 0x007D,
+    "bar" => 0x007C,
+    "slash" => 0x002F,
+    "backslash" => 0x005C,
+    "radical" => 0x221A,
     "dblverticalbar" => 0x2016,
-    "angleleft"      => 0x27E8,
-    "angleright"     => 0x27E9,
-    "lfloor"         => 0x230A,
-    "rfloor"         => 0x230B,
-    "lceil"          => 0x2308,
-    "rceil"          => 0x2309,
+    "angleleft" => 0x27E8,
+    "angleright" => 0x27E9,
+    "lfloor" => 0x230A,
+    "rfloor" => 0x230B,
+    "lceil" => 0x2308,
+    "rceil" => 0x2309,
 )
 
 # Unicode codepoints for symbol commands, resolved by codepoint so the correct
@@ -584,187 +590,187 @@ const _CANONICAL_CODEPOINTS = Dict{String, UInt32}(
 # cases: (1) commands where the AGL PS name differs from the LaTeX name (e.g.
 # \infty → "infinity", \pm → "plusminus"); (2) Greek letters, which most fonts
 # name "alpha", "pi", etc. but some (e.g. FiraMath) name "uni03B1", "uni03C0".
-const _SYMBOL_CODEPOINTS = Dict{String,UInt32}(
+const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     # Greek lowercase
-    "alpha"          => 0x03B1,  "beta"           => 0x03B2,
-    "gamma"          => 0x03B3,  "delta"          => 0x03B4,
-    "epsilon"        => 0x03F5,  "varepsilon"     => 0x03B5,
-    "zeta"           => 0x03B6,  "eta"            => 0x03B7,
-    "theta"          => 0x03B8,  "vartheta"       => 0x03D1,
-    "iota"           => 0x03B9,  "kappa"          => 0x03BA,
-    "varkappa"       => 0x03F0,  "lambda"         => 0x03BB,
-    "mu"             => 0x03BC,  "nu"             => 0x03BD,
-    "xi"             => 0x03BE,  "pi"             => 0x03C0,
-    "varpi"          => 0x03D6,  "rho"            => 0x03C1,
-    "varrho"         => 0x03F1,  "sigma"          => 0x03C3,
-    "varsigma"       => 0x03C2,  "tau"            => 0x03C4,
-    "upsilon"        => 0x03C5,  "phi"            => 0x03D5,
-    "varphi"         => 0x03C6,  "chi"            => 0x03C7,
-    "psi"            => 0x03C8,  "omega"          => 0x03C9,
+    "alpha" => 0x03B1, "beta" => 0x03B2,
+    "gamma" => 0x03B3, "delta" => 0x03B4,
+    "epsilon" => 0x03F5, "varepsilon" => 0x03B5,
+    "zeta" => 0x03B6, "eta" => 0x03B7,
+    "theta" => 0x03B8, "vartheta" => 0x03D1,
+    "iota" => 0x03B9, "kappa" => 0x03BA,
+    "varkappa" => 0x03F0, "lambda" => 0x03BB,
+    "mu" => 0x03BC, "nu" => 0x03BD,
+    "xi" => 0x03BE, "pi" => 0x03C0,
+    "varpi" => 0x03D6, "rho" => 0x03C1,
+    "varrho" => 0x03F1, "sigma" => 0x03C3,
+    "varsigma" => 0x03C2, "tau" => 0x03C4,
+    "upsilon" => 0x03C5, "phi" => 0x03D5,
+    "varphi" => 0x03C6, "chi" => 0x03C7,
+    "psi" => 0x03C8, "omega" => 0x03C9,
     # Greek uppercase
-    "Gamma"          => 0x0393,  "Delta"          => 0x0394,
-    "Theta"          => 0x0398,  "Lambda"         => 0x039B,
-    "Xi"             => 0x039E,  "Pi"             => 0x03A0,
-    "Sigma"          => 0x03A3,  "Upsilon"        => 0x03A5,
-    "Phi"            => 0x03A6,  "Psi"            => 0x03A8,
-    "Omega"          => 0x03A9,
+    "Gamma" => 0x0393, "Delta" => 0x0394,
+    "Theta" => 0x0398, "Lambda" => 0x039B,
+    "Xi" => 0x039E, "Pi" => 0x03A0,
+    "Sigma" => 0x03A3, "Upsilon" => 0x03A5,
+    "Phi" => 0x03A6, "Psi" => 0x03A8,
+    "Omega" => 0x03A9,
     # Misc math
-    "infty"          => 0x221E,  "partial"        => 0x2202,
-    "forall"         => 0x2200,  "exists"         => 0x2203,
-    "nexists"        => 0x2204,  "emptyset"       => 0x2205,
-    "varnothing"     => 0x2205,  "nabla"          => 0x2207,
-    "hbar"           => 0x210F,  "ell"            => 0x2113,
-    "Re"             => 0x211C,  "Im"             => 0x2111,
-    "wp"             => 0x2118,  "aleph"          => 0x2135,
-    "beth"           => 0x2136,  "gimel"          => 0x2137,
-    "daleth"         => 0x2138,  "angle"          => 0x2220,
-    "top"            => 0x22A4,  "bot"            => 0x22A5,
-    "prime"          => 0x2032,  "backprime"      => 0x2035,
-    "surd"           => 0x221A,  "complement"     => 0x2201,
-    "eth"            => 0x00F0,
+    "infty" => 0x221E, "partial" => 0x2202,
+    "forall" => 0x2200, "exists" => 0x2203,
+    "nexists" => 0x2204, "emptyset" => 0x2205,
+    "varnothing" => 0x2205, "nabla" => 0x2207,
+    "hbar" => 0x210F, "ell" => 0x2113,
+    "Re" => 0x211C, "Im" => 0x2111,
+    "wp" => 0x2118, "aleph" => 0x2135,
+    "beth" => 0x2136, "gimel" => 0x2137,
+    "daleth" => 0x2138, "angle" => 0x2220,
+    "top" => 0x22A4, "bot" => 0x22A5,
+    "prime" => 0x2032, "backprime" => 0x2035,
+    "surd" => 0x221A, "complement" => 0x2201,
+    "eth" => 0x00F0,
     # Binary operators
-    "pm"             => 0x00B1,  "mp"             => 0x2213,
-    "times"          => 0x00D7,  "div"            => 0x00F7,
-    "cdot"           => 0x22C5,  "ast"            => 0x2217,
-    "star"           => 0x22C6,  "circ"           => 0x2218,
-    "bullet"         => 0x2219,  "dagger"         => 0x2020,
-    "ddagger"        => 0x2021,  "dag"            => 0x2020,
-    "ddag"           => 0x2021,  "cap"            => 0x2229,
-    "cup"            => 0x222A,  "sqcap"          => 0x2293,
-    "sqcup"          => 0x2294,  "wedge"          => 0x2227,
-    "land"           => 0x2227,  "vee"            => 0x2228,
-    "lor"            => 0x2228,  "setminus"       => 0x2216,
-    "smallsetminus"  => 0x2216,  "oplus"          => 0x2295,
-    "ominus"         => 0x2296,  "otimes"         => 0x2297,
-    "oslash"         => 0x2298,  "odot"           => 0x2299,
-    "wr"             => 0x2240,  "amalg"          => 0x2A3F,
+    "pm" => 0x00B1, "mp" => 0x2213,
+    "times" => 0x00D7, "div" => 0x00F7,
+    "cdot" => 0x22C5, "ast" => 0x2217,
+    "star" => 0x22C6, "circ" => 0x2218,
+    "bullet" => 0x2219, "dagger" => 0x2020,
+    "ddagger" => 0x2021, "dag" => 0x2020,
+    "ddag" => 0x2021, "cap" => 0x2229,
+    "cup" => 0x222A, "sqcap" => 0x2293,
+    "sqcup" => 0x2294, "wedge" => 0x2227,
+    "land" => 0x2227, "vee" => 0x2228,
+    "lor" => 0x2228, "setminus" => 0x2216,
+    "smallsetminus" => 0x2216, "oplus" => 0x2295,
+    "ominus" => 0x2296, "otimes" => 0x2297,
+    "oslash" => 0x2298, "odot" => 0x2299,
+    "wr" => 0x2240, "amalg" => 0x2A3F,
     # Relations
-    "leq"            => 0x2264,  "le"             => 0x2264,
-    "geq"            => 0x2265,  "ge"             => 0x2265,
-    "neq"            => 0x2260,  "ne"             => 0x2260,
-    "approx"         => 0x2248,  "equiv"          => 0x2261,
-    "sim"            => 0x223C,  "simeq"          => 0x2243,
-    "cong"           => 0x2245,  "propto"         => 0x221D,
-    "perp"           => 0x22A5,  "parallel"       => 0x2225,
-    "mid"            => 0x2223,  "nmid"           => 0x2224,
-    "subset"         => 0x2282,  "supset"         => 0x2283,
-    "subseteq"       => 0x2286,  "supseteq"       => 0x2287,
-    "sqsubseteq"     => 0x2291,  "sqsupseteq"     => 0x2292,
-    "in"             => 0x2208,  "notin"          => 0x2209,
-    "ni"             => 0x220B,  "owns"           => 0x220B,
-    "prec"           => 0x227A,  "succ"           => 0x227B,
-    "preceq"         => 0x2AAF,  "succeq"         => 0x2AB0,
-    "ll"             => 0x226A,  "gg"             => 0x226B,
-    "vdash"          => 0x22A2,  "dashv"          => 0x22A3,
-    "models"         => 0x22A8,  "smile"          => 0x2323,
-    "frown"          => 0x2322,  "asymp"          => 0x224D,
+    "leq" => 0x2264, "le" => 0x2264,
+    "geq" => 0x2265, "ge" => 0x2265,
+    "neq" => 0x2260, "ne" => 0x2260,
+    "approx" => 0x2248, "equiv" => 0x2261,
+    "sim" => 0x223C, "simeq" => 0x2243,
+    "cong" => 0x2245, "propto" => 0x221D,
+    "perp" => 0x22A5, "parallel" => 0x2225,
+    "mid" => 0x2223, "nmid" => 0x2224,
+    "subset" => 0x2282, "supset" => 0x2283,
+    "subseteq" => 0x2286, "supseteq" => 0x2287,
+    "sqsubseteq" => 0x2291, "sqsupseteq" => 0x2292,
+    "in" => 0x2208, "notin" => 0x2209,
+    "ni" => 0x220B, "owns" => 0x220B,
+    "prec" => 0x227A, "succ" => 0x227B,
+    "preceq" => 0x2AAF, "succeq" => 0x2AB0,
+    "ll" => 0x226A, "gg" => 0x226B,
+    "vdash" => 0x22A2, "dashv" => 0x22A3,
+    "models" => 0x22A8, "smile" => 0x2323,
+    "frown" => 0x2322, "asymp" => 0x224D,
     # Arrows
-    "to"             => 0x2192,
-    "rightarrow"     => 0x2192,  "leftarrow"      => 0x2190,
-    "Rightarrow"     => 0x21D2,  "Leftarrow"      => 0x21D0,
-    "leftrightarrow" => 0x2194,  "Leftrightarrow" => 0x21D4,
-    "mapsto"         => 0x21A6,  "longmapsto"     => 0x27FC,
-    "longrightarrow" => 0x27F6,  "longleftarrow"  => 0x27F5,
-    "Longrightarrow" => 0x27F9,  "Longleftarrow"  => 0x27F8,
-    "hookrightarrow" => 0x21AA,  "hookleftarrow"  => 0x21A9,
-    "uparrow"        => 0x2191,  "downarrow"      => 0x2193,
-    "Uparrow"        => 0x21D1,  "Downarrow"      => 0x21D3,
-    "updownarrow"    => 0x2195,  "Updownarrow"    => 0x21D5,
-    "nearrow"        => 0x2197,  "searrow"        => 0x2198,
-    "swarrow"        => 0x2199,  "nwarrow"        => 0x2196,
-    "iff"            => 0x21D4,  "implies"        => 0x27F9,
+    "to" => 0x2192,
+    "rightarrow" => 0x2192, "leftarrow" => 0x2190,
+    "Rightarrow" => 0x21D2, "Leftarrow" => 0x21D0,
+    "leftrightarrow" => 0x2194, "Leftrightarrow" => 0x21D4,
+    "mapsto" => 0x21A6, "longmapsto" => 0x27FC,
+    "longrightarrow" => 0x27F6, "longleftarrow" => 0x27F5,
+    "Longrightarrow" => 0x27F9, "Longleftarrow" => 0x27F8,
+    "hookrightarrow" => 0x21AA, "hookleftarrow" => 0x21A9,
+    "uparrow" => 0x2191, "downarrow" => 0x2193,
+    "Uparrow" => 0x21D1, "Downarrow" => 0x21D3,
+    "updownarrow" => 0x2195, "Updownarrow" => 0x21D5,
+    "nearrow" => 0x2197, "searrow" => 0x2198,
+    "swarrow" => 0x2199, "nwarrow" => 0x2196,
+    "iff" => 0x21D4, "implies" => 0x27F9,
     # Ellipses
-    "ldots"          => 0x2026,  "cdots"          => 0x22EF,
-    "vdots"          => 0x22EE,  "ddots"          => 0x22F1,
-    "dots"           => 0x2026,
+    "ldots" => 0x2026, "cdots" => 0x22EF,
+    "vdots" => 0x22EE, "ddots" => 0x22F1,
+    "dots" => 0x2026,
     # Musical / misc
-    "sharp"          => 0x266F,  "flat"           => 0x266D,
-    "natural"        => 0x266E,
+    "sharp" => 0x266F, "flat" => 0x266D,
+    "natural" => 0x266E,
     # Extended binary operators (AMS)
-    "boxplus"        => 0x229E,  "boxminus"       => 0x229F,
-    "boxtimes"       => 0x22A0,  "boxdot"         => 0x22A1,
-    "ltimes"         => 0x22C9,  "rtimes"         => 0x22CA,
-    "leftthreetimes" => 0x22CB,  "rightthreetimes"=> 0x22CC,
-    "curlywedge"     => 0x22CF,  "curlyvee"       => 0x22CE,
-    "barwedge"       => 0x22BC,  "intercal"       => 0x22BA,
-    "dotplus"        => 0x2214,  "doublebarwedge" => 0x2A5E,
-    "divideontimes"  => 0x22C7,  "triangleleft"   => 0x25C3,
-    "triangleright"  => 0x25B9,
+    "boxplus" => 0x229E, "boxminus" => 0x229F,
+    "boxtimes" => 0x22A0, "boxdot" => 0x22A1,
+    "ltimes" => 0x22C9, "rtimes" => 0x22CA,
+    "leftthreetimes" => 0x22CB, "rightthreetimes" => 0x22CC,
+    "curlywedge" => 0x22CF, "curlyvee" => 0x22CE,
+    "barwedge" => 0x22BC, "intercal" => 0x22BA,
+    "dotplus" => 0x2214, "doublebarwedge" => 0x2A5E,
+    "divideontimes" => 0x22C7, "triangleleft" => 0x25C3,
+    "triangleright" => 0x25B9,
     # Extended relations (AMS)
-    "bowtie"         => 0x22C8,  "lll"            => 0x22D8,
-    "ggg"            => 0x22D9,  "leqq"           => 0x2266,
-    "geqq"           => 0x2267,  "leqslant"       => 0x2A7D,
-    "geqslant"       => 0x2A7E,  "eqslantless"    => 0x2A95,
-    "eqslantgtr"     => 0x2A96,  "lesssim"        => 0x2272,
-    "gtrsim"         => 0x2273,  "lessapprox"     => 0x2A85,
-    "gtrapprox"      => 0x2A86,  "approxeq"       => 0x224A,
-    "lessdot"        => 0x22D6,  "gtrdot"         => 0x22D7,
-    "lessgtr"        => 0x2276,  "gtrless"        => 0x2277,
-    "lesseqgtr"      => 0x22DA,  "gtreqless"      => 0x22DB,
-    "lesseqqgtr"     => 0x2A8B,  "gtreqqless"     => 0x2A8C,
-    "doteqdot"       => 0x2251,  "risingdotseq"   => 0x2253,
-    "fallingdotseq"  => 0x2252,  "backsim"        => 0x223D,
-    "backsimeq"      => 0x22CD,  "eqcirc"         => 0x2256,
-    "circeq"         => 0x2257,  "triangleq"      => 0x225C,
-    "bumpeq"         => 0x224F,  "Bumpeq"         => 0x224E,
-    "thicksim"       => 0x223C,  "thickapprox"    => 0x2248,
-    "subseteqq"      => 0x2AC5,  "supseteqq"      => 0x2AC6,
-    "Subset"         => 0x22D0,  "Supset"         => 0x22D1,
-    "sqsubset"       => 0x228F,  "sqsupset"       => 0x2290,
-    "preccurlyeq"    => 0x227C,  "succcurlyeq"    => 0x227D,
-    "curlyeqprec"    => 0x22DE,  "curlyeqsucc"    => 0x22DF,
-    "trianglelefteq" => 0x22B4,  "trianglerighteq"=> 0x22B5,
-    "vartriangleleft"=> 0x22B2,  "vartriangleright"=>0x22B3,
-    "blacktriangleleft"=>0x25C0, "blacktriangleright"=>0x25B6,
-    "between"        => 0x226C,  "pitchfork"      => 0x22D4,
-    "therefore"      => 0x2234,  "because"        => 0x2235,
-    "shortmid"       => 0x2223,  "shortparallel"  => 0x2225,
-    "backepsilon"    => 0x220D,  "varpropto"      => 0x221D,
+    "bowtie" => 0x22C8, "lll" => 0x22D8,
+    "ggg" => 0x22D9, "leqq" => 0x2266,
+    "geqq" => 0x2267, "leqslant" => 0x2A7D,
+    "geqslant" => 0x2A7E, "eqslantless" => 0x2A95,
+    "eqslantgtr" => 0x2A96, "lesssim" => 0x2272,
+    "gtrsim" => 0x2273, "lessapprox" => 0x2A85,
+    "gtrapprox" => 0x2A86, "approxeq" => 0x224A,
+    "lessdot" => 0x22D6, "gtrdot" => 0x22D7,
+    "lessgtr" => 0x2276, "gtrless" => 0x2277,
+    "lesseqgtr" => 0x22DA, "gtreqless" => 0x22DB,
+    "lesseqqgtr" => 0x2A8B, "gtreqqless" => 0x2A8C,
+    "doteqdot" => 0x2251, "risingdotseq" => 0x2253,
+    "fallingdotseq" => 0x2252, "backsim" => 0x223D,
+    "backsimeq" => 0x22CD, "eqcirc" => 0x2256,
+    "circeq" => 0x2257, "triangleq" => 0x225C,
+    "bumpeq" => 0x224F, "Bumpeq" => 0x224E,
+    "thicksim" => 0x223C, "thickapprox" => 0x2248,
+    "subseteqq" => 0x2AC5, "supseteqq" => 0x2AC6,
+    "Subset" => 0x22D0, "Supset" => 0x22D1,
+    "sqsubset" => 0x228F, "sqsupset" => 0x2290,
+    "preccurlyeq" => 0x227C, "succcurlyeq" => 0x227D,
+    "curlyeqprec" => 0x22DE, "curlyeqsucc" => 0x22DF,
+    "trianglelefteq" => 0x22B4, "trianglerighteq" => 0x22B5,
+    "vartriangleleft" => 0x22B2, "vartriangleright" => 0x22B3,
+    "blacktriangleleft" => 0x25C0, "blacktriangleright" => 0x25B6,
+    "between" => 0x226C, "pitchfork" => 0x22D4,
+    "therefore" => 0x2234, "because" => 0x2235,
+    "shortmid" => 0x2223, "shortparallel" => 0x2225,
+    "backepsilon" => 0x220D, "varpropto" => 0x221D,
     "longleftrightarrow" => 0x27F7, "Longleftrightarrow" => 0x27FA,
     # Negated relations with single codepoints
-    "nleq"           => 0x2270,  "ngeq"           => 0x2271,
-    "nless"          => 0x226E,  "ngtr"           => 0x226F,
-    "nsim"           => 0x2241,  "nparallel"      => 0x2226,
-    "nsubseteq"      => 0x2288,  "nsupseteq"      => 0x2289,
-    "subsetneq"      => 0x228A,  "supsetneq"      => 0x228B,
-    "lneq"           => 0x2A87,  "gneq"           => 0x2A88,
-    "lnsim"          => 0x22E6,  "gnsim"          => 0x22E7,
-    "nprec"          => 0x2280,  "nsucc"          => 0x2281,
-    "npreceq"        => 0x22E0,  "nsucceq"        => 0x22E1,
+    "nleq" => 0x2270, "ngeq" => 0x2271,
+    "nless" => 0x226E, "ngtr" => 0x226F,
+    "nsim" => 0x2241, "nparallel" => 0x2226,
+    "nsubseteq" => 0x2288, "nsupseteq" => 0x2289,
+    "subsetneq" => 0x228A, "supsetneq" => 0x228B,
+    "lneq" => 0x2A87, "gneq" => 0x2A88,
+    "lnsim" => 0x22E6, "gnsim" => 0x22E7,
+    "nprec" => 0x2280, "nsucc" => 0x2281,
+    "npreceq" => 0x22E0, "nsucceq" => 0x22E1,
     # Ordinary symbols (AMS)
-    "measuredangle"  => 0x2221,  "sphericalangle" => 0x2222,
-    "imath"          => 0x0131,  "jmath"          => 0x0237,
-    "hslash"         => 0x210F,  "triangle"       => 0x25B3,
-    "triangledown"   => 0x25BD,  "square"         => 0x25A1,
-    "blacksquare"    => 0x25A0,  "lozenge"        => 0x25CA,
-    "blacklozenge"   => 0x29EB,  "bigstar"        => 0x2605,
-    "clubsuit"       => 0x2663,  "diamondsuit"    => 0x2662,
-    "heartsuit"      => 0x2661,  "spadesuit"      => 0x2660,
-    "checkmark"      => 0x2713,  "S"              => 0x00A7,
-    "P"              => 0x00B6,  "copyright"      => 0x00A9,
-    "circledR"       => 0x00AE,  "circledS"       => 0x24C8,
-    "maltese"        => 0x2720,  "yen"            => 0x00A5,
-    "pounds"         => 0x00A3,  "mho"            => 0x2127,
-    "Angstrom"       => 0x212B,  "digamma"        => 0x03DD,
-    "Finv"           => 0x2132,  "Game"           => 0x2141,
-    "degree"         => 0x00B0,  "textdollar"     => 0x0024,
-    "diagup"         => 0x2571,  "diagdown"       => 0x2572,
-    "doteq"          => 0x2250,  "Join"           => 0x2A1D,
-    "Bbbk"           => 0x1D55C, "backslash"      => 0x005C,
+    "measuredangle" => 0x2221, "sphericalangle" => 0x2222,
+    "imath" => 0x0131, "jmath" => 0x0237,
+    "hslash" => 0x210F, "triangle" => 0x25B3,
+    "triangledown" => 0x25BD, "square" => 0x25A1,
+    "blacksquare" => 0x25A0, "lozenge" => 0x25CA,
+    "blacklozenge" => 0x29EB, "bigstar" => 0x2605,
+    "clubsuit" => 0x2663, "diamondsuit" => 0x2662,
+    "heartsuit" => 0x2661, "spadesuit" => 0x2660,
+    "checkmark" => 0x2713, "S" => 0x00A7,
+    "P" => 0x00B6, "copyright" => 0x00A9,
+    "circledR" => 0x00AE, "circledS" => 0x24C8,
+    "maltese" => 0x2720, "yen" => 0x00A5,
+    "pounds" => 0x00A3, "mho" => 0x2127,
+    "Angstrom" => 0x212B, "digamma" => 0x03DD,
+    "Finv" => 0x2132, "Game" => 0x2141,
+    "degree" => 0x00B0, "textdollar" => 0x0024,
+    "diagup" => 0x2571, "diagdown" => 0x2572,
+    "doteq" => 0x2250, "Join" => 0x2A1D,
+    "Bbbk" => 0x0001D55C, "backslash" => 0x005C,
     # Delimiter aliases
-    "lvert"          => 0x007C,  "rvert"          => 0x007C,
-    "lVert"          => 0x2016,  "rVert"          => 0x2016,
-    "lgroup"         => 0x27EE,  "rgroup"         => 0x27EF,
-    "lmoustache"     => 0x23B0,  "rmoustache"     => 0x23B1,
-    "llbracket"      => 0x27E6,  "rrbracket"      => 0x27E7,
+    "lvert" => 0x007C, "rvert" => 0x007C,
+    "lVert" => 0x2016, "rVert" => 0x2016,
+    "lgroup" => 0x27EE, "rgroup" => 0x27EF,
+    "lmoustache" => 0x23B0, "rmoustache" => 0x23B1,
+    "llbracket" => 0x27E6, "rrbracket" => 0x27E7,
     # Delimiters (used in \big* manual sizing, where the name is the bare symbol)
-    "langle"         => 0x27E8,  "rangle"         => 0x27E9,
-    "lfloor"         => 0x230A,  "rfloor"         => 0x230B,
-    "lceil"          => 0x2308,  "rceil"          => 0x2309,
-    "vert"           => 0x007C,  "Vert"           => 0x2016,
+    "langle" => 0x27E8, "rangle" => 0x27E9,
+    "lfloor" => 0x230A, "rfloor" => 0x230B,
+    "lceil" => 0x2308, "rceil" => 0x2309,
+    "vert" => 0x007C, "Vert" => 0x2016,
     # Punctuation
-    "colon"          => 0x003A,  "cdotp"          => 0x22C5,
-    "ldotp"          => 0x002E,
+    "colon" => 0x003A, "cdotp" => 0x22C5,
+    "ldotp" => 0x002E,
 )
 
 # Return the TeX atom class for a given AST node.
@@ -778,7 +784,7 @@ function _atom_class(node::Node)::Symbol
         ch = get(_MATH_CHAR_REMAP, ch, ch)   # same remap as _char_glyph
         return get(_CHAR_ATOM_CLASS, ch, :ord)
     elseif k === NKCommand
-        cmd  = node.value
+        cmd = node.value
         name = startswith(cmd, "\\") ? cmd[2:end] : cmd
         return get(_CMD_ATOM_CLASS, name, :ord)
     elseif k === NKOperator
@@ -820,39 +826,45 @@ end
 # Unicode equivalents before the glyph lookup (e.g. '-' → U+2212).
 # Always resolve by codepoint: the Unicode cmap yields the math-italic form for
 # letters, whereas glyph_metrics(family, "x") returns the upright roman slot.
-function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
+function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
     if ctx.mode === :math
         ch = get(_MATH_CHAR_REMAP, ch, ch)
     end
     cp = UInt32(ch)
-    m  = glyph_metrics_by_codepoint(ctx.family, cp)
+    m = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return nothing
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    return Glyph(isempty(ps) ? string(ch) : ps, :math,
-                 m.advance_width, m.left_side_bearing,
-                 m.x_min, m.y_min, m.x_max, m.y_max)
+    return Glyph(
+        isempty(ps) ? string(ch) : ps, :math,
+        m.advance_width, m.left_side_bearing,
+        m.x_min, m.y_min, m.x_max, m.y_max
+    )
 end
 
 # Return an upright Glyph for a character, or nothing if not in the font.
 # Uses the regular font slot when present (both metrics and PS name come from
 # the same font so the renderer can locate the glyph correctly); falls back to
 # the math font when no regular font is configured.
-function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph,Nothing}
+function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
     family = ctx.family
     if family.regular !== nothing
         m = glyph_metrics_upright(family, ch)
         m === nothing && return nothing
         ps = glyph_name_by_codepoint(family.regular, UInt32(ch))
         name = isempty(ps) ? string(ch) : ps
-        return Glyph(name, :regular, m.advance_width, m.left_side_bearing,
-                     m.x_min, m.y_min, m.x_max, m.y_max)
+        return Glyph(
+            name, :regular, m.advance_width, m.left_side_bearing,
+            m.x_min, m.y_min, m.x_max, m.y_max
+        )
     else
         m = glyph_metrics_by_codepoint(family, UInt32(ch))
         m === nothing && return nothing
         ps = glyph_name_by_codepoint(family.math, UInt32(ch))
         name = isempty(ps) ? string(ch) : ps
-        return Glyph(name, :math, m.advance_width, m.left_side_bearing,
-                     m.x_min, m.y_min, m.x_max, m.y_max)
+        return Glyph(
+            name, :math, m.advance_width, m.left_side_bearing,
+            m.x_min, m.y_min, m.x_max, m.y_max
+        )
     end
 end
 
@@ -862,10 +874,12 @@ end
 # Falls back via _CANONICAL_CODEPOINTS for AGL names that fail in fonts using
 # Unicode-style PS names (e.g. FiraMath "uni0028" vs AGL "parenleft").
 # The returned Glyph carries the font's own PS name so renderers can locate it.
-function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
+function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph, Nothing}
     m = glyph_metrics(ctx.family, name)
-    m !== nothing && return Glyph(name, :math, m.advance_width, m.left_side_bearing,
-                                  m.x_min, m.y_min, m.x_max, m.y_max)
+    m !== nothing && return Glyph(
+        name, :math, m.advance_width, m.left_side_bearing,
+        m.x_min, m.y_min, m.x_max, m.y_max
+    )
     # Fallback 1: AGL name with a known codepoint (e.g. "parenleft" in a font
     # that uses "uni0028").
     cp = get(_CANONICAL_CODEPOINTS, name, nothing)
@@ -873,15 +887,17 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph,Nothing}
     # name ("overbrace").  Parse the codepoint and resolve via the font's own map.
     if cp === nothing
         m2 = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
-        m2 !== nothing && (cp = parse(UInt32, m2.captures[1], base=16))
+        m2 !== nothing && (cp = parse(UInt32, m2.captures[1], base = 16))
     end
     cp === nothing && return nothing
     m2 = glyph_metrics_by_codepoint(ctx.family, cp)
     m2 === nothing && return nothing
     ps = glyph_name_by_codepoint(ctx.family, cp)
     actual = isempty(ps) ? name : ps
-    return Glyph(actual, :math, m2.advance_width, m2.left_side_bearing,
-                 m2.x_min, m2.y_min, m2.x_max, m2.y_max)
+    return Glyph(
+        actual, :math, m2.advance_width, m2.left_side_bearing,
+        m2.x_min, m2.y_min, m2.x_max, m2.y_max
+    )
 end
 
 # Return the key under which a canonically-named glyph is stored in
@@ -904,7 +920,7 @@ function _horiz_construction_key(ctx::_LayoutCtx, uni_name::String)::String
     haskey(ctx.horiz_constructions, uni_name) && return uni_name
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", uni_name)
     m === nothing && return uni_name
-    cp = parse(UInt32, m.captures[1], base=16)
+    cp = parse(UInt32, m.captures[1], base = 16)
     ps = glyph_name_by_codepoint(ctx.family, cp)
     !isempty(ps) && haskey(ctx.horiz_constructions, ps) && return ps
     return uni_name
@@ -914,15 +930,17 @@ end
 #   1. Try Unicode math-variant codepoint in the math font (covers mathbf, mathbb, etc.).
 #   2. For :mathrm, fall through to the upright glyph lookup (regular font or math codepoint).
 #   3. Fall through to the default character glyph (italic math form).
-function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph,Nothing}
+function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph, Nothing}
     cp = _math_variant_codepoint(variant, ch)
     if cp !== nothing
         m = glyph_metrics_by_codepoint(ctx.family, cp)
         if m !== nothing
             ps = glyph_name_by_codepoint(ctx.family, cp)
-            return Glyph(isempty(ps) ? string(Char(cp)) : ps, :math,
-                         m.advance_width, m.left_side_bearing,
-                         m.x_min, m.y_min, m.x_max, m.y_max)
+            return Glyph(
+                isempty(ps) ? string(Char(cp)) : ps, :math,
+                m.advance_width, m.left_side_bearing,
+                m.x_min, m.y_min, m.x_max, m.y_max
+            )
         end
     end
     return _char_glyph(ctx, ch)
@@ -931,8 +949,10 @@ end
 # Copy every element of `src` into `dst`, translating each box by (dx, dy).
 # Used throughout the layout engine to splice a scratch sub-layout (laid out
 # at origin (0,0) or some local origin) into the parent's coordinate system.
-function _emit_shifted!(dst::Vector{LayoutBox}, src::Vector{LayoutBox},
-                        dx::Float64, dy::Float64)
+function _emit_shifted!(
+        dst::Vector{LayoutBox}, src::Vector{LayoutBox},
+        dx::Float64, dy::Float64
+    )
     for b in src
         push!(dst, LayoutBox(b.element, b.x + dx, b.y + dy, b.scale))
     end
@@ -974,9 +994,9 @@ end
 # Build the expanded parts list with extenders repeated `n` times each.
 # Parts are in bottom-to-top order (as stored in the font).
 function _expand_assembly_parts(
-    parts::Vector{GlyphAssemblyPart},
-    n::Int,
-)::Vector{GlyphAssemblyPart}
+        parts::Vector{GlyphAssemblyPart},
+        n::Int,
+    )::Vector{GlyphAssemblyPart}
     n == 1 && return parts
     result = GlyphAssemblyPart[]
     for p in parts
@@ -991,10 +1011,10 @@ end
 # The minimum permissible overlap between two adjacent parts (design units).
 # Clamped to the per-gap maximum so we never exceed the connector lengths.
 @inline function _gap_min_overlap(
-    p1::GlyphAssemblyPart,
-    p2::GlyphAssemblyPart,
-    min_conn::Int,
-)::Int
+        p1::GlyphAssemblyPart,
+        p2::GlyphAssemblyPart,
+        min_conn::Int,
+    )::Int
     max_allowed = min(p1.end_connector, p2.start_connector)
     return min(min_conn, max_allowed)
 end
@@ -1005,7 +1025,7 @@ function _assembly_max_height(parts::Vector{GlyphAssemblyPart}, min_conn::Int)::
     isempty(parts) && return 0.0
     h = Float64(parts[1].full_advance)
     for i in 2:length(parts)
-        h += parts[i].full_advance - _gap_min_overlap(parts[i-1], parts[i], min_conn)
+        h += parts[i].full_advance - _gap_min_overlap(parts[i - 1], parts[i], min_conn)
     end
     return h
 end
@@ -1014,10 +1034,10 @@ end
 # `required_du` tall.  Uses minimum overlaps (giving the tallest assembly) to
 # find the tightest bound on n.
 function _min_extender_reps(
-    parts::Vector{GlyphAssemblyPart},
-    required_du::Float64,
-    min_conn::Int,
-)::Int
+        parts::Vector{GlyphAssemblyPart},
+        required_du::Float64,
+        min_conn::Int,
+    )::Int
     for n in 0:256
         _assembly_max_height(_expand_assembly_parts(parts, n), min_conn) >= required_du &&
             return n
@@ -1028,19 +1048,19 @@ end
 # Lay out a glyph assembly centred on the math axis.  Returns the horizontal
 # advance of the widest part.
 function _layout_assembly!(
-    asm::GlyphAssembly,
-    ctx::_LayoutCtx,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    required_du::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
-    upm      = ctx.upm
-    mc       = ctx.mc
+        asm::GlyphAssembly,
+        ctx::_LayoutCtx,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        required_du::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
+    upm = ctx.upm
+    mc = ctx.mc
     min_conn = ctx.min_connector_overlap
 
-    n     = _min_extender_reps(asm.parts, required_du, min_conn)
+    n = _min_extender_reps(asm.parts, required_du, min_conn)
     parts = _expand_assembly_parts(asm.parts, n)
     isempty(parts) && return 0.0
 
@@ -1048,27 +1068,27 @@ function _layout_assembly!(
     # assembly is as tall as the required extent).
     overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
     for i in 1:length(overlaps)
-        overlaps[i] = _gap_min_overlap(parts[i], parts[i+1], min_conn)
+        overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
     end
 
     # Total assembly height in design units.
     total_du = Float64(parts[1].full_advance)
     for i in 1:length(overlaps)
-        total_du += parts[i+1].full_advance - overlaps[i]
+        total_du += parts[i + 1].full_advance - overlaps[i]
     end
 
     # Derive ink bounds from first/last glyph metrics.  When assembly parts have
     # y_min ≠ 0 (e.g. STIX Two bar: y_min=-234, y_max=706, full_advance=941),
     # centering by total_du/2 misplaces the stack.  Using actual ink bounds
     # centres correctly on the math axis regardless of font design conventions.
-    g_first       = _cmd_glyph(ctx, parts[1].glyph_name)
-    g_last        = _cmd_glyph(ctx, parts[end].glyph_name)
-    ink_bot_du    = (g_first !== nothing) ? Float64(g_first.y_min)  : 0.0
-    cursor_last   = total_du - Float64(parts[end].full_advance)
-    ink_top_du    = cursor_last + ((g_last !== nothing) ? Float64(g_last.y_max) : Float64(parts[end].full_advance))
+    g_first = _cmd_glyph(ctx, parts[1].glyph_name)
+    g_last = _cmd_glyph(ctx, parts[end].glyph_name)
+    ink_bot_du = (g_first !== nothing) ? Float64(g_first.y_min) : 0.0
+    cursor_last = total_du - Float64(parts[end].full_advance)
+    ink_top_du = cursor_last + ((g_last !== nothing) ? Float64(g_last.y_max) : Float64(parts[end].full_advance))
     ink_center_du = (ink_bot_du + ink_top_du) / 2.0
-    axis_em       = y0 + mc.axis_height / upm * scale
-    asm_bot_em    = axis_em - ink_center_du / upm * scale
+    axis_em = y0 + mc.axis_height / upm * scale
+    asm_bot_em = axis_em - ink_center_du / upm * scale
 
     max_adv_w = 0
     cursor_du = 0.0
@@ -1093,29 +1113,29 @@ end
 # `rule_top_em`.  Unlike delimiter assemblies (centred on the math axis),
 # radical assemblies are top-anchored.  Returns horizontal advance.
 function _layout_radical_assembly!(
-    asm::GlyphAssembly,
-    ctx::_LayoutCtx,
-    required_du::Float64,
-    rule_top_em::Float64,
-    x0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
-    upm      = ctx.upm
+        asm::GlyphAssembly,
+        ctx::_LayoutCtx,
+        required_du::Float64,
+        rule_top_em::Float64,
+        x0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
+    upm = ctx.upm
     min_conn = ctx.min_connector_overlap
 
-    n     = _min_extender_reps(asm.parts, required_du, min_conn)
+    n = _min_extender_reps(asm.parts, required_du, min_conn)
     parts = _expand_assembly_parts(asm.parts, n)
     isempty(parts) && return 0.0
 
     overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
     for i in eachindex(overlaps)
-        overlaps[i] = _gap_min_overlap(parts[i], parts[i+1], min_conn)
+        overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
     end
 
     total_du = Float64(parts[1].full_advance)
     for i in eachindex(overlaps)
-        total_du += parts[i+1].full_advance - overlaps[i]
+        total_du += parts[i + 1].full_advance - overlaps[i]
     end
 
     # All radical assembly parts have y_min=0, y_max=full_advance.
@@ -1140,7 +1160,7 @@ end
 # Return the GlyphMetrics for the smallest radical variant that covers
 # `required_du` design units (same selection logic as `_layout_radical!`),
 # or `nothing` if no variant information is available.  Does NOT push to boxes.
-function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph,Nothing}
+function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph, Nothing}
     rkey = _construction_key(ctx, "radical")
     if haskey(ctx.vert_constructions, rkey)
         vc = ctx.vert_constructions[rkey]
@@ -1157,13 +1177,13 @@ end
 # the radical must cover — from the body's bottom ink to the rule top.
 # Returns horizontal advance.
 function _layout_radical!(
-    ctx::_LayoutCtx,
-    required_du::Float64,
-    rule_top_em::Float64,
-    x0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        ctx::_LayoutCtx,
+        required_du::Float64,
+        rule_top_em::Float64,
+        x0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     upm = ctx.upm
 
     function _place_variant(name::String)::Float64
@@ -1186,7 +1206,8 @@ function _layout_radical!(
     end
 
     vc.assembly !== nothing && return _layout_radical_assembly!(
-        vc.assembly, ctx, required_du, rule_top_em, x0, scale, boxes)
+        vc.assembly, ctx, required_du, rule_top_em, x0, scale, boxes
+    )
 
     chosen = isempty(vc.variants) ? "radical" : last(vc.variants).glyph_name
     return _place_variant(chosen)
@@ -1196,17 +1217,17 @@ end
 # math axis.  Tries pre-built size variants first; falls back to the glyph
 # assembly when no variant is large enough.  Returns horizontal advance.
 function _layout_delim!(
-    ctx::_LayoutCtx,
-    glyph_name::String,
-    required_du::Float64,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        ctx::_LayoutCtx,
+        glyph_name::String,
+        required_du::Float64,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     isempty(glyph_name) && return 0.0
     upm = ctx.upm
-    mc  = ctx.mc
+    mc = ctx.mc
 
     function _place_glyph(name::String)::Float64
         g = _cmd_glyph(ctx, name)
@@ -1245,15 +1266,15 @@ end
 # the glyph from parts using the same helpers used for vertical assemblies.
 # Falls back to the largest variant (or the base glyph) if the assembly is empty.
 function _layout_wide_accent!(
-    ctx::_LayoutCtx,
-    accent_ps::String,
-    base_w_em::Float64,
-    accent_y::Float64,
-    x0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Nothing
-    upm      = ctx.upm
+        ctx::_LayoutCtx,
+        accent_ps::String,
+        base_w_em::Float64,
+        accent_y::Float64,
+        x0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Nothing
+    upm = ctx.upm
     min_conn = ctx.min_connector_overlap
     required_du = base_w_em / scale * upm   # convert em to design units
 
@@ -1268,7 +1289,7 @@ function _layout_wide_accent!(
         g = _cmd_glyph(ctx, name)
         g === nothing && return
         ink_center = (g.x_min + g.x_max) / (2.0 * upm) * scale
-        push!(boxes, LayoutBox(g, x0 + base_w_em / 2 - ink_center, accent_y, scale))
+        return push!(boxes, LayoutBox(g, x0 + base_w_em / 2 - ink_center, accent_y, scale))
     end
 
     # Try pre-built variants first (smallest that covers the base).
@@ -1281,17 +1302,21 @@ function _layout_wide_accent!(
 
     # Try extensible assembly.
     if hc.assembly !== nothing
-        asm   = hc.assembly
-        n     = _min_extender_reps(asm.parts, required_du, min_conn)
+        asm = hc.assembly
+        n = _min_extender_reps(asm.parts, required_du, min_conn)
         parts = _expand_assembly_parts(asm.parts, n)
         if !isempty(parts)
             # Compute overlap for each adjacent pair.
-            overlaps = [_gap_min_overlap(parts[i], parts[i+1], min_conn)
-                        for i in 1:(length(parts)-1)]
+            overlaps = [
+                _gap_min_overlap(parts[i], parts[i + 1], min_conn)
+                    for i in 1:(length(parts) - 1)
+            ]
             # Total width of the assembly in design units.
             total_du = Float64(parts[1].full_advance) +
-                       sum(Float64(parts[i+1].full_advance) - overlaps[i]
-                           for i in eachindex(overlaps); init=0.0)
+                sum(
+                Float64(parts[i + 1].full_advance) - overlaps[i]
+                    for i in eachindex(overlaps); init = 0.0
+            )
             total_w = total_du / upm * scale
             # Centre the assembly over the base.
             ax = x0 + (base_w_em - total_w) / 2
@@ -1325,48 +1350,48 @@ end
 #
 # sub_node / sup_node: subscript / superscript children (nothing if absent).
 function _layout_horiz_brace!(
-    brace_node::Node,
-    sub_node::Union{Node,Nothing},
-    sup_node::Union{Node,Nothing},
-    ctx::_LayoutCtx,
-    style::TexStyle,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        brace_node::Node,
+        sub_node::Union{Node, Nothing},
+        sup_node::Union{Node, Nothing},
+        ctx::_LayoutCtx,
+        style::TexStyle,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     upm = ctx.upm
-    mc  = ctx.mc
-    is_over  = startswith(brace_node.value, "\\over")
+    mc = ctx.mc
+    is_over = startswith(brace_node.value, "\\over")
     glyph_ps = _horiz_construction_key(ctx, _HORIZ_BRACE_GLYPHS[brace_node.value])
 
     # Primary note lives on the brace side; secondary note is the opposite.
-    primary_node   = is_over ? sup_node : sub_node
+    primary_node = is_over ? sup_node : sub_node
     secondary_node = is_over ? sub_node : sup_node
 
     # Body at current style.
     tmp_body = LayoutBox[]
-    body_w   = _layout_node!(brace_node.children[1], ctx, style, 0.0, 0.0, scale, tmp_body)
+    body_w = _layout_node!(brace_node.children[1], ctx, style, 0.0, 0.0, scale, tmp_body)
     body_top = _boxes_top(tmp_body, upm)
     body_bot = _boxes_bottom(tmp_body, upm)
 
     # Primary note at the script style of the brace side.
-    pri_s     = is_over ? sup_style(style) : sub_style(style)
+    pri_s = is_over ? sup_style(style) : sub_style(style)
     pri_scale = size_scale(pri_s, mc)
-    tmp_pri   = LayoutBox[]
-    pri_w     = 0.0
+    tmp_pri = LayoutBox[]
+    pri_w = 0.0
     if primary_node !== nothing
         pri_w = _layout_node!(primary_node, ctx, pri_s, 0.0, 0.0, pri_scale, tmp_pri)
     end
 
     # Total span: body and note are both centred over max(body_w, note_w).
     total_w = max(body_w, pri_w)
-    Δbody   = (total_w - body_w) / 2
+    Δbody = (total_w - body_w) / 2
 
     # Reference glyph for brace ink-extent calculation: find the same variant
     # that _layout_wide_accent! would select (smallest covering body_w or largest).
-    hc       = get(ctx.horiz_constructions, glyph_ps, nothing)
-    req_du   = body_w / scale * upm
+    hc = get(ctx.horiz_constructions, glyph_ps, nothing)
+    req_du = body_w / scale * upm
     sel_name = glyph_ps
     if hc !== nothing
         for v in hc.variants
@@ -1393,9 +1418,9 @@ function _layout_horiz_brace!(
         # No glyph metrics available: assume the brace's baseline coincides with
         # the body-side ink edge (y_min=0 for over, y_max=0 for under) and pad by
         # 0.25 em on the opposite side as a placeholder for the missing glyph.
-        brace_y   = is_over ? y0 + body_top + body_gap : y0 + body_bot - body_gap
+        brace_y = is_over ? y0 + body_top + body_gap : y0 + body_bot - body_gap
         brace_top = is_over ? brace_y + 0.25 * scale : brace_y
-        brace_bot = is_over ? brace_y                : brace_y - 0.25 * scale
+        brace_bot = is_over ? brace_y : brace_y - 0.25 * scale
     end
 
     # Place body (centred over total_w at y0).
@@ -1417,22 +1442,26 @@ function _layout_horiz_brace!(
 
     # Secondary note: placed as a normal side script to the right of the stack.
     if secondary_node !== nothing
-        sec_s     = is_over ? sub_style(style) : sup_style(style)
+        sec_s = is_over ? sub_style(style) : sup_style(style)
         sec_scale = size_scale(sec_s, mc)
-        tmp_sec   = LayoutBox[]
-        sec_w     = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, tmp_sec)
-        s         = scale / upm
-        script_x  = x0 + total_w
+        tmp_sec = LayoutBox[]
+        sec_w = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, tmp_sec)
+        s = scale / upm
+        script_x = x0 + total_w
         if is_over
-            y_sub = min(y0 - mc.subscript_shift_down * s,
-                        y0 + body_bot - mc.subscript_baseline_drop_min * s)
+            y_sub = min(
+                y0 - mc.subscript_shift_down * s,
+                y0 + body_bot - mc.subscript_baseline_drop_min * s
+            )
             y_sub = min(y_sub, y0 - _boxes_top(tmp_sec, upm) + mc.subscript_top_max * s)
             _emit_shifted!(boxes, tmp_sec, script_x, y_sub)
         else
             min_sup = is_cramped(style) ?
                 mc.superscript_shift_up_cramped * s : mc.superscript_shift_up * s
-            y_sup = max(y0 + min_sup,
-                        y0 + body_top - mc.superscript_baseline_drop_max * s)
+            y_sup = max(
+                y0 + min_sup,
+                y0 + body_top - mc.superscript_baseline_drop_max * s
+            )
             y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sec, upm))
             _emit_shifted!(boxes, tmp_sec, script_x, y_sup)
         end
@@ -1451,8 +1480,10 @@ _limits_base(node::Node) = node.kind === NKLimitsOverride ? node.children[1] : n
 # Used to shift limits of slanted operators (e.g. ∫) so they track the diagonal stroke.
 # Per the OpenType MATH spec and KaTeX, limits are offset by ±½ IC: subscripts shift
 # left and superscripts shift right.
-function _base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx,
-                                    scale::Float64)::Float64
+function _base_italic_correction_em(
+        boxes::Vector{LayoutBox}, ctx::_LayoutCtx,
+        scale::Float64
+    )::Float64
     for b in boxes
         b.element isa Glyph || continue
         ic = get(ctx.italic_corrections, b.element.glyph_name, 0)
@@ -1503,7 +1534,7 @@ end
 
 # Atom classes that left-cancel a following mbin atom (Rule 5).
 # A mbin at the start of a list or immediately after one of these is demoted to mord.
-const _BIN_LEFT_CANCEL  = (:bin, :open, :rel, :op, :punct)
+const _BIN_LEFT_CANCEL = (:bin, :open, :rel, :op, :punct)
 # Atom classes that right-cancel a preceding mbin atom (Rule 6).
 # A mbin immediately before one of these is demoted to mord.
 const _BIN_RIGHT_CANCEL = (:rel, :close, :punct)
@@ -1516,19 +1547,19 @@ const _BIN_RIGHT_CANCEL = (:rel, :close, :punct)
 # a mbin atom is demoted to mord when the surrounding context would produce
 # nonsensical spacing (e.g. a leading or trailing binary operator).
 function _layout_children!(
-    children,
-    ctx::_LayoutCtx,
-    style::TexStyle,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        children,
+        ctx::_LayoutCtx,
+        style::TexStyle,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     isempty(children) && return 0.0
 
     # Collect into an indexable array and compute initial atom classes.
-    nodes   = children isa Vector ? children : collect(children)
-    n       = length(nodes)
+    nodes = children isa Vector ? children : collect(children)
+    n = length(nodes)
     classes = Vector{Symbol}(undef, n)
     for i in 1:n
         classes[i] = _atom_class(nodes[i])
@@ -1558,7 +1589,7 @@ function _layout_children!(
     end
 
     # Emit nodes with inter-atom spacing using the reclassified classes.
-    cursor     = x0
+    cursor = x0
     prev_class = :nothing
     for i in 1:n
         cls = classes[i]
@@ -1584,8 +1615,8 @@ end
 # _MATRIX_COLSEP is the margin added on each side of a column (total gap between
 # adjacent cells = 2 × _MATRIX_COLSEP), matching LaTeX's \arraycolsep ≈ 5 mu.
 # _MATRIX_ROWGAP is extra baseline-to-baseline clearance added between rows.
-const _MATRIX_COLSEP       = 5 / 18   # 5 mu per side, matches LaTeX \arraycolsep
-const _MATRIX_ROWGAP        = 3 / 18   # extra row gap in em
+const _MATRIX_COLSEP = 5 / 18   # 5 mu per side, matches LaTeX \arraycolsep
+const _MATRIX_ROWGAP = 3 / 18   # extra row gap in em
 const _MATRIX_DOUBLERULESEP = 2 / 18   # gap between two adjacent rules (≈ TeX \doublerulesep = 2pt)
 
 # Parse a column-spec string (e.g. "|l||c|r|") into per-column alignment symbols
@@ -1596,8 +1627,8 @@ const _MATRIX_DOUBLERULESEP = 2 / 18   # gap between two adjacent rules (≈ TeX
 # '||' → vrule count 2 (double rule with _MATRIX_DOUBLERULESEP gap).
 # Unknown tokens (e.g. @{}, p{width}) are silently ignored.
 function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Int}}
-    col_aligns   = Symbol[]
-    vrule        = Int[]
+    col_aligns = Symbol[]
+    vrule = Int[]
     pending_rule = 0
     for ch in spec
         if ch === 'l' || ch === 'c' || ch === 'r'
@@ -1617,26 +1648,26 @@ end
 # Cells are laid out in Text style (even in Display), centred on the math axis.
 # Returns the total horizontal advance in em units.
 function _layout_matrix!(
-    node::Node,
-    ctx::_LayoutCtx,
-    style::TexStyle,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        node::Node,
+        ctx::_LayoutCtx,
+        style::TexStyle,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     # Decode value = "env_name\x00nrow\x00colspec".
-    parts = split(node.value, '\x00'; limit=3)
+    parts = split(node.value, '\x00'; limit = 3)
     length(parts) < 3 && return 0.0
     env_name = parts[1]
-    nrow     = parse(Int, parts[2])
+    nrow = parse(Int, parts[2])
     col_aligns, vrule = _parse_colspec(parts[3])
     ncol = length(col_aligns)
     (nrow == 0 || ncol == 0) && return 0.0
 
     info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
-    upm  = ctx.upm
-    mc   = ctx.mc
+    upm = ctx.upm
+    mc = ctx.mc
 
     # Cells are typeset in Text style (following TeX's rule for array environments).
     cell_style = is_cramped(style) ? CrampedText : Text
@@ -1645,31 +1676,31 @@ function _layout_matrix!(
     cell_scale = scale * info.scale
 
     # ── First pass: lay out each cell into a scratch buffer, record metrics ──
-    cell_boxes   = [LayoutBox[] for _ in 1:nrow, _ in 1:ncol]
-    cell_widths  = zeros(Float64, nrow, ncol)
+    cell_boxes = [LayoutBox[] for _ in 1:nrow, _ in 1:ncol]
+    cell_widths = zeros(Float64, nrow, ncol)
     cell_heights = zeros(Float64, nrow, ncol)   # max ink above baseline
-    cell_depths  = zeros(Float64, nrow, ncol)   # max ink below baseline (positive)
+    cell_depths = zeros(Float64, nrow, ncol)   # max ink below baseline (positive)
 
     for r in 1:nrow, c in 1:ncol
         ci = (r - 1) * ncol + c
         ci > length(node.children) && continue
         tmp = LayoutBox[]
         w = _layout_node!(node.children[ci], ctx, cell_style, 0.0, 0.0, cell_scale, tmp)
-        cell_boxes[r, c]   = tmp
-        cell_widths[r, c]  = w
-        cell_heights[r, c] = max(0.0,  _boxes_top(tmp, upm))
-        cell_depths[r, c]  = max(0.0, -_boxes_bottom(tmp, upm))
+        cell_boxes[r, c] = tmp
+        cell_widths[r, c] = w
+        cell_heights[r, c] = max(0.0, _boxes_top(tmp, upm))
+        cell_depths[r, c] = max(0.0, -_boxes_bottom(tmp, upm))
     end
 
     # ── Compute per-column widths and per-row extents ──
-    col_widths  = [maximum(cell_widths[:, c];  init=0.0) for c in 1:ncol]
-    row_heights = [maximum(cell_heights[r, :]; init=0.0) for r in 1:nrow]
-    row_depths  = [maximum(cell_depths[r, :];  init=0.0) for r in 1:nrow]
+    col_widths = [maximum(cell_widths[:, c]; init = 0.0) for c in 1:ncol]
+    row_heights = [maximum(cell_heights[r, :]; init = 0.0) for r in 1:nrow]
+    row_depths = [maximum(cell_depths[r, :]; init = 0.0) for r in 1:nrow]
 
     # Provisional baseline y for each row (row 1 at y = 0).
     row_y = zeros(Float64, nrow)
     for r in 2:nrow
-        row_y[r] = row_y[r-1] - (row_depths[r-1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
+        row_y[r] = row_y[r - 1] - (row_depths[r - 1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
     end
 
     # Vertical extent of the provisional grid.
@@ -1677,31 +1708,33 @@ function _layout_matrix!(
     grid_bot = row_y[nrow] - row_depths[nrow]
 
     # Centre grid on the math axis.
-    axis_em  = mc.axis_height / upm * scale
-    y_shift  = y0 + axis_em - (grid_top + grid_bot) / 2
+    axis_em = mc.axis_height / upm * scale
+    y_shift = y0 + axis_em - (grid_top + grid_bot) / 2
 
     # Column left-edge positions (relative to content origin, before adding left delimiter).
     # Vertical rules occupy space within the column separations.
     vrule_thick = mc.fraction_rule_thickness / upm * cell_scale
-    x_col    = zeros(Float64, ncol)
+    x_col = zeros(Float64, ncol)
     x_col[1] = _MATRIX_COLSEP * cell_scale
     for c in 2:ncol
-        x_col[c] = x_col[c-1] + col_widths[c-1] + 2 * _MATRIX_COLSEP * cell_scale
+        x_col[c] = x_col[c - 1] + col_widths[c - 1] + 2 * _MATRIX_COLSEP * cell_scale
     end
     content_w = x_col[ncol] + col_widths[ncol] + _MATRIX_COLSEP * cell_scale
 
     # ── Delimiter sizing (if required) ──
     left_w = 0.0; right_w = 0.0
     if !isempty(info.left) || !isempty(info.right)
-        actual_top  = y_shift + grid_top - y0
-        actual_bot  = y_shift + grid_bot - y0
-        h_above     = max(0.0, actual_top - axis_em)
-        h_below     = max(0.0, axis_em   - actual_bot)
+        actual_top = y_shift + grid_top - y0
+        actual_bot = y_shift + grid_bot - y0
+        h_above = max(0.0, actual_top - axis_em)
+        h_below = max(0.0, axis_em - actual_bot)
         required_em = 2.0 * max(h_above, h_below)
         required_du = required_em / scale * upm
-        left_w  = _layout_delim!(ctx, info.left,  required_du, x0, y0, scale, boxes)
-        right_w = _layout_delim!(ctx, info.right, required_du,
-                                 x0 + left_w + content_w, y0, scale, boxes)
+        left_w = _layout_delim!(ctx, info.left, required_du, x0, y0, scale, boxes)
+        right_w = _layout_delim!(
+            ctx, info.right, required_du,
+            x0 + left_w + content_w, y0, scale, boxes
+        )
     end
 
     # ── Second pass: emit all cells with correct offsets ──
@@ -1713,15 +1746,15 @@ function _layout_matrix!(
 
         # Per-column alignment: :l = flush left, :r = flush right, :c = centred.
         offset = col_aligns[c] === :l ? 0.0 :
-                 col_aligns[c] === :r ? col_widths[c] - cell_widths[r, c] :
-                                        (col_widths[c] - cell_widths[r, c]) / 2
+            col_aligns[c] === :r ? col_widths[c] - cell_widths[r, c] :
+            (col_widths[c] - cell_widths[r, c]) / 2
         x_cell = x0 + left_w + x_col[c] + offset
         y_cell = y_shift + row_y[r]
         _emit_shifted!(boxes, tmp, x_cell, y_cell)
     end
 
     # ── Emit vertical rules from colspec ──
-    vrule_bot    = y_shift + grid_bot
+    vrule_bot = y_shift + grid_bot
     vrule_height = grid_top - grid_bot
     # Base x positions of rule groups within the content area (relative to x0+left_w).
     # vrule[1]: before col 1; vrule[c+1]: between col c and c+1; vrule[ncol+1]: after last.
@@ -1732,16 +1765,21 @@ function _layout_matrix!(
         # Centre the rule group around base_x.
         group_w = n * vrule_thick + (n - 1) * _MATRIX_DOUBLERULESEP * cell_scale
         x_start = base_x - group_w / 2
-        for k in 0:n-1
-            push!(boxes, LayoutBox(VRule(vrule_height, vrule_thick),
-                                   x0 + left_w + x_start + k * rule_sep, vrule_bot, scale))
+        for k in 0:(n - 1)
+            push!(
+                boxes, LayoutBox(
+                    VRule(vrule_height, vrule_thick),
+                    x0 + left_w + x_start + k * rule_sep, vrule_bot, scale
+                )
+            )
         end
+        return
     end
-    emit_vrules!(0.0,                                                  vrule[1])
-    for c in 1:ncol-1
-        emit_vrules!(x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale, vrule[c+1])
+    emit_vrules!(0.0, vrule[1])
+    for c in 1:(ncol - 1)
+        emit_vrules!(x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale, vrule[c + 1])
     end
-    emit_vrules!(content_w,                                            vrule[ncol+1])
+    emit_vrules!(content_w, vrule[ncol + 1])
 
     return left_w + content_w + right_w
 end
@@ -1758,24 +1796,24 @@ end
 
 function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     ch = only(node.value)
-    g  = if ctx.font_variant !== :default
-             _variant_glyph(ctx, ctx.font_variant, ch)
-         elseif ctx.mode === :math && isletter(ch)
-             # Standard LaTeX renders math-mode letters italic; use the
-             # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
-             _variant_glyph(ctx, :mathit, ch)
-         elseif ctx.mode === :text && ch == ' '
-             # Space in text mode: emit a Space element with the font's word-space advance.
-             m = glyph_metrics_upright(ctx.family, ' ')
-             w = m === nothing ? 0.25 : m.advance_width / ctx.upm * scale
-             push!(boxes, LayoutBox(Space(w), x0, y0, scale))
-             return w
-        elseif ctx.mode === :text
-             # \text{}/\mbox{}: use upright (regular-font) glyph; no italic remapping.
-             _upright_glyph(ctx, ch)
-         else
-             _char_glyph(ctx, ch)
-         end
+    g = if ctx.font_variant !== :default
+        _variant_glyph(ctx, ctx.font_variant, ch)
+    elseif ctx.mode === :math && isletter(ch)
+        # Standard LaTeX renders math-mode letters italic; use the
+        # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
+        _variant_glyph(ctx, :mathit, ch)
+    elseif ctx.mode === :text && ch == ' '
+        # Space in text mode: emit a Space element with the font's word-space advance.
+        m = glyph_metrics_upright(ctx.family, ' ')
+        w = m === nothing ? 0.25 : m.advance_width / ctx.upm * scale
+        push!(boxes, LayoutBox(Space(w), x0, y0, scale))
+        return w
+    elseif ctx.mode === :text
+        # \text{}/\mbox{}: use upright (regular-font) glyph; no italic remapping.
+        _upright_glyph(ctx, ch)
+    else
+        _char_glyph(ctx, ch)
+    end
     g === nothing && return 0.0
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / ctx.upm * scale
@@ -1823,9 +1861,11 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     m = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return 0.0
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    g  = Glyph(isempty(ps) ? name : ps, :math,
-               m.advance_width, m.left_side_bearing,
-               m.x_min, m.y_min, m.x_max, m.y_max)
+    g = Glyph(
+        isempty(ps) ? name : ps, :math,
+        m.advance_width, m.left_side_bearing,
+        m.x_min, m.y_min, m.x_max, m.y_max
+    )
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / upm * scale
 end
@@ -1854,28 +1894,30 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NKHorizBrace &&
         return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sup_s     = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
+    sup_s = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
     if _use_limits(base, style)
         # Limits placement: sup centred above base.
         tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-        sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+        sup_w = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
         base_top = _boxes_top(tmp_base, upm)
         s = scale / upm
-        y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
-                    y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
+        y_sup = max(
+            y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+            y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm)
+        )
         total_w = max(base_w, sup_w)
         Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
         # ±½ italic correction shifts superscript right over the slanted stroke.
         Δsup += _base_italic_correction_em(tmp_base, ctx, scale) / 2
         _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-        _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
+        _emit_shifted!(boxes, tmp_sup, x0 + Δsup, y_sup)
         return total_w
     end
 
     tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
     base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-    sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+    sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
     append!(boxes, tmp_base)
     s = scale / upm
     min_sup = is_cramped(style) ?
@@ -1896,28 +1938,30 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NKHorizBrace &&
         return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sub_s     = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
+    sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
     if _use_limits(base, style)
         # Limits placement: sub centred below base.
         tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-        sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+        sub_w = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
         base_bot = _boxes_bottom(tmp_base, upm)
         s = scale / upm
-        y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
-                    y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+        y_sub = min(
+            y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+            y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s
+        )
         total_w = max(base_w, sub_w)
         Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
         # ±½ italic correction shifts subscript left under the slanted stroke.
         Δsub -= _base_italic_correction_em(tmp_base, ctx, scale) / 2
         _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-        _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
+        _emit_shifted!(boxes, tmp_sub, x0 + Δsub, y_sub)
         return total_w
     end
 
     tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
     base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-    sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+    sub_adv = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
     append!(boxes, tmp_base)
     s = scale / upm
     min_sub = mc.subscript_shift_down * s
@@ -1946,33 +1990,37 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
         # Limits placement: sub centred below, sup centred above.
         tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, tmp_base)
-        sub_w  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-        sup_w  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+        sub_w = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+        sup_w = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
         base_top = _boxes_top(tmp_base, upm)
         base_bot = _boxes_bottom(tmp_base, upm)
         s = scale / upm
-        y_sup = max(y0 + base_top + mc.upper_limit_baseline_rise_min * s,
-                    y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm))
-        y_sub = min(y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
-                    y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s)
+        y_sup = max(
+            y0 + base_top + mc.upper_limit_baseline_rise_min * s,
+            y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(tmp_sup, upm)
+        )
+        y_sub = min(
+            y0 + base_bot - mc.lower_limit_baseline_drop_min * s,
+            y0 + base_bot - _boxes_top(tmp_sub, upm) - mc.lower_limit_gap_min * s
+        )
         total_w = max(base_w, sub_w, sup_w)
         Δbase = (total_w - base_w) / 2
-        Δsub  = (total_w - sub_w)  / 2
-        Δsup  = (total_w - sup_w)  / 2
+        Δsub = (total_w - sub_w) / 2
+        Δsup = (total_w - sup_w) / 2
         # ±½ italic correction shifts sub/sup to track the slanted operator stroke.
         ic_half = _base_italic_correction_em(tmp_base, ctx, scale) / 2
         Δsub -= ic_half
         Δsup += ic_half
         _emit_shifted!(boxes, tmp_base, x0 + Δbase, y0)
-        _emit_shifted!(boxes, tmp_sub,  x0 + Δsub,  y_sub)
-        _emit_shifted!(boxes, tmp_sup,  x0 + Δsup,  y_sup)
+        _emit_shifted!(boxes, tmp_sub, x0 + Δsub, y_sub)
+        _emit_shifted!(boxes, tmp_sup, x0 + Δsup, y_sup)
         return total_w
     end
 
     tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
     base_adv = _layout_node!(base, ctx, style, x0, y0, scale, tmp_base)
-    sub_adv  = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
-    sup_adv  = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
+    sub_adv = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, tmp_sub)
+    sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, tmp_sup)
     append!(boxes, tmp_base)
     script_x = x0 + base_adv
     # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
@@ -2009,7 +2057,7 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
         end
     end
     _emit_shifted!(boxes, tmp_sub, script_x - ic_em, y_sub)
-    _emit_shifted!(boxes, tmp_sup, script_x,         y_sup)
+    _emit_shifted!(boxes, tmp_sup, script_x, y_sup)
     return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
 end
 
@@ -2047,15 +2095,15 @@ end
 #   - Minimum arrow width: max(natural width, widest_label + 2*PAD*scale).
 #   - Both labels and arrow centred horizontally over the full advance.
 function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm  = ctx.mc, ctx.upm
-    cmd      = node.value
+    mc, upm = ctx.mc, ctx.upm
+    cmd = node.value
     above_node = node.children[1]
     below_node = length(node.children) >= 2 ? node.children[2] : nothing
 
     # Labels rendered at sub/sup script style and scale.
-    above_s     = sup_style(style)
+    above_s = sup_style(style)
     above_scale = _scale_for_child(scale, style, above_s, mc)
-    below_s     = sub_style(style)
+    below_s = sub_style(style)
     below_scale = _scale_for_child(scale, style, below_s, mc)
 
     tmp_above = LayoutBox[]
@@ -2068,8 +2116,8 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     # Resolve the arrow glyph in horiz_constructions.
-    cp       = get(_XARROW_CODEPOINTS, cmd, 0x2192)
-    uni_name = "uni" * uppercase(string(cp, base=16, pad=4))
+    cp = get(_XARROW_CODEPOINTS, cmd, 0x2192)
+    uni_name = "uni" * uppercase(string(cp, base = 16, pad = 4))
     arrow_ps = _horiz_construction_key(ctx, uni_name)
 
     # Natural arrow width from the reference glyph (smallest pre-built variant
@@ -2096,7 +2144,7 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
         arrow_top = arrow_y + Float64(g_ref.y_max) / upm * scale
         arrow_bot = arrow_y + Float64(g_ref.y_min) / upm * scale
     else
-        arrow_y   = y0 + axis_em
+        arrow_y = y0 + axis_em
         arrow_top = arrow_y + 0.3 * scale
         arrow_bot = arrow_y - 0.3 * scale
     end
@@ -2136,13 +2184,13 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     if is_display(style)
         num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
         den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
-        num_gap   = mc.fraction_num_display_style_gap_min / upm * scale
-        den_gap   = mc.fraction_denom_display_style_gap_min / upm * scale
+        num_gap = mc.fraction_num_display_style_gap_min / upm * scale
+        den_gap = mc.fraction_denom_display_style_gap_min / upm * scale
     else
         num_shift = mc.fraction_numerator_shift_up / upm * scale
         den_shift = mc.fraction_denominator_shift_down / upm * scale
-        num_gap   = mc.fraction_numerator_gap_min / upm * scale
-        den_gap   = mc.fraction_denominator_gap_min / upm * scale
+        num_gap = mc.fraction_numerator_gap_min / upm * scale
+        den_gap = mc.fraction_denominator_gap_min / upm * scale
     end
 
     # Layout at y=0 to measure ink extents before applying shifts.
@@ -2153,10 +2201,10 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     # Clamp shifts so the minimum gap between content and rule is respected
     # (TeX Rule 15d/15e).  num_depth is how far the numerator ink extends below
     # its own baseline; den_height is how far the denominator ink extends above.
-    num_depth  = max(0.0, -_boxes_bottom(tmp_num, upm))
-    den_height = max(0.0,  _boxes_top(tmp_den,    upm))
-    num_shift  = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
-    den_shift  = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
+    num_depth = max(0.0, -_boxes_bottom(tmp_num, upm))
+    den_height = max(0.0, _boxes_top(tmp_den, upm))
+    num_shift = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
+    den_shift = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
 
     frac_w = max(num_w, den_w)
     Δnum = (frac_w - num_w) / 2
@@ -2174,11 +2222,11 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     tmp = LayoutBox[]
     # Rule 11: body is built in the cramped style (prevents superscripts inside
     # the radicand from protruding above the rule bar).
-    body_w   = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
+    body_w = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
     body_top = _boxes_top(tmp, upm)
     body_bot = _boxes_bottom(tmp, upm)
 
-    gap            = is_display(style) ?
+    gap = is_display(style) ?
         mc.radical_display_style_vertical_gap / upm * scale :
         mc.radical_vertical_gap / upm * scale
     rule_thickness = mc.radical_rule_thickness / upm * scale
@@ -2198,13 +2246,13 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
         end
     end
 
-    rule_y_local   = body_top + gap           # bottom of rule bar (em, relative to y0)
+    rule_y_local = body_top + gap           # bottom of rule bar (em, relative to y0)
     rule_top_local = rule_y_local + rule_thickness
 
     # required_du: vertical span from body bottom to rule top, in design units
     # at scale=1 (matching the vert_constructions advance values).
-    required_du  = (rule_top_local - body_bot) / scale * upm
-    rule_top_em  = y0 + rule_top_local
+    required_du = (rule_top_local - body_bot) / scale * upm
+    rule_top_em = y0 + rule_top_local
     rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
 
     # When the selected radical variant is larger than the minimum required
@@ -2221,8 +2269,12 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     _emit_shifted!(boxes, tmp, x0 + rad_adv, y0 - body_shift)
-    push!(boxes, LayoutBox(HRule(body_w, rule_thickness),
-                           x0 + rad_adv, y0 + rule_y_local, scale))
+    push!(
+        boxes, LayoutBox(
+            HRule(body_w, rule_thickness),
+            x0 + rad_adv, y0 + rule_y_local, scale
+        )
+    )
     return rad_adv + body_w
 end
 
@@ -2230,20 +2282,20 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     # \left…\right: size delimiters to the inner content, centred on the math axis.
     # node.value encodes "left_ps_name\x00right_ps_name".
-    sep        = findfirst('\x00', node.value)
-    left_name  = sep === nothing ? node.value : node.value[1:sep-1]
-    right_name = sep === nothing ? ""          : node.value[sep+1:end]
+    sep = findfirst('\x00', node.value)
+    left_name = sep === nothing ? node.value : node.value[1:(sep - 1)]
+    right_name = sep === nothing ? "" : node.value[(sep + 1):end]
 
     # Partition inner children into content segments separated by NKMiddle nodes.
     # segments[i] holds the children between the (i-1)-th and i-th \middle delimiter.
     # middles[i]  is the NKMiddle node separating segments[i] from segments[i+1].
-    segments    = Vector{Node}[]
-    middles     = Node[]
+    segments = Vector{Node}[]
+    middles = Node[]
     current_seg = Node[]
     for child in node.children
         if child.kind === NKMiddle
             push!(segments, current_seg)
-            push!(middles,  child)
+            push!(middles, child)
             current_seg = Node[]
         else
             push!(current_seg, child)
@@ -2253,14 +2305,14 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
 
     # Lay out each segment at the origin into a scratch buffer to measure dimensions.
     # x=0 is used so that box positions are relative; they are shifted when placed.
-    seg_boxes  = [LayoutBox[] for _ in segments]
+    seg_boxes = [LayoutBox[] for _ in segments]
     seg_widths = zeros(Float64, length(segments))
     for (i, seg) in enumerate(segments)
         seg_widths[i] = _layout_children!(seg, ctx, style, 0.0, y0, scale, seg_boxes[i])
     end
 
     # Measure the overall vertical extent across all segment boxes.
-    all_tmp     = isempty(seg_boxes) ? LayoutBox[] : reduce(vcat, seg_boxes)
+    all_tmp = isempty(seg_boxes) ? LayoutBox[] : reduce(vcat, seg_boxes)
     content_top = _boxes_top(all_tmp, upm)
     content_bot = _boxes_bottom(all_tmp, upm)
     # Ensure a sensible non-zero span when content has no glyph ink.
@@ -2271,9 +2323,9 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     # symmetrically around the math axis (same formula for left, middle, and right).
     # Converted to unscaled design units because GlyphVariant.advance and
     # GlyphAssemblyPart.full_advance are stored in unscaled design units.
-    axis_em     = y0 + mc.axis_height / upm * scale
-    h_above     = max(0.0, content_top - axis_em)
-    h_below     = max(0.0, axis_em - content_bot)
+    axis_em = y0 + mc.axis_height / upm * scale
+    h_above = max(0.0, content_top - axis_em)
+    h_below = max(0.0, axis_em - content_bot)
     required_em = 2.0 * max(h_above, h_below)
     required_du = required_em / scale * upm
 
@@ -2315,7 +2367,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
 
     # Build base in cramped style (Rule 12: base is typeset cramped).
     tmp = LayoutBox[]
-    base_w   = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
+    base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
     base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
     _emit_shifted!(boxes, tmp, x0, y0)
 
@@ -2363,11 +2415,17 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
         x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
     end
 
-    push!(boxes, LayoutBox(Glyph(accent_ps, :math, accent_m.advance_width,
-                                 accent_m.left_side_bearing,
-                                 accent_m.x_min, accent_m.y_min,
-                                 accent_m.x_max, accent_m.y_max),
-                           accent_x, accent_y, scale))
+    push!(
+        boxes, LayoutBox(
+            Glyph(
+                accent_ps, :math, accent_m.advance_width,
+                accent_m.left_side_bearing,
+                accent_m.x_min, accent_m.y_min,
+                accent_m.x_max, accent_m.y_max
+            ),
+            accent_x, accent_y, scale
+        )
+    )
     return base_w
 end
 
@@ -2377,14 +2435,14 @@ function _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
     # \underline (Rule 10): body in current style; HRule below with gap from MATH table.
     isempty(node.children) && return 0.0
     mc, upm = ctx.mc, ctx.upm
-    is_over     = node.value == "overline"
+    is_over = node.value == "overline"
     child_style = is_over ? cramp_style(style) : style
 
     tmp = LayoutBox[]
     body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, tmp)
 
     rule_t = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
-    gap    = (is_over ? mc.overbar_vertical_gap   : mc.underbar_vertical_gap)   / upm * scale
+    gap = (is_over ? mc.overbar_vertical_gap : mc.underbar_vertical_gap) / upm * scale
     _emit_shifted!(boxes, tmp, x0, y0)
 
     # Rule bottom at body_top + gap (over) or body_bot − gap − rule_t (under).
@@ -2399,14 +2457,14 @@ end
 # the given scale.  Returns the horizontal advance of the node in em units.
 # Dispatches per `node.kind` to a specialised `_layout_X!` helper above.
 function _layout_node!(
-    node::Node,
-    ctx::_LayoutCtx,
-    style::TexStyle,
-    x0::Float64,
-    y0::Float64,
-    scale::Float64,
-    boxes::Vector{LayoutBox},
-)::Float64
+        node::Node,
+        ctx::_LayoutCtx,
+        style::TexStyle,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
     k = node.kind
     k === NKChar           && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     k === NKCommand        && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
@@ -2444,11 +2502,13 @@ Lay out `node` in the given style, using font metrics from `family`.
 Returns a flat list of positioned elements.
 """
 function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
-    mt  = load_math_table(family.math)
-    ctx = _LayoutCtx(family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-                     mt.horiz_constructions, mt.top_accent_attachments,
-                     mt.italic_corrections,
-                     mt.min_connector_overlap, :math, :default)
+    mt = load_math_table(family.math)
+    ctx = _LayoutCtx(
+        family, mt.constants, Float64(mt.upm), mt.vert_constructions,
+        mt.horiz_constructions, mt.top_accent_attachments,
+        mt.italic_corrections,
+        mt.min_connector_overlap, :math, :default
+    )
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
     return boxes
@@ -2464,10 +2524,9 @@ Returns the same flat `(element, x, y, scale)` representation consumed by
 `texelems_and_glyph_collection` in Makie.
 """
 function generate_tex_elements(
-    input::AbstractString,
-    family::FontFamily = default_font_family(),
-)::Vector{LayoutBox}
+        input::AbstractString,
+        family::FontFamily = default_font_family(),
+    )::Vector{LayoutBox}
     node = parse_latex(input)
-    layout(node, family, Display)
+    return layout(node, family, Display)
 end
-

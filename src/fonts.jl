@@ -21,10 +21,10 @@ The `math` slot is mandatory; text slots may be omitted if only math mode is nee
 """
 struct FontFamily
     math::String
-    regular::Union{String,Nothing}
-    italic::Union{String,Nothing}
-    bold::Union{String,Nothing}
-    bolditalic::Union{String,Nothing}
+    regular::Union{String, Nothing}
+    italic::Union{String, Nothing}
+    bold::Union{String, Nothing}
+    bolditalic::Union{String, Nothing}
 end
 
 FontFamily(math::String) = FontFamily(math, nothing, nothing, nothing, nothing)
@@ -46,40 +46,40 @@ end
 # ── Font cache ────────────────────────────────────────────────────────────────
 
 # Per-path cache: FTFont handle + hmtx table (Vector of (advance, lsb) by GID).
-const _FONT_CACHE = Dict{String, Tuple{FreeTypeAbstraction.FTFont, Vector{Tuple{Int,Int}}}}()
+const _FONT_CACHE = Dict{String, Tuple{FreeTypeAbstraction.FTFont, Vector{Tuple{Int, Int}}}}()
 
 # Parse the hmtx table from raw font bytes.
 # Returns a 1-indexed vector where index GID+1 gives (advance_width, lsb).
-function _parse_hmtx_table(data::Vector{UInt8})::Vector{Tuple{Int,Int}}
+function _parse_hmtx_table(data::Vector{UInt8})::Vector{Tuple{Int, Int}}
     maxp_start, _ = _find_table(data, "maxp")
-    num_glyphs    = Int(_u16(data, maxp_start + 4))
+    num_glyphs = Int(_u16(data, maxp_start + 4))
 
     hhea_start, _ = _find_table(data, "hhea")
-    n_hm          = Int(_u16(data, hhea_start + 34))   # numberOfHMetrics
+    n_hm = Int(_u16(data, hhea_start + 34))   # numberOfHMetrics
 
     hmtx_start, _ = _find_table(data, "hmtx")
 
-    result = Vector{Tuple{Int,Int}}(undef, num_glyphs)
+    result = Vector{Tuple{Int, Int}}(undef, num_glyphs)
     last_adv = 0
     for i in 0:(n_hm - 1)
-        adv      = Int(_u16(data, hmtx_start + 4*i))
-        lsb_u    = Int(_u16(data, hmtx_start + 4*i + 2))
-        lsb      = lsb_u >= 0x8000 ? lsb_u - 0x10000 : lsb_u
+        adv = Int(_u16(data, hmtx_start + 4 * i))
+        lsb_u = Int(_u16(data, hmtx_start + 4 * i + 2))
+        lsb = lsb_u >= 0x8000 ? lsb_u - 0x00010000 : lsb_u
         result[i + 1] = (adv, lsb)
         last_adv = adv
     end
     # Remaining glyphs inherit the last advance width.
     for i in n_hm:(num_glyphs - 1)
-        off   = n_hm * 4 + (i - n_hm) * 2
+        off = n_hm * 4 + (i - n_hm) * 2
         lsb_u = Int(_u16(data, hmtx_start + off))
-        lsb   = lsb_u >= 0x8000 ? lsb_u - 0x10000 : lsb_u
+        lsb = lsb_u >= 0x8000 ? lsb_u - 0x00010000 : lsb_u
         result[i + 1] = (last_adv, lsb)
     end
     return result
 end
 
 function _load_font(path::String)
-    get!(_FONT_CACHE, path) do
+    return get!(_FONT_CACHE, path) do
         face = FreeTypeAbstraction.FTFont(path)
         hmtx = _parse_hmtx_table(read(path))
         (face, hmtx)
@@ -95,7 +95,7 @@ Return horizontal metrics for the named glyph in the math font, or `nothing`
 if the glyph is absent.  `glyph_name` is the PostScript name (e.g. `"f"`,
 `"parenleft"`, `"alpha"`).
 """
-function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetrics,Nothing}
+function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetrics, Nothing}
     face, hmtx = _load_font(family.math)
     gid = Int(FreeTypeAbstraction.glyph_index(face, glyph_name))
     gid == 0 && return nothing
@@ -109,7 +109,7 @@ function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetri
     x_max = Int(m.horiBearingX) + Int(m.width)
     y_min = Int(m.horiBearingY) - Int(m.height)
 
-    GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
+    return GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
 end
 
 """
@@ -122,7 +122,7 @@ font's codepoint mapping, which yields upright letter forms in OpenType math
 fonts such as NewCMMath (unlike the PS-name lookup, which returns italic forms).
 Returns `nothing` if the glyph is absent from the chosen font.
 """
-function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics,Nothing}
+function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics, Nothing}
     font_path = family.regular !== nothing ? family.regular : family.math
     face, hmtx = _load_font(font_path)
     gid = Int(_FT.FT_Get_Char_Index(face, UInt32(ch)))
@@ -131,11 +131,13 @@ function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics
     adv, lsb = hmtx[gid + 1]
     _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
     m = unsafe_load(face.glyph).metrics
-    GlyphMetrics(adv, lsb,
-                 Int(m.horiBearingX),
-                 Int(m.horiBearingY) - Int(m.height),
-                 Int(m.horiBearingX) + Int(m.width),
-                 Int(m.horiBearingY))
+    return GlyphMetrics(
+        adv, lsb,
+        Int(m.horiBearingX),
+        Int(m.horiBearingY) - Int(m.height),
+        Int(m.horiBearingX) + Int(m.width),
+        Int(m.horiBearingY)
+    )
 end
 
 """
@@ -144,7 +146,7 @@ end
 Return metrics for the glyph mapped from a Unicode codepoint in the math font,
 or `nothing` if the codepoint has no glyph.
 """
-function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::Union{GlyphMetrics,Nothing}
+function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::Union{GlyphMetrics, Nothing}
     face, hmtx = _load_font(family.math)
     gid = Int(_FT.FT_Get_Char_Index(face, cp))
     gid == 0 && return nothing
@@ -158,7 +160,7 @@ function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::Union{Glyph
     x_max = Int(m.horiBearingX) + Int(m.width)
     y_min = Int(m.horiBearingY) - Int(m.height)
 
-    GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
+    return GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
 end
 
 # ── Unicode math-variant codepoint mapping ────────────────────────────────────
@@ -169,7 +171,7 @@ end
 
 # \mathbb exceptions: letters that have dedicated BMP codepoints in addition to
 # (or instead of) their Mathematical Double-Struck equivalents.
-const _MATHBB_EXCEPTIONS = Dict{Char,UInt32}(
+const _MATHBB_EXCEPTIONS = Dict{Char, UInt32}(
     'C' => 0x2102,  # ℂ  DOUBLE-STRUCK CAPITAL C
     'H' => 0x210D,  # ℍ  DOUBLE-STRUCK CAPITAL H
     'N' => 0x2115,  # ℕ  DOUBLE-STRUCK CAPITAL N
@@ -180,7 +182,7 @@ const _MATHBB_EXCEPTIONS = Dict{Char,UInt32}(
 )
 
 # \mathcal exceptions: uppercase letters with BMP Letterlike Symbols codepoints.
-const _MATHCAL_UC_EXCEPTIONS = Dict{Char,UInt32}(
+const _MATHCAL_UC_EXCEPTIONS = Dict{Char, UInt32}(
     'B' => 0x212C,  # ℬ  SCRIPT CAPITAL B
     'E' => 0x2130,  # ℰ  SCRIPT CAPITAL E
     'F' => 0x2131,  # ℱ  SCRIPT CAPITAL F
@@ -192,14 +194,14 @@ const _MATHCAL_UC_EXCEPTIONS = Dict{Char,UInt32}(
 )
 
 # \mathcal lowercase exceptions.
-const _MATHCAL_LC_EXCEPTIONS = Dict{Char,UInt32}(
+const _MATHCAL_LC_EXCEPTIONS = Dict{Char, UInt32}(
     'e' => 0x212F,  # ℯ  SCRIPT SMALL E
     'g' => 0x210A,  # ℊ  SCRIPT SMALL G
     'o' => 0x2134,  # ℴ  SCRIPT SMALL O
 )
 
 # \mathfrak uppercase exceptions: letters with BMP Letterlike Symbols codepoints.
-const _MATHFRAK_UC_EXCEPTIONS = Dict{Char,UInt32}(
+const _MATHFRAK_UC_EXCEPTIONS = Dict{Char, UInt32}(
     'C' => 0x212D,  # ℭ  FRAKTUR CAPITAL C
     'H' => 0x210C,  # ℌ  FRAKTUR CAPITAL H
     'I' => 0x2111,  # ℑ  FRAKTUR CAPITAL I (BLACK-LETTER)
@@ -208,7 +210,7 @@ const _MATHFRAK_UC_EXCEPTIONS = Dict{Char,UInt32}(
 )
 
 # \mathit lowercase exceptions.
-const _MATHIT_LC_EXCEPTIONS = Dict{Char,UInt32}(
+const _MATHIT_LC_EXCEPTIONS = Dict{Char, UInt32}(
     'h' => 0x210E,  # ℎ  PLANCK CONSTANT (italic h)
 )
 
@@ -221,7 +223,7 @@ variant, or `nothing` if no variant codepoint exists for that character.
 Uses the Mathematical Alphanumeric Symbols block (U+1D400–U+1D7FF) for
 continuous ranges, and dedicated BMP Letterlike Symbols for exceptions.
 """
-function _math_variant_codepoint(variant::Symbol, ch::Char)::Union{UInt32,Nothing}
+function _math_variant_codepoint(variant::Symbol, ch::Char)::Union{UInt32, Nothing}
     cp = UInt32(ch)
 
     # ── \mathbf: bold upright Latin, digits, and Greek ─────────────────────────
@@ -230,114 +232,122 @@ function _math_variant_codepoint(variant::Symbol, ch::Char)::Union{UInt32,Nothin
     # The Greek UC gap at 0x03A2 (no such letter) aligns with the ϴ-symbol slot
     # 1D6B9 in the math block, so a single offset covers Α–Ρ and Σ–Ω uniformly.
     if variant === :mathbf
-        'A' <= ch <= 'Z' && return 0x1D400 + (cp - UInt32('A'))  # 𝐀–𝐙
-        'a' <= ch <= 'z' && return 0x1D41A + (cp - UInt32('a'))  # 𝐚–𝐳
-        '0' <= ch <= '9' && return 0x1D7CE + (cp - UInt32('0'))  # 𝟎–𝟗
+        'A' <= ch <= 'Z' && return 0x0001D400 + (cp - UInt32('A'))  # 𝐀–𝐙
+        'a' <= ch <= 'z' && return 0x0001D41A + (cp - UInt32('a'))  # 𝐚–𝐳
+        '0' <= ch <= '9' && return 0x0001D7CE + (cp - UInt32('0'))  # 𝟎–𝟗
         if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
-            return 0x1D6A8 + (cp - UInt32('Α'))             # 𝚨–𝛀
+            return 0x0001D6A8 + (cp - UInt32('Α'))             # 𝚨–𝛀
         end
         'α' <= ch <= 'ω' &&
-            return 0x1D6C2 + (cp - UInt32('α'))             # 𝛂–𝛚
-        ch === '∇' && return 0x1D6C1  # bold ∇
-        ch === '∂' && return 0x1D6DB  # bold ∂
-        ch === 'ϵ' && return 0x1D6DC  # bold ϵ (varepsilon)
-        ch === 'ϑ' && return 0x1D6DD  # bold ϑ (vartheta)
-        ch === 'ϰ' && return 0x1D6DE  # bold ϰ (varkappa)
-        ch === 'ϕ' && return 0x1D6DF  # bold ϕ (varphi)
-        ch === 'ϱ' && return 0x1D6E0  # bold ϱ (varrho)
-        ch === 'ϖ' && return 0x1D6E1  # bold ϖ (varpi)
+            return 0x0001D6C2 + (cp - UInt32('α'))             # 𝛂–𝛚
+        ch === '∇' && return 0x0001D6C1  # bold ∇
+        ch === '∂' && return 0x0001D6DB  # bold ∂
+        ch === 'ϵ' && return 0x0001D6DC  # bold ϵ (varepsilon)
+        ch === 'ϑ' && return 0x0001D6DD  # bold ϑ (vartheta)
+        ch === 'ϰ' && return 0x0001D6DE  # bold ϰ (varkappa)
+        ch === 'ϕ' && return 0x0001D6DF  # bold ϕ (varphi)
+        ch === 'ϱ' && return 0x0001D6E0  # bold ϱ (varrho)
+        ch === 'ϖ' && return 0x0001D6E1  # bold ϖ (varpi)
         return nothing
 
-    # ── \boldsymbol: bold italic Latin and Greek ──────────────────────────────
-    # Unlike \mathbf, bold italic uses separate Latin slots (1D468 UC, 1D482 LC)
-    # and a separate Greek block (UC 1D71C–1D734, LC 1D736–1D74E).
+        # ── \boldsymbol: bold italic Latin and Greek ──────────────────────────────
+        # Unlike \mathbf, bold italic uses separate Latin slots (1D468 UC, 1D482 LC)
+        # and a separate Greek block (UC 1D71C–1D734, LC 1D736–1D74E).
     elseif variant === :boldsymbol
-        'A' <= ch <= 'Z' && return 0x1D468 + (cp - UInt32('A'))  # 𝑨–𝒁
-        'a' <= ch <= 'z' && return 0x1D482 + (cp - UInt32('a'))  # 𝒂–𝒛
-        '0' <= ch <= '9' && return 0x1D7CE + (cp - UInt32('0'))  # 𝟎–𝟗 (bold only; no bold-italic digit block)
+        'A' <= ch <= 'Z' && return 0x0001D468 + (cp - UInt32('A'))  # 𝑨–𝒁
+        'a' <= ch <= 'z' && return 0x0001D482 + (cp - UInt32('a'))  # 𝒂–𝒛
+        '0' <= ch <= '9' && return 0x0001D7CE + (cp - UInt32('0'))  # 𝟎–𝟗 (bold only; no bold-italic digit block)
         if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
-            return 0x1D71C + (cp - UInt32('Α'))             # 𝜜–𝜴
+            return 0x0001D71C + (cp - UInt32('Α'))             # 𝜜–𝜴
         end
         'α' <= ch <= 'ω' &&
-            return 0x1D736 + (cp - UInt32('α'))             # 𝜶–𝝎
-        ch === '∇' && return 0x1D735  # bold italic ∇
-        ch === '∂' && return 0x1D74F  # bold italic ∂
-        ch === 'ϵ' && return 0x1D750  # bold italic ϵ
-        ch === 'ϑ' && return 0x1D751  # bold italic ϑ
-        ch === 'ϰ' && return 0x1D752  # bold italic ϰ
-        ch === 'ϕ' && return 0x1D753  # bold italic ϕ
-        ch === 'ϱ' && return 0x1D754  # bold italic ϱ
-        ch === 'ϖ' && return 0x1D755  # bold italic ϖ
+            return 0x0001D736 + (cp - UInt32('α'))             # 𝜶–𝝎
+        ch === '∇' && return 0x0001D735  # bold italic ∇
+        ch === '∂' && return 0x0001D74F  # bold italic ∂
+        ch === 'ϵ' && return 0x0001D750  # bold italic ϵ
+        ch === 'ϑ' && return 0x0001D751  # bold italic ϑ
+        ch === 'ϰ' && return 0x0001D752  # bold italic ϰ
+        ch === 'ϕ' && return 0x0001D753  # bold italic ϕ
+        ch === 'ϱ' && return 0x0001D754  # bold italic ϱ
+        ch === 'ϖ' && return 0x0001D755  # bold italic ϖ
         return nothing
 
-    # ── \mathit / \mathnormal: italic Latin and Greek ─────────────────────────
-    # Greek italic: UC 1D6E2–1D6FA, LC 1D6FC–1D714 (default math style for Greek).
+        # ── \mathit / \mathnormal: italic Latin and Greek ─────────────────────────
+        # Greek italic: UC 1D6E2–1D6FA, LC 1D6FC–1D714 (default math style for Greek).
     elseif variant === :mathit || variant === :mathnormal
-        'A' <= ch <= 'Z' && return 0x1D434 + (cp - UInt32('A'))  # 𝐴–𝑍
-        'a' <= ch <= 'z' && return get(_MATHIT_LC_EXCEPTIONS, ch,
-                                       0x1D44E + (cp - UInt32('a')))  # 𝑎–𝑧 (ℎ exception)
+        'A' <= ch <= 'Z' && return 0x0001D434 + (cp - UInt32('A'))  # 𝐴–𝑍
+        'a' <= ch <= 'z' && return get(
+            _MATHIT_LC_EXCEPTIONS, ch,
+            0x0001D44E + (cp - UInt32('a'))
+        )  # 𝑎–𝑧 (ℎ exception)
         if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
-            return 0x1D6E2 + (cp - UInt32('Α'))             # 𝛢–𝛺
+            return 0x0001D6E2 + (cp - UInt32('Α'))             # 𝛢–𝛺
         end
         'α' <= ch <= 'ω' &&
-            return 0x1D6FC + (cp - UInt32('α'))             # 𝛼–𝜔
-        ch === '∇' && return 0x1D6FB  # italic ∇
-        ch === '∂' && return 0x1D715  # italic ∂
-        ch === 'ϵ' && return 0x1D716  # italic ϵ
-        ch === 'ϑ' && return 0x1D717  # italic ϑ
-        ch === 'ϰ' && return 0x1D718  # italic ϰ
-        ch === 'ϕ' && return 0x1D719  # italic ϕ
-        ch === 'ϱ' && return 0x1D71A  # italic ϱ
-        ch === 'ϖ' && return 0x1D71B  # italic ϖ
+            return 0x0001D6FC + (cp - UInt32('α'))             # 𝛼–𝜔
+        ch === '∇' && return 0x0001D6FB  # italic ∇
+        ch === '∂' && return 0x0001D715  # italic ∂
+        ch === 'ϵ' && return 0x0001D716  # italic ϵ
+        ch === 'ϑ' && return 0x0001D717  # italic ϑ
+        ch === 'ϰ' && return 0x0001D718  # italic ϰ
+        ch === 'ϕ' && return 0x0001D719  # italic ϕ
+        ch === 'ϱ' && return 0x0001D71A  # italic ϱ
+        ch === 'ϖ' && return 0x0001D71B  # italic ϖ
         return nothing
 
-    # ── \mathrm: upright via regular font or math-font codepoint ──────────────
+        # ── \mathrm: upright via regular font or math-font codepoint ──────────────
     elseif variant === :mathrm
         # ASCII letters map directly; the layout engine will use _upright_glyph.
         # Return nothing here to signal "use upright lookup, not variant codepoint".
         return nothing
 
-    # ── \mathbb: double-struck ─────────────────────────────────────────────────
+        # ── \mathbb: double-struck ─────────────────────────────────────────────────
     elseif variant === :mathbb
         haskey(_MATHBB_EXCEPTIONS, ch) && return _MATHBB_EXCEPTIONS[ch]
-        'A' <= ch <= 'Z' && return 0x1D538 + (cp - UInt32('A'))  # 𝔸–𝕑
-        'a' <= ch <= 'z' && return 0x1D552 + (cp - UInt32('a'))  # 𝕒–𝕫
-        '0' <= ch <= '9' && return 0x1D7D8 + (cp - UInt32('0'))  # 𝟘–𝟡
+        'A' <= ch <= 'Z' && return 0x0001D538 + (cp - UInt32('A'))  # 𝔸–𝕑
+        'a' <= ch <= 'z' && return 0x0001D552 + (cp - UInt32('a'))  # 𝕒–𝕫
+        '0' <= ch <= '9' && return 0x0001D7D8 + (cp - UInt32('0'))  # 𝟘–𝟡
         return nothing
 
-    # ── \mathcal / \mathscr: script ───────────────────────────────────────────
+        # ── \mathcal / \mathscr: script ───────────────────────────────────────────
     elseif variant === :mathcal || variant === :mathscr
-        'A' <= ch <= 'Z' && return get(_MATHCAL_UC_EXCEPTIONS, ch,
-                                       0x1D49C + (cp - UInt32('A')))  # 𝒜–𝒵
-        'a' <= ch <= 'z' && return get(_MATHCAL_LC_EXCEPTIONS, ch,
-                                       0x1D4B6 + (cp - UInt32('a')))  # 𝒶–𝓏
+        'A' <= ch <= 'Z' && return get(
+            _MATHCAL_UC_EXCEPTIONS, ch,
+            0x0001D49C + (cp - UInt32('A'))
+        )  # 𝒜–𝒵
+        'a' <= ch <= 'z' && return get(
+            _MATHCAL_LC_EXCEPTIONS, ch,
+            0x0001D4B6 + (cp - UInt32('a'))
+        )  # 𝒶–𝓏
         return nothing
 
-    # ── \mathfrak: fraktur ────────────────────────────────────────────────────
+        # ── \mathfrak: fraktur ────────────────────────────────────────────────────
     elseif variant === :mathfrak
-        'A' <= ch <= 'Z' && return get(_MATHFRAK_UC_EXCEPTIONS, ch,
-                                       0x1D504 + (cp - UInt32('A')))  # 𝔄–𝔷
-        'a' <= ch <= 'z' && return 0x1D51E + (cp - UInt32('a'))       # 𝔞–𝔷
+        'A' <= ch <= 'Z' && return get(
+            _MATHFRAK_UC_EXCEPTIONS, ch,
+            0x0001D504 + (cp - UInt32('A'))
+        )  # 𝔄–𝔷
+        'a' <= ch <= 'z' && return 0x0001D51E + (cp - UInt32('a'))       # 𝔞–𝔷
         return nothing
 
-    # ── \mathsf: sans-serif upright ───────────────────────────────────────────
+        # ── \mathsf: sans-serif upright ───────────────────────────────────────────
     elseif variant === :mathsf
-        'A' <= ch <= 'Z' && return 0x1D5A0 + (cp - UInt32('A'))  # 𝖠–𝖹
-        'a' <= ch <= 'z' && return 0x1D5BA + (cp - UInt32('a'))  # 𝖺–𝗓
-        '0' <= ch <= '9' && return 0x1D7E2 + (cp - UInt32('0'))  # 𝟢–𝟫
+        'A' <= ch <= 'Z' && return 0x0001D5A0 + (cp - UInt32('A'))  # 𝖠–𝖹
+        'a' <= ch <= 'z' && return 0x0001D5BA + (cp - UInt32('a'))  # 𝖺–𝗓
+        '0' <= ch <= '9' && return 0x0001D7E2 + (cp - UInt32('0'))  # 𝟢–𝟫
         return nothing
 
-    # ── \mathtt: monospace ────────────────────────────────────────────────────
+        # ── \mathtt: monospace ────────────────────────────────────────────────────
     elseif variant === :mathtt
-        'A' <= ch <= 'Z' && return 0x1D670 + (cp - UInt32('A'))  # 𝙰–𝚉
-        'a' <= ch <= 'z' && return 0x1D68A + (cp - UInt32('a'))  # 𝚊–𝚣
-        '0' <= ch <= '9' && return 0x1D7F6 + (cp - UInt32('0'))  # 𝟶–𝟿
+        'A' <= ch <= 'Z' && return 0x0001D670 + (cp - UInt32('A'))  # 𝙰–𝚉
+        'a' <= ch <= 'z' && return 0x0001D68A + (cp - UInt32('a'))  # 𝚊–𝚣
+        '0' <= ch <= '9' && return 0x0001D7F6 + (cp - UInt32('0'))  # 𝟶–𝟿
         return nothing
 
-    # ── \mathsfit: sans-serif italic ─────────────────────────────────────────
+        # ── \mathsfit: sans-serif italic ─────────────────────────────────────────
     elseif variant === :mathsfit
-        'A' <= ch <= 'Z' && return 0x1D608 + (cp - UInt32('A'))  # 𝘈–𝘡
-        'a' <= ch <= 'z' && return 0x1D622 + (cp - UInt32('a'))  # 𝘢–𝘻
+        'A' <= ch <= 'Z' && return 0x0001D608 + (cp - UInt32('A'))  # 𝘈–𝘡
+        'a' <= ch <= 'z' && return 0x0001D622 + (cp - UInt32('a'))  # 𝘢–𝘻
         return nothing
 
     else
@@ -366,21 +376,21 @@ function glyph_name_by_codepoint(font_path::String, cp::UInt32)::String
     ret = _FT.FT_Get_Glyph_Name(face, UInt32(gid), buf, UInt32(length(buf)))
     ret != 0 && return ""
     i = findfirst(==(0x00), buf)
-    return i === nothing ? "" : String(buf[1:i-1])
+    return i === nothing ? "" : String(buf[1:(i - 1)])
 end
 
 # ── Named font families via Artifacts ────────────────────────────────────────
 
 # Maps user-facing Symbol names to artifact names in Artifacts.toml.
-const _NAMED_ARTIFACTS = Dict{Symbol,String}(
-    :new_cm    => "NewCMMath",
-    :pagella   => "Pagella",
-    :luciole   => "Luciole",
-    :stix_two  => "STIXTwo",
+const _NAMED_ARTIFACTS = Dict{Symbol, String}(
+    :new_cm => "NewCMMath",
+    :pagella => "Pagella",
+    :luciole => "Luciole",
+    :stix_two => "STIXTwo",
     :fira_math => "FiraMath",
-    :schola    => "Schola",
-    :termes    => "Termes",
-    :bonum     => "Bonum",
+    :schola => "Schola",
+    :termes => "Termes",
+    :bonum => "Bonum",
 )
 
 # Build a FontFamily from an artifact directory.  Tries .otf first, then .ttf
@@ -397,32 +407,34 @@ function _family_from_artifact(dir::AbstractString)::FontFamily
         return nothing
     end
 
-    FontFamily(math,
-               find_slot("regular"),
-               find_slot("italic"),
-               find_slot("bold"),
-               find_slot("bolditalic"))
+    return FontFamily(
+        math,
+        find_slot("regular"),
+        find_slot("italic"),
+        find_slot("bold"),
+        find_slot("bolditalic")
+    )
 end
 
 # One small function per artifact name so that the @artifact_str macro receives
 # a string literal (required — the macro cannot accept a variable).
-_artifact_dir_new_cm()    = @artifact_str("NewCMMath")
-_artifact_dir_pagella()   = @artifact_str("Pagella")
-_artifact_dir_luciole()   = @artifact_str("Luciole")
-_artifact_dir_stix_two()  = @artifact_str("STIXTwo")
+_artifact_dir_new_cm() = @artifact_str("NewCMMath")
+_artifact_dir_pagella() = @artifact_str("Pagella")
+_artifact_dir_luciole() = @artifact_str("Luciole")
+_artifact_dir_stix_two() = @artifact_str("STIXTwo")
 _artifact_dir_fira_math() = @artifact_str("FiraMath")
-_artifact_dir_schola()    = @artifact_str("Schola")
-_artifact_dir_termes()    = @artifact_str("Termes")
-_artifact_dir_bonum()     = @artifact_str("Bonum")
+_artifact_dir_schola() = @artifact_str("Schola")
+_artifact_dir_termes() = @artifact_str("Termes")
+_artifact_dir_bonum() = @artifact_str("Bonum")
 const _ARTIFACT_LOADERS = Dict{Symbol, Function}(
-    :new_cm    => _artifact_dir_new_cm,
-    :pagella   => _artifact_dir_pagella,
-    :luciole   => _artifact_dir_luciole,
-    :stix_two  => _artifact_dir_stix_two,
+    :new_cm => _artifact_dir_new_cm,
+    :pagella => _artifact_dir_pagella,
+    :luciole => _artifact_dir_luciole,
+    :stix_two => _artifact_dir_stix_two,
     :fira_math => _artifact_dir_fira_math,
-    :schola    => _artifact_dir_schola,
-    :termes    => _artifact_dir_termes,
-    :bonum     => _artifact_dir_bonum,
+    :schola => _artifact_dir_schola,
+    :termes => _artifact_dir_termes,
+    :bonum => _artifact_dir_bonum,
 )
 
 """
@@ -446,7 +458,7 @@ function font_family(name::Symbol)::FontFamily
     loader = get(_ARTIFACT_LOADERS, name, nothing)
     loader === nothing &&
         error("unknown font family :$name — choose from: $(join(sort(string.(keys(_ARTIFACT_LOADERS))), ", "))")
-    _family_from_artifact(loader())
+    return _family_from_artifact(loader())
 end
 
 """
@@ -455,20 +467,22 @@ end
 Construct a `FontFamily` from user-supplied file paths.  Only `math_path` is
 required; text slots default to `nothing` (math-only mode).
 """
-function font_family(math_path::AbstractString;
-                     regular::Union{AbstractString,Nothing}    = nothing,
-                     bold::Union{AbstractString,Nothing}        = nothing,
-                     italic::Union{AbstractString,Nothing}      = nothing,
-                     bolditalic::Union{AbstractString,Nothing}  = nothing)::FontFamily
+function font_family(
+        math_path::AbstractString;
+        regular::Union{AbstractString, Nothing} = nothing,
+        bold::Union{AbstractString, Nothing} = nothing,
+        italic::Union{AbstractString, Nothing} = nothing,
+        bolditalic::Union{AbstractString, Nothing} = nothing
+    )::FontFamily
     isfile(math_path) || error("math font not found: $math_path")
-    FontFamily(math_path, regular, italic, bold, bolditalic)
+    return FontFamily(math_path, regular, italic, bold, bolditalic)
 end
 
 # Process-global default.  Stores a Symbol (defers artifact download) or a
 # FontFamily constructed from user-supplied paths.  Library code must never
 # mutate this; only end-user scripts and notebooks should call
 # set_default_font_family!.
-const _DEFAULT_FONT_FAMILY = Ref{Union{Symbol,FontFamily}}(:new_cm)
+const _DEFAULT_FONT_FAMILY = Ref{Union{Symbol, FontFamily}}(:new_cm)
 
 """
     set_default_font_family!(family)
@@ -482,8 +496,8 @@ called.
 Library code should never call this function; it is intended for end-user
 scripts and interactive sessions only.
 """
-function set_default_font_family!(f::Union{Symbol,FontFamily})
-    _DEFAULT_FONT_FAMILY[] = f
+function set_default_font_family!(f::Union{Symbol, FontFamily})
+    return _DEFAULT_FONT_FAMILY[] = f
 end
 
 """
@@ -495,5 +509,5 @@ first call if the default is still a `Symbol`.
 """
 function default_font_family()::FontFamily
     v = _DEFAULT_FONT_FAMILY[]
-    v isa Symbol ? font_family(v) : v
+    return v isa Symbol ? font_family(v) : v
 end

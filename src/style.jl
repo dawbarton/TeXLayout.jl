@@ -11,13 +11,13 @@ Integer values (1–8) match the ordering in KaTeX's Style.ts and allow
 efficient lookup tables.  Cramped styles are odd-indexed successors.
 """
 @enum TexStyle::Int8 begin
-    Display             = 1
-    CrampedDisplay      = 2
-    Text                = 3
-    CrampedText         = 4
-    Script              = 5
-    CrampedScript       = 6
-    ScriptScript        = 7
+    Display = 1
+    CrampedDisplay = 2
+    Text = 3
+    CrampedText = 4
+    Script = 5
+    CrampedScript = 6
+    ScriptScript = 7
     CrampedScriptScript = 8
 end
 
@@ -36,28 +36,38 @@ is_script_script(s::TexStyle) = s === ScriptScript || s === CrampedScriptScript
 # ── Style transitions ──────────────────────────────────────────────────────────
 # Source: KaTeX/src/Style.ts, cross-checked with TeXbook Appendix G rules 14–17.
 
-const _SUP_STYLE = (Script, CrampedScript, Script, CrampedScript,
-                    ScriptScript, CrampedScriptScript, ScriptScript, CrampedScriptScript)
+const _SUP_STYLE = (
+    Script, CrampedScript, Script, CrampedScript,
+    ScriptScript, CrampedScriptScript, ScriptScript, CrampedScriptScript,
+)
 
-const _SUB_STYLE = (CrampedScript, CrampedScript, CrampedScript, CrampedScript,
-                    CrampedScriptScript, CrampedScriptScript,
-                    CrampedScriptScript, CrampedScriptScript)
+const _SUB_STYLE = (
+    CrampedScript, CrampedScript, CrampedScript, CrampedScript,
+    CrampedScriptScript, CrampedScriptScript,
+    CrampedScriptScript, CrampedScriptScript,
+)
 
-const _FRAC_NUM_STYLE = (Text, CrampedText, Script, CrampedScript,
-                         ScriptScript, CrampedScriptScript, ScriptScript, CrampedScriptScript)
+const _FRAC_NUM_STYLE = (
+    Text, CrampedText, Script, CrampedScript,
+    ScriptScript, CrampedScriptScript, ScriptScript, CrampedScriptScript,
+)
 
-const _FRAC_DEN_STYLE = (CrampedText, CrampedText, CrampedScript, CrampedScript,
-                         CrampedScriptScript, CrampedScriptScript,
-                         CrampedScriptScript, CrampedScriptScript)
+const _FRAC_DEN_STYLE = (
+    CrampedText, CrampedText, CrampedScript, CrampedScript,
+    CrampedScriptScript, CrampedScriptScript,
+    CrampedScriptScript, CrampedScriptScript,
+)
 
-const _CRAMP_STYLE = (CrampedDisplay, CrampedDisplay, CrampedText, CrampedText,
-                      CrampedScript, CrampedScript, CrampedScriptScript, CrampedScriptScript)
+const _CRAMP_STYLE = (
+    CrampedDisplay, CrampedDisplay, CrampedText, CrampedText,
+    CrampedScript, CrampedScript, CrampedScriptScript, CrampedScriptScript,
+)
 
 """Style used for a superscript in the current style."""
-sup_style(s::TexStyle)      = _SUP_STYLE[Int8(s)]
+sup_style(s::TexStyle) = _SUP_STYLE[Int8(s)]
 
 """Style used for a subscript in the current style."""
-sub_style(s::TexStyle)      = _SUB_STYLE[Int8(s)]
+sub_style(s::TexStyle) = _SUB_STYLE[Int8(s)]
 
 """Style used for the numerator of a fraction in the current style."""
 frac_num_style(s::TexStyle) = _FRAC_NUM_STYLE[Int8(s)]
@@ -66,7 +76,7 @@ frac_num_style(s::TexStyle) = _FRAC_NUM_STYLE[Int8(s)]
 frac_den_style(s::TexStyle) = _FRAC_DEN_STYLE[Int8(s)]
 
 """Cramped variant of the current style."""
-cramp_style(s::TexStyle)    = _CRAMP_STYLE[Int8(s)]
+cramp_style(s::TexStyle) = _CRAMP_STYLE[Int8(s)]
 
 """
     size_scale(s, math_constants) -> Float64
@@ -76,7 +86,7 @@ Scale factors come from the font's MATH table: `ScriptPercentScaleDown` and
 `ScriptScriptPercentScaleDown`.
 """
 function size_scale(s::TexStyle, mc::MathConstants)::Float64
-    if is_script_script(s)
+    return if is_script_script(s)
         mc.script_script_percent_scale_down / 100.0
     elseif is_script(s)
         mc.script_percent_scale_down / 100.0

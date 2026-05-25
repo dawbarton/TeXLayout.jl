@@ -14,43 +14,45 @@
 # Usage:  julia tools/demo_features.jl [output_dir]
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io=devnull)
+Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
 
-const BASE_PX   = 120   # pixels per em for math content
-const MARGIN    = 16    # outer border in pixels
-const ROW_GAP   = 14    # vertical gap between rows in pixels
-const CAP_H     = 18    # caption row height in pixels
-const CAP_PX    = 14    # FreeType pixel size for caption glyphs
+const BASE_PX = 120   # pixels per em for math content
+const MARGIN = 16    # outer border in pixels
+const ROW_GAP = 14    # vertical gap between rows in pixels
+const CAP_H = 18    # caption row height in pixels
+const CAP_PX = 14    # FreeType pixel size for caption glyphs
 
-const FONT_PATH = joinpath(@__DIR__, "..", "..", "external",
+const FONT_PATH = joinpath(
+    @__DIR__, "..", "..", "external",
     "MathTeXEngine.jl", "assets", "fonts", "NewComputerModern",
-    "NewCMMath-Regular.otf")
+    "NewCMMath-Regular.otf"
+)
 
 # ── Canvas helpers ─────────────────────────────────────────────────────────────
 
 @inline function composite!(canvas, ry, cx, alpha::UInt8)
     1 <= ry <= size(canvas, 1) && 1 <= cx <= size(canvas, 2) || return
     old = Int(canvas[ry, cx])
-    canvas[ry, cx] = UInt8(old * (255 - Int(alpha)) ÷ 255)
+    return canvas[ry, cx] = UInt8(old * (255 - Int(alpha)) ÷ 255)
 end
 
-function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8=0x00)
+function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8 = 0x00)
     r1c = clamp(r1, 1, size(canvas, 1))
     r2c = clamp(r2, 1, size(canvas, 1))
     c1c = clamp(c1, 1, size(canvas, 2))
     c2c = clamp(c2, 1, size(canvas, 2))
-    canvas[r1c:r2c, c1c:c2c] .= val
+    return canvas[r1c:r2c, c1c:c2c] .= val
 end
 
 function hline!(canvas, row, c1, c2, val::UInt8)
     r = clamp(row, 1, size(canvas, 1))
-    canvas[r, clamp(c1,1,size(canvas,2)):clamp(c2,1,size(canvas,2))] .= val
+    return canvas[r, clamp(c1, 1, size(canvas, 2)):clamp(c2, 1, size(canvas, 2))] .= val
 end
 
 # ── Bounding box computation ───────────────────────────────────────────────────
-function em_bbox(boxes, upm; pad=0.12)
+function em_bbox(boxes, upm; pad = 0.12)
     bx1 = bx2 = by1 = by2 = 0.0
     for box in boxes
         el = box.element
@@ -73,7 +75,7 @@ function em_bbox(boxes, upm; pad=0.12)
 end
 
 # ── Render one expression into a fresh canvas ─────────────────────────────────
-function render_expr(expr::String, family, mt, face_math, style=TeXLayout.Display)
+function render_expr(expr::String, family, mt, face_math, style = TeXLayout.Display)
     boxes = layout(parse_latex(expr), family, style)
     upm = mt.upm
     bx1, bx2, by1, by2 = em_bbox(boxes, upm)
@@ -105,7 +107,7 @@ function render_expr(expr::String, family, mt, face_math, style=TeXLayout.Displa
             end
             bx_px = round(Int, ext.horizontal_bearing[1])
             by_px = round(Int, ext.horizontal_bearing[2])
-            bmp_top  = pen_cy - by_px
+            bmp_top = pen_cy - by_px
             bmp_left = pen_cx + bx_px
             for row in axes(bmp, 2), col in axes(bmp, 1)
                 alpha = bmp[col, row]
@@ -135,7 +137,7 @@ function render_caption(face, text::String, W::Int)
         end
         bx_px = round(Int, ext.horizontal_bearing[1])
         by_px = round(Int, ext.horizontal_bearing[2])
-        top  = CAP_H ÷ 2 - by_px ÷ 2
+        top = CAP_H ÷ 2 - by_px ÷ 2
         left = x + bx_px
         for row in axes(bmp, 2), col in axes(bmp, 1)
             alpha = bmp[col, row]
@@ -180,7 +182,7 @@ function write_png(path, canvas::Matrix{UInt8})
             write(io, view(canvas, row, :))
         end
     end
-    println("Written $path  ($(W)×$(H) px)")
+    return println("Written $path  ($(W)×$(H) px)")
 end
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -189,25 +191,25 @@ function main()
     mkpath(outdir)
 
     isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
-    family    = FontFamily(FONT_PATH)
-    mt        = TeXLayout.load_math_table(FONT_PATH)
+    family = FontFamily(FONT_PATH)
+    mt = TeXLayout.load_math_table(FONT_PATH)
     face_math = FTFont(FONT_PATH)
 
     # ── Panel 1: Accents (Rule 12) ─────────────────────────────────────────────
-    accent_rows = Pair{String,String}[
-        "\\hat{x}"           => "\\hat{x}",
-        "\\bar{a}"           => "\\bar{a}",
-        "\\vec{v}"           => "\\vec{v}",
-        "\\tilde{n}"         => "\\tilde{n}",
-        "\\dot{x}"           => "\\dot{x}",
-        "\\ddot{x}"          => "\\ddot{x}",
-        "\\acute{e}"         => "\\acute{e}",
-        "\\grave{e}"         => "\\grave{e}",
-        "\\hat{A}"           => "\\hat{A}  (tall base)",
-        "\\hat{\\frac{a}{b}}"=> "\\hat{\\frac{a}{b}}  (fraction base — centering fallback)",
-        "\\widehat{x}"       => "\\widehat{x}  (wide accent, single char)",
-        "\\widehat{xyz}"     => "\\widehat{xyz}  (wide accent, 3 chars — extensible)",
-        "\\widetilde{x+y}"   => "\\widetilde{x+y}  (wide tilde over expression)",
+    accent_rows = Pair{String, String}[
+        "\\hat{x}" => "\\hat{x}",
+        "\\bar{a}" => "\\bar{a}",
+        "\\vec{v}" => "\\vec{v}",
+        "\\tilde{n}" => "\\tilde{n}",
+        "\\dot{x}" => "\\dot{x}",
+        "\\ddot{x}" => "\\ddot{x}",
+        "\\acute{e}" => "\\acute{e}",
+        "\\grave{e}" => "\\grave{e}",
+        "\\hat{A}" => "\\hat{A}  (tall base)",
+        "\\hat{\\frac{a}{b}}" => "\\hat{\\frac{a}{b}}  (fraction base — centering fallback)",
+        "\\widehat{x}" => "\\widehat{x}  (wide accent, single char)",
+        "\\widehat{xyz}" => "\\widehat{xyz}  (wide accent, 3 chars — extensible)",
+        "\\widetilde{x+y}" => "\\widetilde{x+y}  (wide tilde over expression)",
     ]
 
     rows = Matrix{UInt8}[]
@@ -227,14 +229,14 @@ function main()
     write_png(joinpath(outdir, "accents.png"), make_panel(rows2))
 
     # ── Panel 2: \overline / \underline (Rules 9 & 10) ────────────────────────
-    ou_rows = Pair{String,String}[
-        "\\overline{abc}"               => "\\overline{abc}",
-        "\\underline{abc}"              => "\\underline{abc}",
-        "\\overline{x+y+z}"             => "\\overline{x+y+z}",
-        "\\underline{x+y+z}"            => "\\underline{x+y+z}",
-        "\\overline{\\frac{a}{b}}"      => "\\overline{\\frac{a}{b}}  (fraction body)",
-        "\\underline{\\frac{a}{b}}"     => "\\underline{\\frac{a}{b}}",
-        "\\overline{\\overline{x}}"     => "\\overline{\\overline{x}}  (nested)",
+    ou_rows = Pair{String, String}[
+        "\\overline{abc}" => "\\overline{abc}",
+        "\\underline{abc}" => "\\underline{abc}",
+        "\\overline{x+y+z}" => "\\overline{x+y+z}",
+        "\\underline{x+y+z}" => "\\underline{x+y+z}",
+        "\\overline{\\frac{a}{b}}" => "\\overline{\\frac{a}{b}}  (fraction body)",
+        "\\underline{\\frac{a}{b}}" => "\\underline{\\frac{a}{b}}",
+        "\\overline{\\overline{x}}" => "\\overline{\\overline{x}}  (nested)",
         "\\frac{\\overline{a}}{\\underline{b}}" => "\\frac{\\overline{a}}{\\underline{b}}",
     ]
 
@@ -255,15 +257,15 @@ function main()
 
     # ── Panel 3: Binary reclassification (Rules 5 & 6) ────────────────────────
     # Each entry: (expr, caption, note)
-    bin_rows = Pair{String,String}[
-        "+x"                 => "+x  (Rule 5: leading + demoted to ord, no space before x)",
-        "a+x"                => "a+x  (normal: + is bin, medium space either side)",
-        "\\left(+x\\right)"  => "\\left( +x \\right)  (Rule 5: + after open, demoted)",
+    bin_rows = Pair{String, String}[
+        "+x" => "+x  (Rule 5: leading + demoted to ord, no space before x)",
+        "a+x" => "a+x  (normal: + is bin, medium space either side)",
+        "\\left(+x\\right)" => "\\left( +x \\right)  (Rule 5: + after open, demoted)",
         "\\left(a+x\\right)" => "\\left( a+x \\right)  (normal: + is bin)",
-        "a+{=}b"             => "a + {=} b  (control: both + and = are full class)",
-        "a+=b"               => "a+=b  (Rule 6: + before rel = demoted, no space before =)",
-        "a++b"               => "a++b  (Rule 5: second + demoted after first +)",
-        "a+b+c"              => "a+b+c  (normal: all + are bin with medium spaces)",
+        "a+{=}b" => "a + {=} b  (control: both + and = are full class)",
+        "a+=b" => "a+=b  (Rule 6: + before rel = demoted, no space before =)",
+        "a++b" => "a++b  (Rule 5: second + demoted after first +)",
+        "a+b+c" => "a+b+c  (normal: all + are bin with medium spaces)",
     ]
 
     rows = Matrix{UInt8}[]
@@ -282,17 +284,17 @@ function main()
     write_png(joinpath(outdir, "binary_reclass.png"), make_panel(rows2))
 
     # ── Panel 4: Horizontal braces ────────────────────────────────────────────
-    hb_rows = Pair{String,String}[
-        "\\overbrace{x+y+z}"            => "\\overbrace{x+y+z}",
-        "\\underbrace{x+y+z}"           => "\\underbrace{x+y+z}",
-        "\\overbrace{x+y}^{n}"          => "\\overbrace{x+y}^{n}  (note above)",
-        "\\underbrace{x+y}_{k}"         => "\\underbrace{x+y}_{k}  (note below)",
-        "\\overbrace{x}^{n}_{m}"        => "\\overbrace{x}^{n}_{m}  (note above + side sub)",
-        "\\underbrace{x}_{k}^{j}"       => "\\underbrace{x}_{k}^{j}  (note below + side sup)",
-        "\\overbracket{a+b+c}"          => "\\overbracket{a+b+c}",
-        "\\underbracket{a+b+c}"         => "\\underbracket{a+b+c}",
-        "\\overparen{abc}"              => "\\overparen{abc}",
-        "\\underparen{abc}"             => "\\underparen{abc}",
+    hb_rows = Pair{String, String}[
+        "\\overbrace{x+y+z}" => "\\overbrace{x+y+z}",
+        "\\underbrace{x+y+z}" => "\\underbrace{x+y+z}",
+        "\\overbrace{x+y}^{n}" => "\\overbrace{x+y}^{n}  (note above)",
+        "\\underbrace{x+y}_{k}" => "\\underbrace{x+y}_{k}  (note below)",
+        "\\overbrace{x}^{n}_{m}" => "\\overbrace{x}^{n}_{m}  (note above + side sub)",
+        "\\underbrace{x}_{k}^{j}" => "\\underbrace{x}_{k}^{j}  (note below + side sup)",
+        "\\overbracket{a+b+c}" => "\\overbracket{a+b+c}",
+        "\\underbracket{a+b+c}" => "\\underbracket{a+b+c}",
+        "\\overparen{abc}" => "\\overparen{abc}",
+        "\\underparen{abc}" => "\\underparen{abc}",
         "\\underbrace{\\frac{a}{b}+c}_{\\text{total}}" =>
             "\\underbrace{\\frac{a}{b}+c}_{\\text{total}}",
     ]
@@ -316,7 +318,7 @@ function main()
         push!(rows2, render_caption(face_math, cap, W_cap))
         push!(rows2, rows[i])
     end
-    write_png(joinpath(outdir, "horiz_braces.png"), make_panel(rows2))
+    return write_png(joinpath(outdir, "horiz_braces.png"), make_panel(rows2))
 end
 
 main()

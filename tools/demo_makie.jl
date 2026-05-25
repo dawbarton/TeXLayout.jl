@@ -15,16 +15,16 @@ println("TeXLayout v$(pkgversion(TeXLayout)) — MathTeXEngineExt demo")
 println("Extension loaded: MathTeXEngineExt ∈ keys(Base.loaded_modules)")
 
 # ── Smoke test: generate_tex_elements returns MTE-compatible tuples ───────────
-elems     = MathTeXEngine.generate_tex_elements(L"\frac{x^2 + 1}{2}")
+elems = MathTeXEngine.generate_tex_elements(L"\frac{x^2 + 1}{2}")
 tex_chars = filter(t -> t[1] isa MathTeXEngine.TeXChar, elems)
-hlines    = filter(t -> t[1] isa MathTeXEngine.HLine, elems)
+hlines = filter(t -> t[1] isa MathTeXEngine.HLine, elems)
 println("\\frac{x^2+1}{2}: $(length(tex_chars)) chars, $(length(hlines)) rules")
 @assert length(tex_chars) > 0 "Expected at least one TeXChar"
-@assert length(hlines)    > 0 "Expected at least one HLine (fraction bar)"
+@assert length(hlines) > 0 "Expected at least one HLine (fraction bar)"
 
 # ── Render a figure with several LaTeX formulae ───────────────────────────────
-fig = Figure(size=(800, 600), backgroundcolor=:white)
-ax  = Axis(fig[1,1]; title="TeXLayout.jl — Makie integration")
+fig = Figure(size = (800, 600), backgroundcolor = :white)
+ax = Axis(fig[1, 1]; title = "TeXLayout.jl — Makie integration")
 CairoMakie.hidespines!(ax)
 CairoMakie.hidedecorations!(ax)
 
@@ -37,7 +37,7 @@ formulas = [
 ]
 
 for (x, y, formula) in formulas
-    text!(ax, x, y; text=formula, fontsize=28, align=(:center, :center))
+    text!(ax, x, y; text = formula, fontsize = 28, align = (:center, :center))
 end
 
 xlims!(ax, 0, 1)
