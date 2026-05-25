@@ -88,6 +88,20 @@ end
     ctx.mode, variant,
 )
 
+# Propagate a font-size multiplier (from \large, \tiny, etc.) through a style
+# transition.  `scale` is the parent's absolute scale (which already includes
+# any sizing factor); `parent_s` and `child_s` are TeX styles.  The result is
+# the child's absolute scale, preserving whatever sizing factor was embedded in
+# the parent scale beyond what the parent style alone contributes.
+#
+#   child_scale = scale × (size_scale(child_s) / size_scale(parent_s))
+#
+# Because size_scale only returns 1.0, ~0.7, or ~0.5 (never zero), the
+# division is always safe.
+@inline _scale_for_child(scale::Float64, parent_s::TexStyle, child_s::TexStyle,
+                         mc::MathConstants) =
+    scale * (size_scale(child_s, mc) / size_scale(parent_s, mc))
+
 # Return a copy of `ctx` with mode set to :text, preserving all other fields.
 # Used by NKText so that character lookup uses upright (regular-font) glyphs and
 # math-mode italic remapping and inter-atom spacing are suppressed.
@@ -1840,7 +1854,7 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NKHorizBrace &&
         return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sup_s     = sup_style(style);  sup_scale = size_scale(sup_s, mc)
+    sup_s     = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
     if _use_limits(base, style)
         # Limits placement: sup centred above base.
         tmp_base = LayoutBox[];  tmp_sup = LayoutBox[]
@@ -1882,7 +1896,7 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NKHorizBrace &&
         return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sub_s     = sub_style(style);  sub_scale = size_scale(sub_s, mc)
+    sub_s     = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
     if _use_limits(base, style)
         # Limits placement: sub centred below base.
         tmp_base = LayoutBox[];  tmp_sub = LayoutBox[]
@@ -1926,8 +1940,8 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NKHorizBrace &&
         return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sub_s = sub_style(style);  sub_scale = size_scale(sub_s, mc)
-    sup_s = sup_style(style);  sup_scale = size_scale(sup_s, mc)
+    sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
+    sup_s = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
     if _use_limits(base, style)
         # Limits placement: sub centred below, sup centred above.
         tmp_base = LayoutBox[];  tmp_sub = LayoutBox[];  tmp_sup = LayoutBox[]
@@ -2040,9 +2054,9 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
 
     # Labels rendered at sub/sup script style and scale.
     above_s     = sup_style(style)
-    above_scale = size_scale(above_s, mc)
+    above_scale = _scale_for_child(scale, style, above_s, mc)
     below_s     = sub_style(style)
-    below_scale = size_scale(below_s, mc)
+    below_scale = _scale_for_child(scale, style, below_s, mc)
 
     tmp_above = LayoutBox[]
     above_w = _layout_node!(above_node, ctx, above_s, 0.0, 0.0, above_scale, tmp_above)
@@ -2110,8 +2124,8 @@ end
 function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     num_node, den_node = node.children[1], node.children[2]
-    num_s = frac_num_style(style);  num_scale = size_scale(num_s, mc)
-    den_s = frac_den_style(style);  den_scale = size_scale(den_s, mc)
+    num_s = frac_num_style(style);  num_scale = _scale_for_child(scale, style, num_s, mc)
+    den_s = frac_den_style(style);  den_scale = _scale_for_child(scale, style, den_s, mc)
 
     rule_thickness = mc.fraction_rule_thickness / upm * scale
     axis_em = mc.axis_height / upm * scale

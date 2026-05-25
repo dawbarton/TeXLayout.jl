@@ -449,6 +449,40 @@ const STRESS_SECTIONS = [
         raw"e^x = \sum_{n=0}^{\infty}\frac{x^n}{n!}, \quad \sin x = \sum_{n=0}^{\infty}\frac{(-1)^n x^{2n+1}}{(2n+1)!}",
         raw"\frac{1}{1-x} = \sum_{n=0}^{\infty} x^n \quad (|x| < 1)",
     ]),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Font size commands: tests \tiny / \scriptsize / … / \Huge scaling.
+    # Each command consumes the rest of its brace group, so the canonical form
+    # is {\large …}.  Multipliers follow the standard LaTeX 10pt size ladder.
+    # ─────────────────────────────────────────────────────────────────────────
+    "25. FONT SIZE COMMANDS — SIZE LADDER" => _D([
+        # Same fraction at every size to show vertical growth.
+        raw"{\tiny \frac{1}{2}}{\scriptsize \frac{1}{2}}{\footnotesize \frac{1}{2}}{\small \frac{1}{2}}{\normalsize \frac{1}{2}}{\large \frac{1}{2}}{\Large \frac{1}{2}}{\LARGE \frac{1}{2}}{\huge \frac{1}{2}}{\Huge \frac{1}{2}}",
+        # Super/subscript pair at every size — tests scale cascade.
+        raw"{\tiny x^2_n}\;{\small x^2_n}\;{\normalsize x^2_n}\;{\large x^2_n}\;{\Large x^2_n}\;{\LARGE x^2_n}\;{\Huge x^2_n}",
+    ]),
+
+    "26. FONT SIZE COMMANDS — MIXED SIZES IN ONE EXPRESSION" => _D([
+        # Coefficients shrink while the variable grows.
+        raw"{\Large f}(x) = {\large a}x^2 + {\normalsize b}x + {\small c}",
+        # Same famous identity rendered tiny vs Huge.
+        raw"{\tiny e^{i\pi}+1=0} \;\longleftrightarrow\; {\Huge e^{i\pi}+1=0}",
+        # Large sigma on the left, Large fraction on the right.
+        raw"{\large \sum_{n=1}^{\infty} \frac{1}{n^2}} = {\Large \frac{\pi^2}{6}}",
+        # Oversized integral with normal-size integrand.
+        raw"{\LARGE \int_0^{\infty}} e^{-x^2}\,dx = {\Large \frac{\sqrt{\pi}}{2}}",
+    ]),
+
+    "27. FONT SIZE COMMANDS — SIZING WITHIN SUB-EXPRESSIONS" => _D([
+        # Different sizes in numerator vs denominator.
+        raw"\frac{{\Large a + b}}{{\small c - d}} + {\normalsize \sqrt{{\large x} + {\small y}}}",
+        # Sizing applied to auto-delimited content.
+        raw"\left({\large \frac{p}{q}}\right)^{\!{\small 2}} + \left({\small \frac{r}{s}}\right)^{\!{\large 3}}",
+        # Bold matrix equation with sized components.
+        raw"{\LARGE \mathbf{A}}{\large \mathbf{x}} = {\LARGE \mathbf{b}}, \quad {\small \mathbf{A} \in \mathbb{R}^{m \times n}}",
+        # Nested sizing: \Large outer, \small inner fraction.
+        raw"{\Large \sum_{k=0}^{n} {\small \frac{(-1)^k}{2k+1}}} \xrightarrow{n\to\infty} {\Large \frac{\pi}{4}}",
+    ]),
 ]
 
 # ── PNG output ────────────────────────────────────────────────────────────────
