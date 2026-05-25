@@ -154,7 +154,8 @@ driven by `MathConstants.script_percent_scale_down` and
 - `FontFamily` holds font paths: `math` (mandatory), `regular`, `italic`, `bold`,
   `bold_italic` (all optional).
 - **Constructors:** `font_family(::Symbol)` looks up a named artifact (`:new_cm`,
-  `:pagella`, `:luciole`, `:stix_two`, `:fira_math`); `font_family(math_path; regular,
+  `:pagella`, `:termes`, `:schola`, `:bonum`, `:luciole`, `:stix_two`, `:fira_math`);
+  `font_family(math_path; regular,
   bold, italic, bolditalic)` accepts file paths directly; `default_font_family()` is an
   alias for `font_family(:new_cm)`.
 - **Three glyph lookup functions:**
@@ -287,10 +288,18 @@ A summary of major features and their status.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.
 - **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
-  extension).  When both `TeXLayout` and `MathTeXEngine` are loaded, the extension
-  overrides `MathTeXEngine.generate_tex_elements` with TeXLayout's OpenType layout
-  engine.  The extension uses `__precompile__(false)` because Julia forbids method
-  overwriting during module precompilation.
+  extension).  When `TeXLayout`, `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings`
+  are all loaded, the extension adds a specialised
+  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method that uses TeXLayout's
+  OpenType layout engine.  Makie's `texelems_and_glyph_collection` always passes a
+  `LaTeXString`, so dispatch picks our method over MathTeXEngine's fallback.  The
+  extension is fully precompiled (no `__precompile__(false)` needed) because adding
+  a method with a more specific argument type is a new method, not an overwrite.
+  **This is type piracy**: TeXLayout owns neither the function (`MathTeXEngine.generate_tex_elements`)
+  nor the argument type (`LaTeXStrings.LaTeXString`).  It is pragmatic and confined
+  to the extension, but alternative integration strategies (e.g. a dedicated Makie
+  recipe or a proper upstream extension point in MathTeXEngine) will be investigated
+  in future.
 
 ---
 

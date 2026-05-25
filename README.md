@@ -29,9 +29,36 @@ units relative to the formula baseline, and a scale factor.
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
-- Five bundled font families, downloaded lazily via Julia Artifacts on first use (three further TeX Gyre families pending artifact publication).
+- Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NKCommand` leaf nodes that are silently skipped by the layout engine.
+
+## Makie integration
+
+When both `TeXLayout` and `MathTeXEngine` are loaded in the same Julia session,
+TeXLayout automatically activates a package extension (`MathTeXEngineExt`) that
+replaces MathTeXEngine's layout engine with TeXLayout's.  No other code changes
+are required — LaTeX strings passed to `text!` in CairoMakie or GLMakie are
+rendered using TeXLayout's OpenType-aware pipeline.
+
+```julia
+using TeXLayout       # activates MathTeXEngineExt automatically
+using CairoMakie, LaTeXStrings
+
+fig = Figure()
+ax  = Axis(fig[1,1])
+text!(ax, 0.5, 0.5; text=L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
+      fontsize=32, align=(:center, :center))
+save("output.png", fig)
+```
+
+> **Note:** The extension works by adding a specialised
+> `MathTeXEngine.generate_tex_elements(::LaTeXString)` method from within a
+> package that owns neither the function nor the argument type — a form of
+> [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy).
+> This is pragmatic but not ideal.  Alternative integration strategies that avoid
+> type piracy (e.g. a dedicated Makie recipe or a proper upstream extension point)
+> will be investigated in future.
 
 ## Usage
 
@@ -41,9 +68,12 @@ using TeXLayout
 # Use the default font family (New Computer Modern Math, downloaded automatically).
 family = default_font_family()
 
-# Or select one of the five bundled families by symbol:
+# Or select one of the eight bundled families by symbol:
 #   :new_cm    — New Computer Modern (default)
 #   :pagella   — TeX Gyre Pagella (Palatino style)
+#   :termes    — TeX Gyre Termes Math (Times style)
+#   :schola    — TeX Gyre Schola Math (New Century Schoolbook style)
+#   :bonum     — TeX Gyre Bonum Math (Bookman style)
 #   :luciole   — Luciole Math (designed for low vision)
 #   :stix_two  — STIX Two Math (Times style)
 #   :fira_math — Fira Math + Fira Sans (sans-serif)
@@ -66,6 +96,7 @@ boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}", family)
 Early development (v0.1).  The following features are not yet implemented:
 
 - `\text{…}` inter-atom spacing (text-mode fragments are not yet classified by atom class).
+- Type-piracy-free Makie integration (current approach is functional but uses a specialised method on types owned by other packages; see note above).
 
 ## Acknowledgements
 
@@ -88,7 +119,7 @@ TeXLayout.jl draws heavily on the following prior work:
 
 ### Bundled fonts
 
-The five currently published font families (plus three pending; see `tools/prepare_font_artifacts.jl`) are redistributed under their respective open licences.  Each tarball includes the relevant licence file.
+All eight font families are redistributed under their respective open licences.  Each tarball includes the relevant licence file.
 
 | Symbol | Font | Authors | Licence |
 |:-------|:-----|:--------|:--------|
@@ -97,6 +128,6 @@ The five currently published font families (plus three pending; see `tools/prepa
 | `:luciole` | [Luciole](https://luciole-vision.com/) | Daniel Flipo and [typographies.fr](https://typographies.fr/), in collaboration with [Centre de Ressources Handicap Visuel](https://crhv.fr/) de Lyon; with support from DIPHE/Université Lumière Lyon 2, GUTenberg, Swiss Ceres Foundation, PEP69 | Math font: [SIL OFL 1.1](https://openfontlicense.org); text fonts: [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `:stix_two` | [STIX Two Math](https://github.com/stipub/stixfonts) v2.0.2 | The STIX Fonts Project Authors; STIX Fonts™ is a trademark of the [Institute of Electrical and Electronics Engineers](https://www.ieee.org/) | [SIL OFL 1.1](https://openfontlicense.org) (Reserved Font Name "TM Math") |
 | `:fira_math` | [Fira Math](https://github.com/firamath/firamath) v0.3.4 + [Fira Sans](https://github.com/mozilla/Fira) | Fira Math: Xiangdong Zeng; Fira Sans: Mozilla and Telefonica S.A. | [SIL OFL 1.1](https://openfontlicense.org) |
-| `:schola` *(pending)* | [TeX Gyre Schola Math](https://ctan.org/pkg/tex-gyre-math-schola) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
-| `:termes` *(pending)* | [TeX Gyre Termes Math](https://ctan.org/pkg/tex-gyre-math-termes) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
-| `:bonum` *(pending)* | [TeX Gyre Bonum Math](https://ctan.org/pkg/tex-gyre-math-bonum) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:schola` | [TeX Gyre Schola Math](https://ctan.org/pkg/tex-gyre-math-schola) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:termes` | [TeX Gyre Termes Math](https://ctan.org/pkg/tex-gyre-math-termes) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
+| `:bonum` | [TeX Gyre Bonum Math](https://ctan.org/pkg/tex-gyre-math-bonum) | Bogusław Jackowski, Janusz M. Nowacki, Piotr Strzelczyk (GUST e-foundry) | [GUST Font Licence](https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt) (LPPL 1.3c) |
