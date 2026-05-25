@@ -384,10 +384,13 @@ const STRESS_SECTIONS = [
     # ─────────────────────────────────────────────────────────────────────────
     # Named operators: every operator in _OPERATOR_NAMES at least once.
     # ─────────────────────────────────────────────────────────────────────────
-    "18. NAMED OPERATORS" => _D([
+    "18(a). NAMED OPERATORS" => _D([
         raw"\sin^2\theta + \cos^2\theta = 1, \quad \tan\theta = \frac{\sin\theta}{\cos\theta}",
         raw"\log(ab) = \log a + \log b, \quad \ln e^x = x, \quad \exp(i\pi) = -1",
         raw"\lim_{x\to 0^+} x\ln x = 0, \quad \limsup_{n\to\infty} a_n, \quad \liminf_{n\to\infty} b_n",
+    ]),
+
+    "18(b). NAMED OPERATORS" => _D([
         raw"\sup_{x\in A} f(x), \quad \inf_{x\in A} f(x), \quad \max_{k} a_k, \quad \min_{k} b_k",
         raw"\det A = \sum_{\sigma} \text{sgn}(\sigma)\prod_{i}a_{i\sigma(i)}, \quad \ker T \cap \text{Im}\,S",
         raw"\gcd(a,b)\cdot\operatorname{lcm}(a,b) = ab, \quad \deg p = n, \quad \dim V = n",
