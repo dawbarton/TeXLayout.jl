@@ -463,7 +463,7 @@ function write_png(path, canvas::Matrix{UInt8})
                 write(io, view(canvas, row, :))
             end
         end
-        run(`convert pgm:$tmp png:$path`)
+        run(`magick pgm:$tmp png:$path`)
     finally
         isfile(tmp) && rm(tmp)
     end
