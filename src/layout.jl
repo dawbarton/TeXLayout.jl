@@ -1421,9 +1421,9 @@ function _is_char_box(node::Node)::Bool
     n.kind === NKChar && return true
     n.kind === NKOperator && return false  # named operators (e.g. \sin) are not char boxes
     n.kind === NKCommand && return !_is_large_op(n)  # large ops are not char boxes
-    if n.kind === NKFontSwitch && length(n.children) == 1
-        return _is_char_box(n.children[1])
-    end
+    # NKFontSwitch is constructed with exactly one body child by the parser, so the
+    # recursion is unconditional.
+    n.kind === NKFontSwitch && return _is_char_box(n.children[1])
     return false
 end
 
