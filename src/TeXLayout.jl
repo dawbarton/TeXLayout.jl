@@ -22,7 +22,7 @@ include("layout.jl")
 export MathTable, GlyphConstruction, GlyphAssembly, GlyphAssemblyPart,
        GlyphVariant, load_math_table
 export FontFamily, GlyphMetrics, glyph_metrics, glyph_metrics_by_codepoint, glyph_metrics_upright,
-       font_family, default_font_family
+       font_family, default_font_family, set_default_font_family!
 # TexStyle enum values deliberately not exported at top level to avoid
 # conflicts with Base.Text and Base.Display.  Access as TeXLayout.Display etc.
 export TexStyle,

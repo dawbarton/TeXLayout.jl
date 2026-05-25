@@ -458,12 +458,36 @@ function font_family(math_path::AbstractString;
     FontFamily(math_path, regular, italic, bold, bolditalic)
 end
 
+# Process-global default.  Stores a Symbol (defers artifact download) or a
+# FontFamily constructed from user-supplied paths.  Library code must never
+# mutate this; only end-user scripts and notebooks should call
+# set_default_font_family!.
+const _DEFAULT_FONT_FAMILY = Ref{Union{Symbol,FontFamily}}(:new_cm)
+
+"""
+    set_default_font_family!(family)
+
+Set the font family returned by `default_font_family()`.  Accepts a `Symbol`
+(e.g. `:pagella`) or a `FontFamily` constructed from file paths.  The change
+takes effect immediately and affects all subsequent calls, including the Makie
+extension.  No artifact download is triggered until `default_font_family()` is
+called.
+
+Library code should never call this function; it is intended for end-user
+scripts and interactive sessions only.
+"""
+function set_default_font_family!(f::Union{Symbol,FontFamily})
+    _DEFAULT_FONT_FAMILY[] = f
+end
+
 """
     default_font_family() -> FontFamily
 
-Return the default `FontFamily` (New Computer Modern Math).  Downloads the
-artifact on first call if not already cached.
+Return the current default `FontFamily`.  Initially New Computer Modern Math;
+override with `set_default_font_family!`.  The artifact is downloaded lazily on
+first call if the default is still a `Symbol`.
 """
 function default_font_family()::FontFamily
-    font_family(:new_cm)
+    v = _DEFAULT_FONT_FAMILY[]
+    v isa Symbol ? font_family(v) : v
 end

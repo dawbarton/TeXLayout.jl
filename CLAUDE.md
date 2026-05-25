@@ -264,7 +264,7 @@ A summary of major features and their status.
 | Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; upright fallback for `\mathrm`; propagates into sub/superscripts |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
 | Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double (`||`) vertical rules from colspec; two-pass grid layout centred on math axis |
-| `default_font_family()` | ✓ | Returns `:new_cm` (NewCMMath) via Julia Artifacts; lazy download |
+| `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
 
 ## Known limitations / future work
 - **Multi-codepoint Unicode symbols** — a subset of negated and variant relations
@@ -302,10 +302,9 @@ A summary of major features and their status.
   in future.
 - **Makie extension ignores caller-specified font family** — the overridden
   `generate_tex_elements` accepts a `font_family` argument (for API compatibility
-  with MathTeXEngine) but always uses `TeXLayout.default_font_family()` (`:new_cm`)
-  regardless.  To use a different font family for math rendering in Makie, the
-  extension would need to honour this argument or provide an alternative
-  configuration mechanism (e.g. a global `set_makie_font_family!` setter).
+  with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
+  Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
+  before rendering; the extension will pick up the new default automatically.
 
 ---
 
