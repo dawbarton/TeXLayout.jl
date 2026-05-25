@@ -1724,6 +1724,12 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     # correct glyph is found regardless of font-specific PS naming.
     cp = get(_SYMBOL_CODEPOINTS, name, nothing)
     cp === nothing && return 0.0
+    # Inside a font-switch context (\mathbf, \boldsymbol, etc.), try to map to
+    # the variant codepoint (e.g. \alpha inside \mathbf{} → bold Greek alpha).
+    if ctx.font_variant !== :default
+        vcp = _math_variant_codepoint(ctx.font_variant, Char(cp))
+        vcp !== nothing && (cp = vcp)
+    end
     m = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return 0.0
     ps = glyph_name_by_codepoint(ctx.family, cp)

@@ -280,14 +280,10 @@ A summary of major features and their status.
   `_SYMBOL_CODEPOINTS`, so it produces blank space on all fonts.  It is not a standard
   LaTeX/AMS symbol and has no single Unicode codepoint; per-font investigation would be
   needed to support it.
-- **Font switching (text slots)** — `\mathbf` etc. use Unicode math-variant codepoints
-  from the math font.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not
-  yet used; adding them would give better coverage for characters outside the math block
-  (e.g., Greek bold letters).
-- **Artifacts not yet published** — `default_font_family()` and `font_family(::Symbol)`
-  work locally (artifacts in `~/.julia/artifacts/`), but the placeholder URLs in
-  `Artifacts.toml` must be replaced with real GitHub Release asset URLs before the
-  package is installable by other users.  The five tarballs are in `shared/font_archives/`.
+- **Font switching (text slots)** — `\mathbf`, `\boldsymbol`, `\mathit` etc. map Latin,
+  Greek, and common symbols (∇, ∂, variant letters) to their Unicode math-variant
+  codepoints.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not yet used;
+  adding them would cover characters outside the Unicode math block.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.
 - **Makie integration** — the package produces `Vector{LayoutBox}` but does not yet

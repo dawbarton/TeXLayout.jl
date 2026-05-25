@@ -224,18 +224,71 @@ continuous ranges, and dedicated BMP Letterlike Symbols for exceptions.
 function _math_variant_codepoint(variant::Symbol, ch::Char)::Union{UInt32,Nothing}
     cp = UInt32(ch)
 
-    # ── \mathbf: bold upright Latin and digits ─────────────────────────────────
-    if variant === :mathbf || variant === :boldsymbol
+    # ── \mathbf: bold upright Latin, digits, and Greek ─────────────────────────
+    # Unicode Mathematical Bold block: Latin UC 1D400–1D419, LC 1D41A–1D433,
+    # digits 1D7CE–1D7D7; Greek UC 1D6A8–1D6C0, LC 1D6C2–1D6DA.
+    # The Greek UC gap at 0x03A2 (no such letter) aligns with the ϴ-symbol slot
+    # 1D6B9 in the math block, so a single offset covers Α–Ρ and Σ–Ω uniformly.
+    if variant === :mathbf
         'A' <= ch <= 'Z' && return 0x1D400 + (cp - UInt32('A'))  # 𝐀–𝐙
         'a' <= ch <= 'z' && return 0x1D41A + (cp - UInt32('a'))  # 𝐚–𝐳
         '0' <= ch <= '9' && return 0x1D7CE + (cp - UInt32('0'))  # 𝟎–𝟗
+        if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
+            return 0x1D6A8 + (cp - UInt32('Α'))             # 𝚨–𝛀
+        end
+        'α' <= ch <= 'ω' &&
+            return 0x1D6C2 + (cp - UInt32('α'))             # 𝛂–𝛚
+        ch === '∇' && return 0x1D6C1  # bold ∇
+        ch === '∂' && return 0x1D6DB  # bold ∂
+        ch === 'ϵ' && return 0x1D6DC  # bold ϵ (varepsilon)
+        ch === 'ϑ' && return 0x1D6DD  # bold ϑ (vartheta)
+        ch === 'ϰ' && return 0x1D6DE  # bold ϰ (varkappa)
+        ch === 'ϕ' && return 0x1D6DF  # bold ϕ (varphi)
+        ch === 'ϱ' && return 0x1D6E0  # bold ϱ (varrho)
+        ch === 'ϖ' && return 0x1D6E1  # bold ϖ (varpi)
         return nothing
 
-    # ── \mathit: italic Latin ──────────────────────────────────────────────────
+    # ── \boldsymbol: bold italic Latin and Greek ──────────────────────────────
+    # Unlike \mathbf, bold italic uses separate Latin slots (1D468 UC, 1D482 LC)
+    # and a separate Greek block (UC 1D71C–1D734, LC 1D736–1D74E).
+    elseif variant === :boldsymbol
+        'A' <= ch <= 'Z' && return 0x1D468 + (cp - UInt32('A'))  # 𝑨–𝒁
+        'a' <= ch <= 'z' && return 0x1D482 + (cp - UInt32('a'))  # 𝒂–𝒛
+        '0' <= ch <= '9' && return 0x1D7CE + (cp - UInt32('0'))  # 𝟎–𝟗 (bold only; no bold-italic digit block)
+        if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
+            return 0x1D71C + (cp - UInt32('Α'))             # 𝜜–𝜴
+        end
+        'α' <= ch <= 'ω' &&
+            return 0x1D736 + (cp - UInt32('α'))             # 𝜶–𝝎
+        ch === '∇' && return 0x1D735  # bold italic ∇
+        ch === '∂' && return 0x1D74F  # bold italic ∂
+        ch === 'ϵ' && return 0x1D750  # bold italic ϵ
+        ch === 'ϑ' && return 0x1D751  # bold italic ϑ
+        ch === 'ϰ' && return 0x1D752  # bold italic ϰ
+        ch === 'ϕ' && return 0x1D753  # bold italic ϕ
+        ch === 'ϱ' && return 0x1D754  # bold italic ϱ
+        ch === 'ϖ' && return 0x1D755  # bold italic ϖ
+        return nothing
+
+    # ── \mathit / \mathnormal: italic Latin and Greek ─────────────────────────
+    # Greek italic: UC 1D6E2–1D6FA, LC 1D6FC–1D714 (default math style for Greek).
     elseif variant === :mathit || variant === :mathnormal
         'A' <= ch <= 'Z' && return 0x1D434 + (cp - UInt32('A'))  # 𝐴–𝑍
         'a' <= ch <= 'z' && return get(_MATHIT_LC_EXCEPTIONS, ch,
                                        0x1D44E + (cp - UInt32('a')))  # 𝑎–𝑧 (ℎ exception)
+        if ('Α' <= ch <= 'Ρ') || ('Σ' <= ch <= 'Ω')
+            return 0x1D6E2 + (cp - UInt32('Α'))             # 𝛢–𝛺
+        end
+        'α' <= ch <= 'ω' &&
+            return 0x1D6FC + (cp - UInt32('α'))             # 𝛼–𝜔
+        ch === '∇' && return 0x1D6FB  # italic ∇
+        ch === '∂' && return 0x1D715  # italic ∂
+        ch === 'ϵ' && return 0x1D716  # italic ϵ
+        ch === 'ϑ' && return 0x1D717  # italic ϑ
+        ch === 'ϰ' && return 0x1D718  # italic ϰ
+        ch === 'ϕ' && return 0x1D719  # italic ϕ
+        ch === 'ϱ' && return 0x1D71A  # italic ϱ
+        ch === 'ϖ' && return 0x1D71B  # italic ϖ
         return nothing
 
     # ── \mathrm: upright via regular font or math-font codepoint ──────────────

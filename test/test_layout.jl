@@ -638,6 +638,45 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test glyphs[1].element.advance_width > 0
     end
 
+    @testset "FontSwitch: \\mathbf{\\alpha} command gives different glyph from plain \\alpha" begin
+        # \mathbf{\alpha} should resolve to the bold Greek alpha (U+1D6C2) rather
+        # than the italic/default alpha (U+1D6FC or similar).
+        boxes_bf  = layout(parse_latex("\\mathbf{\\alpha}"),  family, Text)
+        boxes_def = layout(parse_latex("\\alpha"),             family, Text)
+        glyphs_bf  = find_glyphs(boxes_bf)
+        glyphs_def = find_glyphs(boxes_def)
+        @test length(glyphs_bf)  == 1
+        @test length(glyphs_def) == 1
+        @test glyphs_bf[1].element.advance_width  > 0
+        @test glyphs_def[1].element.advance_width > 0
+        @test glyphs_bf[1].element.glyph_name != glyphs_def[1].element.glyph_name
+    end
+
+    @testset "FontSwitch: \\boldsymbol{x} differs from \\mathbf{x} (bold-italic vs bold-upright)" begin
+        # \boldsymbol uses bold-italic Latin (U+1D482+) vs \mathbf bold-upright (U+1D41A+).
+        boxes_bs = layout(parse_latex("\\boldsymbol{x}"), family, Text)
+        boxes_bf = layout(parse_latex("\\mathbf{x}"),     family, Text)
+        gs_bs = find_glyphs(boxes_bs)
+        gs_bf = find_glyphs(boxes_bf)
+        @test length(gs_bs) == 1
+        @test length(gs_bf) == 1
+        @test gs_bs[1].element.advance_width > 0
+        @test gs_bf[1].element.advance_width > 0
+        @test gs_bs[1].element.glyph_name != gs_bf[1].element.glyph_name
+    end
+
+    @testset "FontSwitch: \\boldsymbol{\\alpha} differs from \\mathbf{\\alpha} (bold-italic vs bold-upright Greek)" begin
+        boxes_bs = layout(parse_latex("\\boldsymbol{\\alpha}"), family, Text)
+        boxes_bf = layout(parse_latex("\\mathbf{\\alpha}"),     family, Text)
+        gs_bs = find_glyphs(boxes_bs)
+        gs_bf = find_glyphs(boxes_bf)
+        @test length(gs_bs) == 1
+        @test length(gs_bf) == 1
+        @test gs_bs[1].element.advance_width > 0
+        @test gs_bf[1].element.advance_width > 0
+        @test gs_bs[1].element.glyph_name != gs_bf[1].element.glyph_name
+    end
+
     # ── Accent layout (Rule 12) ───────────────────────────────────────────────
 
     @testset "Accent: \\hat{x} emits base and accent glyphs" begin
