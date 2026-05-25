@@ -22,8 +22,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Test"]
 
 [compat]
-FreeTypeAbstraction = "0.10.8"
-GeometryBasics = "0.5.10"
-LaTeXStrings = "1.4.0"
-LazyArtifacts = "1.11.0"
-MathTeXEngine = "0.6.7"
+FreeTypeAbstraction = "0.10"
+GeometryBasics = "0.5"
+LaTeXStrings = "1.4"
+LazyArtifacts = "1.10"
+MathTeXEngine = "0.6"
