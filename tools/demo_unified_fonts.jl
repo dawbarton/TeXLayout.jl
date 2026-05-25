@@ -13,12 +13,12 @@ using TeXLayout, CairoMakie, LaTeXStrings
 ff = default_font_family()
 
 # Teach Makie to use the same text fonts.  The :bolditalic key matches
-# Makie's theme convention (FontFamily.bold_italic → theme :bolditalic).
+# Makie's theme convention (FontFamily.bolditalic → theme :bolditalic).
 set_theme!(fonts = (;
     regular     = ff.regular,
     bold        = ff.bold,
     italic      = ff.italic,
-    bolditalic  = ff.bold_italic,
+    bolditalic  = ff.bolditalic,
 ))
 
 # ── Build figure ──────────────────────────────────────────────────────────────

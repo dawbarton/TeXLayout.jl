@@ -78,7 +78,7 @@ function _mte_font_family(tl_family::TeXLayout.FontFamily)
     reg_path  = something(tl_family.regular, math_path)
     it_path   = something(tl_family.italic, reg_path)
     bd_path   = something(tl_family.bold, reg_path)
-    bdit_path = something(tl_family.bold_italic, it_path)
+    bdit_path = something(tl_family.bolditalic, it_path)
     MathTeXEngine.FontFamily(Dict(
         :regular    => reg_path,
         :italic     => it_path,

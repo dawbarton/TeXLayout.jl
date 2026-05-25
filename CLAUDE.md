@@ -152,7 +152,7 @@ driven by `MathConstants.script_percent_scale_down` and
 
 ### `FontFamily` / `GlyphMetrics` (`fonts.jl`)
 - `FontFamily` holds font paths: `math` (mandatory), `regular`, `italic`, `bold`,
-  `bold_italic` (all optional).
+  `bolditalic` (all optional).
 - **Constructors:** `font_family(::Symbol)` looks up a named artifact (`:new_cm`,
   `:pagella`, `:termes`, `:schola`, `:bonum`, `:luciole`, `:stix_two`, `:fira_math`);
   `font_family(math_path; regular,
@@ -283,7 +283,7 @@ A summary of major features and their status.
   needed to support it.
 - **Font switching (text slots)** — `\mathbf`, `\boldsymbol`, `\mathit` etc. map Latin,
   Greek, and common symbols (∇, ∂, variant letters) to their Unicode math-variant
-  codepoints.  The `bold`, `italic`, `bold_italic` slots in `FontFamily` are not yet used;
+  codepoints.  The `bold`, `italic`, `bolditalic` slots in `FontFamily` are not yet used;
   adding them would cover characters outside the Unicode math block.
 - **Inter-atom spacing for `\text{}`** — text-mode fragments are not yet classified for
   atom-class spacing purposes.

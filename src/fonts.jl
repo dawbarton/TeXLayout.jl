@@ -24,7 +24,7 @@ struct FontFamily
     regular::Union{String,Nothing}
     italic::Union{String,Nothing}
     bold::Union{String,Nothing}
-    bold_italic::Union{String,Nothing}
+    bolditalic::Union{String,Nothing}
 end
 
 FontFamily(math::String) = FontFamily(math, nothing, nothing, nothing, nothing)

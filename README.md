@@ -73,18 +73,17 @@ using TeXLayout, CairoMakie, LaTeXStrings
 
 ff = default_font_family()   # whichever family is currently active
 
-# Note: Makie uses :bolditalic (not :bold_italic).
 set_theme!(fonts = (;
     regular    = ff.regular,
     bold       = ff.bold,
     italic     = ff.italic,
-    bolditalic = ff.bold_italic,
+    bolditalic = ff.bolditalic,
 ))
 
 fig = Figure(size = (800, 500))
 ax  = Axis(fig[1, 1]; xlabel = L"x", ylabel = L"f(x)")
 x   = LinRange(0, 2π, 400)
-lines!(ax, x, sin.(x);               label = L"\sin(x)")
+lines!(ax, x, sin.(x); label = L"\sin(x)")
 lines!(ax, x, exp.(-x/4).*sin.(3x); label = L"e^{-x/4}\sin(3x)")
 axislegend(ax)
 save("output.png", fig)
