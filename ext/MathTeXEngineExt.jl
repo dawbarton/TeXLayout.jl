@@ -1,15 +1,18 @@
-# MathTeXEngineExt — override MathTeXEngine.generate_tex_elements with TeXLayout's
-# OpenType-aware typesetter.
+# MathTeXEngineExt — add a MathTeXEngine.generate_tex_elements(::LaTeXString) method
+# that uses TeXLayout's OpenType-aware typesetter instead of MathTeXEngine's own
+# layout engine.
 #
-# Loaded automatically when both TeXLayout and MathTeXEngine are in the same
-# Julia session (e.g. when CairoMakie or GLMakie is loaded).
+# Loaded automatically when TeXLayout, MathTeXEngine, GeometryBasics, and
+# LaTeXStrings are all in the same Julia session (e.g. when CairoMakie or
+# GLMakie is loaded — both packages always bring the full set as transitive deps).
+#
+# The ::LaTeXString specialisation is a new method (not an overwrite of an
+# existing one), so the extension can be fully precompiled.  Makie's
+# texelems_and_glyph_collection passes a LaTeXString directly, so our more
+# specific method is always chosen over MathTeXEngine's fallback.
 #
 # We produce real MathTeXEngine.TeXChar / HLine / VLine instances so that
 # Makie's texelems_and_glyph_collection can consume them without modification.
-
-# Method overwriting (replacing MathTeXEngine.generate_tex_elements) is not
-# permitted during precompilation, so we opt out and load interpreted.
-__precompile__(false)
 
 module MathTeXEngineExt
 
@@ -17,6 +20,7 @@ import MathTeXEngine
 import TeXLayout
 using FreeTypeAbstraction: FreeTypeAbstraction
 using GeometryBasics: Point2f
+using LaTeXStrings: LaTeXString
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,15 +113,20 @@ end
 # ── Main override ─────────────────────────────────────────────────────────────
 
 """
-    MathTeXEngine.generate_tex_elements(str[, font_family])
+    MathTeXEngine.generate_tex_elements(str::LaTeXString[, font_family])
 
-Override of MathTeXEngine's implementation.  Uses TeXLayout's OpenType-aware
-typesetter instead of MathTeXEngine's own layout engine.
+Specialisation of MathTeXEngine's `generate_tex_elements` for `LaTeXString`
+inputs.  Uses TeXLayout's OpenType-aware typesetter instead of MathTeXEngine's
+own layout engine.
+
+This is a new method (not an overwrite), so the extension is fully precompiled.
+Makie always passes a `LaTeXString` at this call site, so this method takes
+priority via normal dispatch specificity.
 
 The `font_family` argument is accepted for API compatibility but is currently
 ignored; TeXLayout's `default_font_family()` is used instead.
 """
-function MathTeXEngine.generate_tex_elements(str, _mte_family=MathTeXEngine.FontFamily())
+function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family=MathTeXEngine.FontFamily())
     tl_family = TeXLayout.default_font_family()
 
     input = _strip_math_delimiters(str)
