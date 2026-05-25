@@ -246,3 +246,11 @@
   - Reclassifying `NKHorizBrace` from `:inner` to `:ord`: KaTeX's `horizBrace.ts` emits `minner`, so our current classification matches.
   - Factoring the 3× repeated `base.kind === NKHorizBrace && return _layout_horiz_brace!(...)` dispatch: only 2 lines per site after the per-kind split, so factoring would add ceremony without saving meaningful code.
 - **Verification**: All 797 tests pass after every commit (originally 789; +8 for new Unicode lexer tests and one nothing-return test). Smoke-tested a 18-input suite including direct-Unicode and empty/malformed inputs.
+
+## 2026-05-25T09:01+00:00 Complete _SYMBOL_CODEPOINTS audit (item 2)
+
+- Audited all entries in `_CMD_ATOM_CLASS` against `_SYMBOL_CODEPOINTS` and `_DISPLAY_OP_CODEPOINTS`.
+- The 2026-05-24 session had already added ~85 entries; the residual "genuinely missing" symbols were: `\doteq` (U+2250), `\Join` (U+2A1D), `\Bbbk` (U+1D55C), `\backslash` (U+005C). All four added.
+- All remaining entries in `_CMD_ATOM_CLASS` without a codepoint are legitimately handled by other code paths (font switch → NKFontSwitch, accents → NKAccent, `\big*` delimiters, `\bmod`/`\pmod`/`\xleftarrow`/`\xrightarrow`, ellipsis variants), or are negated composites without a single codepoint (documented limitation), or `\bigplus` (no standard Unicode codepoint).
+- CLAUDE.md Known Limitations updated: "~150 AMS symbols missing" bullet replaced with accurate `\bigplus` note.
+- 798 tests pass.
