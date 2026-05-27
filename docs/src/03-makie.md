@@ -19,6 +19,11 @@ normal Julia method dispatch selects the TeXLayout method over MathTeXEngine's
 built-in fallback.  No monkey-patching, no `__precompile__(false)`, and no changes to
 any upstream package are needed.
 
+For repeated rendering with the same font family, the extension reuses a cached
+runtime bundle derived from the active `FontFamily`, and the underlying TeXLayout
+pipeline reuses cached font handles and parsed MATH tables.  In steady-state Makie
+workloads this avoids reparsing the OpenType font data on every formula.
+
 ## Quick start
 
 Load `TeXLayout` before (or alongside) `CairoMakie`; the extension activates

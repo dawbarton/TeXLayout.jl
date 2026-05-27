@@ -24,10 +24,13 @@ Node  (AST)
 Vector{LayoutBox}
 ```
 
-Each stage is a **pure function** (no global mutation beyond the font cache).  This
-clean separation means that a parsed AST can be reused across multiple font choices or
-style levels without re-parsing, and that each stage can be tested and debugged in
-isolation.
+Each stage is a **pure function** apart from internal memoization caches.  In
+particular, `fonts.jl` caches loaded FreeType faces and horizontal metrics by path,
+and `math_table.jl` caches parsed `MathTable` values by math-font path.  This keeps
+the pipeline logically clean while avoiding repeated font I/O and MATH-table parsing
+on hot paths such as repeated Makie rendering.  A parsed AST can still be reused
+across multiple font choices or style levels without re-parsing, and each stage can
+be tested and debugged in isolation.
 
 The public entry points are:
 
@@ -263,6 +266,22 @@ partially typed or otherwise broken expressions.
 The layout engine converts the AST into a flat list of positioned renderable elements.
 It is a recursive tree walk: `_layout_node!` dispatches on `NodeKind` and pushes
 `LayoutBox` values into a shared accumulator vector.
+
+### Font and MATH-table caching
+
+Layout depends on font-derived data that is expensive to reconstruct repeatedly, so
+TeXLayout memoizes it:
+
+- **Font cache (`src/fonts.jl`)** — `_load_font(path)` reuses loaded FreeType faces and
+  parsed `hmtx` data keyed by font path.
+- **MATH table cache (`src/math_table.jl`)** — `load_math_table(path)` caches the parsed
+  `MathTable` object keyed by the math-font path.  Repeated layout calls with the same
+  font therefore reuse the already-parsed OpenType MATH table instead of reparsing the
+  binary table on every call.
+
+This cache layer matters in practice because AST parsing is usually cheap, while
+font loading and MATH-table decoding can dominate steady-state rendering workloads if
+they are not memoized.
 
 ### Layout context
 
