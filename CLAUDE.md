@@ -19,46 +19,52 @@ algorithmic structure where it is sound.
 ```
 TeXLayout.jl/
 ├── src/
-│   ├── TeXLayout.jl        # Module entry point; all exports declared here
-│   ├── math_table.jl      # OpenType MATH table parser (binary → MathConstants struct)
-│   ├── fonts.jl           # FontFamily, GlyphMetrics, font-cache, glyph lookup
-│   ├── style.jl           # TexStyle enum (D/T/S/SS × cramped), style transition functions
-│   ├── lexer.jl           # Tokeniser: LaTeX string → Vector{Token}
-│   ├── parser.jl          # Recursive-descent parser: tokens → Node AST
-│   └── layout.jl          # Layout engine: Node + style → Vector{LayoutBox}
+│   ├── TeXLayout.jl        # Module entry point; exports and include order
+│   ├── math_table.jl       # OpenType MATH table parser + per-font MathTable cache
+│   ├── fonts.jl            # FontFamily, GlyphMetrics, artifact-backed font lookup, font cache
+│   ├── style.jl            # TexStyle enum (D/T/S/SS × cramped), style transition helpers
+│   ├── lexer.jl            # Tokeniser: LaTeX string → Vector{Token}
+│   ├── parser.jl           # Recursive-descent parser: tokens → Node AST
+│   └── layout.jl           # Layout engine: Node + style → Vector{LayoutBox}
+├── ext/
+│   └── MathTeXEngineExt.jl # Makie/MathTeXEngine extension + cached runtime conversion bundle
 ├── test/
-│   ├── runtests.jl        # Top-level testset; includes all test files
+│   ├── runtests.jl         # Top-level testset; includes all test files
 │   ├── fixtures/
-│   │   └── newcm_math.jl  # Ground-truth constants extracted from NewCMMath-Regular.otf
-│   ├── test_math_table.jl # Tests for MATH table parsing
-│   ├── test_metrics.jl    # Tests for glyph metric lookups
-│   ├── test_style.jl      # Tests for style cascade transitions
-│   ├── test_lexer.jl      # Tests for the tokeniser
-│   ├── test_parser.jl     # Tests for AST structure
-│   ├── test_layout.jl     # Tests for layout engine invariants
-│   └── test_katex.jl      # KaTeX-derived test suite (smoke, malformed, nested)
+│   │   └── newcm_math.jl   # Ground-truth constants extracted from NewCMMath-Regular.otf
+│   ├── test_math_table.jl  # Tests for MATH table parsing and cache behaviour
+│   ├── test_metrics.jl     # Tests for glyph metric lookups
+│   ├── test_style.jl       # Tests for style cascade transitions
+│   ├── test_lexer.jl       # Tests for the tokeniser
+│   ├── test_parser.jl      # Tests for AST structure
+│   ├── test_layout.jl      # Tests for layout engine invariants and feature coverage
+│   └── test_katex.jl       # KaTeX-derived test suite (smoke, malformed, nested)
 ├── tools/
-│   ├── visualise_bitmap.jl       # Render one expression to PNG via FreeType (usage: julia tools/visualise_bitmap.jl "expr" out.png)
-│   ├── visualise_svg.jl          # Render bounding-box diagram to SVG (glyph boxes + reference lines; good for debugging metrics)
-│   ├── visualise_spacing.jl      # Grid of expressions showing inter-atom spacing
-│   ├── demo_features.jl          # Generate accents.png / overunder.png / binary_reclass.png feature panels
-│   ├── demo_sheet.jl             # Comprehensive single-page PNG demo for a font family (julia tools/demo_sheet.jl [:symbol|/path] [out.png])
-│   └── prepare_font_artifacts.jl # Build artifact tarballs + draft Artifacts.toml for all 8 font families
-├── external/              # Source references (read-only; not part of the package)
-│   ├── KaTeX/             # Original KaTeX JS implementation
-│   ├── Makie.jl/          # Makie ecosystem packages
-│   └── MathTeXEngine.jl/  # Previous Julia math typesetter
+│   ├── visualise_bitmap.jl      # Rasterise one expression to PNG
+│   ├── visualise_svg.jl         # SVG bounding-box / baseline / axis visualiser
+│   ├── visualise_spacing.jl     # Inter-atom spacing visualiser
+│   ├── demo_features.jl         # Feature panels for accents / over-under / braces / etc.
+│   ├── demo_sheet.jl            # General single-page feature sheet for a font family
+│   ├── demo_matrix.jl           # Matrix / array environment demo output
+│   ├── demo_makie.jl            # Smoke test and CairoMakie integration demo
+│   ├── demo_unified_fonts.jl    # Makie text+math font matching demo
+│   ├── stress_test_sheet.jl     # Stress sheet targeting edge cases and regressions
+│   ├── stress_test_all.sh       # Batch-render stress sheets for bundled families
+│   ├── png_diff.jl              # Signed PNG diff visualiser for rendered outputs
+│   └── prepare_font_artifacts.jl # Build artifact tarballs + draft Artifacts.toml stanzas
 ├── docs/
-│   ├── make.jl            # Documenter.jl build script
+│   ├── make.jl             # Documenter.jl build script
 │   ├── Project.toml
-│   └── src/               # Markdown source pages
-│       ├── index.md
-│       ├── 01-getting-started.md
-│       ├── 02-fonts.md
-│       ├── 03-makie.md
-│       ├── 04-commands.md
-│       ├── 05-api.md
-│       └── 91-developer.md
+│   └── src/                # Markdown source pages
+├── external/               # Source references (read-only; not part of the package)
+│   ├── KaTeX/
+│   ├── Makie.jl/
+│   └── MathTeXEngine.jl/
+├── artifacts/              # Bundled font payloads and extracted font files
+├── Artifacts.toml          # Artifact definitions for bundled fonts
+├── CLAUDE.md               # This architecture/developer guide
+├── katex_rules.md          # Rule-by-rule implementation notes against KaTeX/TeX
+├── notes.md                # Cross-session engineering notes
 ├── Project.toml
 └── README.md
 ```
@@ -72,9 +78,20 @@ All tools in `tools/` activate the package's own project environment and require
 | `visualise_bitmap.jl` | Pixel-accurate render of a single expression using FreeType glyph rasterisation.  Useful as a quick sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_svg.jl` | Bounding-box diagram: each `LayoutBox` drawn as a coloured rectangle with glyph-name label, baseline and math-axis reference lines.  Best for debugging metric or positioning bugs. | `julia tools/visualise_svg.jl "expr" out.svg` |
 | `visualise_spacing.jl` | Multi-row grid of spacing test expressions with inter-atom gaps highlighted. | `julia tools/visualise_spacing.jl` |
-| `demo_features.jl` | Renders panels for accents, `\overline`/`\underline`, and binary reclassification (one PNG per feature) into a specified output directory. | `julia tools/demo_features.jl /path/to/output/` |
-| `demo_sheet.jl` | Comprehensive single-page PNG demo sheet showing all major layout features for a given font family. | `julia tools/demo_sheet.jl [:symbol\|/path/to/math.otf] [out.png]` |
+| `demo_features.jl` | Renders feature panels used for quick visual checks of accents, braces, over/under constructs, and related layout rules. | `julia tools/demo_features.jl /path/to/output/` |
+| `demo_sheet.jl` | Comprehensive single-page PNG demo sheet showing major layout features for a given font family. | `julia tools/demo_sheet.jl [:symbol\|/path/to/math.otf] [out.png]` |
+| `demo_makie.jl` / `demo_unified_fonts.jl` | Smoke-test the MathTeXEngine extension and show Makie figures with TeXLayout-driven math rendering. | `julia tools/demo_makie.jl` |
+| `demo_matrix.jl` / `stress_test_sheet.jl` | Focused demos for matrix/array layout and a broader regression-oriented stress sheet. | `julia tools/stress_test_sheet.jl [:symbol\|/path] [out.png]` |
+| `stress_test_all.sh` | Batch-renders the stress sheet for all bundled font families. | `bash tools/stress_test_all.sh` |
+| `png_diff.jl` | Signed red/green PNG diff for comparing two rendered outputs; pads mismatched image sizes onto a white canvas first. | `julia tools/png_diff.jl before.png after.png [diff.png]` |
 | `prepare_font_artifacts.jl` | Downloads fonts from CTAN/GitHub, builds Julia artifact tarballs and draft `Artifacts.toml` stanzas for all 8 font families.  Run once when adding new fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
+
+### Formatting
+
+Format Julia code with Runic.jl.  The simplest path is the `runic` Bash command
+from the repository root; Runic is also installed in the global Julia
+environment `@runic`.  Any touched Julia source or test files should be left in
+Runic format before finishing a change.
 
 ---
 
@@ -94,7 +111,10 @@ String  ──tokenize──►  Vector{Token}
                      Vector{LayoutBox}
 ```
 
-Each stage is stateless and pure (no global mutation beyond the font cache).
+Each stage is stateless and pure apart from memoization caches: `fonts.jl`
+caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
+parsed `MathTable` values by math-font path, and `ext/MathTeXEngineExt.jl`
+caches the Makie-facing runtime bundle by effective `FontFamily`.
 
 ---
 
@@ -230,6 +250,8 @@ driven by `MathConstants.script_percent_scale_down` and
 Parsed directly from the font's OpenType MATH table.  All constants are in design units;
 divide by `upm` (from `_LayoutCtx.upm`) to get em values.  No hard-coded fallbacks are
 used anywhere — if the font lacks a MATH table, `load_math_table` throws.
+`load_math_table(path)` returns a cached `MathTable` object keyed by the math-font
+path, so repeated layouts with the same font do not reparse the binary table.
 
 ---
 
@@ -336,6 +358,9 @@ A summary of major features and their status.
   `LaTeXString`, so dispatch picks our method over MathTeXEngine's fallback.  The
   extension is fully precompiled (no `__precompile__(false)` needed) because adding
   a method with a more specific argument type is a new method, not an overwrite.
+  The extension also maintains a per-font runtime cache so repeated Makie renders
+  reuse the loaded math/regular faces, the derived `MathTeXEngine.FontFamily`, and
+  glyph-name → glyph-index lookup tables.
   **This is type piracy**: TeXLayout owns neither the function (`MathTeXEngine.generate_tex_elements`)
   nor the argument type (`LaTeXStrings.LaTeXString`).  It is pragmatic and confined
   to the extension, but alternative integration strategies (e.g. a dedicated Makie

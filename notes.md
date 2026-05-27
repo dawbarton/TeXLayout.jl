@@ -446,3 +446,9 @@
 - **Incidental fix**: `stress_test_sheet.jl` was using `magick` (not installed); aligned with `demo_sheet.jl` to use `convert`
 
 - All three fixes are in commit `4a22217`; verified visually with Luciole stress test and demo sheets, and NewCM regression check passed
+
+## 2026-05-27T11:38+00:00 Refresh CLAUDE.md for current repository state
+
+- Updated `CLAUDE.md` to reflect the current tree layout, including `ext/MathTeXEngineExt.jl`, the broader `tools/` set, artifact-managed fonts, and repo-level notes files.
+- Added explicit developer guidance that Julia code should be formatted with Runic.jl, using the `runic` command in Bash or the global Julia environment `@runic`.
+- Documented the current cache layers more accurately: font cache in `src/fonts.jl`, `MathTable` cache in `src/math_table.jl`, and the Makie runtime cache in `ext/MathTeXEngineExt.jl`.
