@@ -458,3 +458,24 @@
 - Updated `docs/src/91-developer.md` so the architecture overview no longer claims the pipeline only mutates the font cache; it now documents both the font-handle cache and the parsed `MathTable` cache.
 - Added a focused developer-doc note that `load_math_table(path)` memoizes the OpenType MATH table by math-font path, which matters for repeated layout and Makie rendering.
 - Updated `docs/src/03-makie.md` to mention the extension/runtime caching story in steady-state Makie usage.
+## 2026-05-27T15:23+00:00 Plan MathTeXEngine-style layout visualiser
+
+- New task: add a command-line visualisation tool under `tools/` that reproduces the style of the older MathTeXEngine debug view for arbitrary expressions.
+- Chosen implementation approach: use TeXLayout's own `parse_latex` + `layout` output and render a custom PNG with helper overlays, rather than introducing a CairoMakie dependency into the package project.
+- Planned visual layers: rendered glyph/rule output, baseline + math-axis guides, and coloured metric overlays inspired by `external/MathTeXEngine.jl/prototype/prototype.jl` (left bearing / post-ink advance / above-baseline ink / descender).
+- Need to update `CLAUDE.md` tool list once the script exists and then run formatting plus the relevant Julia checks.
+
+## 2026-05-27T15:35+00:00 Implement visualise_metrics CLI tool
+
+- Added `tools/visualise_metrics.jl`, a self-contained command-line visualiser that renders TeXLayout output with MathTeXEngine-style metric overlays.
+- The tool uses only `TeXLayout` + `FreeTypeAbstraction`, so it stays inside the package project rather than depending on CairoMakie.
+- Output layers:
+  - black glyph/rule rendering,
+  - grey baseline and red math-axis guides,
+  - yellow origin-to-left-ink region,
+  - green right-ink-to-advance region,
+  - red above-baseline ink region,
+  - blue descender region,
+  - outline/origin/advance guides per glyph.
+- CLI shape: `julia tools/visualise_metrics.jl "expr" [out.png|out.ppm] [:font_symbol|/path/to/font.otf]`.
+- Added a subprocess smoke test in `test/test_tools.jl`; because the tool self-activates via `using Pkg`, the test restores `JULIA_LOAD_PATH=@:@stdlib` before launching it.

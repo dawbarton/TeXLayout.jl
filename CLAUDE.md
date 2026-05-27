@@ -43,6 +43,7 @@ TeXLayout.jl/
 │   ├── visualise_bitmap.jl      # Rasterise one expression to PNG
 │   ├── visualise_svg.jl         # SVG bounding-box / baseline / axis visualiser
 │   ├── visualise_spacing.jl     # Inter-atom spacing visualiser
+│   ├── visualise_metrics.jl     # MathTeXEngine-style glyph metric overlay visualiser
 │   ├── demo_features.jl         # Feature panels for accents / over-under / braces / etc.
 │   ├── demo_sheet.jl            # General single-page feature sheet for a font family
 │   ├── demo_matrix.jl           # Matrix / array environment demo output
@@ -78,6 +79,7 @@ All tools in `tools/` activate the package's own project environment and require
 | `visualise_bitmap.jl` | Pixel-accurate render of a single expression using FreeType glyph rasterisation.  Useful as a quick sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_svg.jl` | Bounding-box diagram: each `LayoutBox` drawn as a coloured rectangle with glyph-name label, baseline and math-axis reference lines.  Best for debugging metric or positioning bugs. | `julia tools/visualise_svg.jl "expr" out.svg` |
 | `visualise_spacing.jl` | Multi-row grid of spacing test expressions with inter-atom gaps highlighted. | `julia tools/visualise_spacing.jl` |
+| `visualise_metrics.jl` | MathTeXEngine-style metric overlay view: rendered glyphs with coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png\|out.ppm] [:font_symbol\|/path/to/math.otf]` |
 | `demo_features.jl` | Renders feature panels used for quick visual checks of accents, braces, over/under constructs, and related layout rules. | `julia tools/demo_features.jl /path/to/output/` |
 | `demo_sheet.jl` | Comprehensive single-page PNG demo sheet showing major layout features for a given font family. | `julia tools/demo_sheet.jl [:symbol\|/path/to/math.otf] [out.png]` |
 | `demo_makie.jl` / `demo_unified_fonts.jl` | Smoke-test the MathTeXEngine extension and show Makie figures with TeXLayout-driven math rendering. | `julia tools/demo_makie.jl` |
