@@ -35,6 +35,8 @@ artifacts/
 
 # Render artefacts
 *.png
+*.svg
+*.pdf
 
 # macOS AppleDouble resource fork files
 ._*
