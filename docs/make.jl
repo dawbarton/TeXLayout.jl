@@ -61,9 +61,12 @@ end
 makedocs(;
     modules = [TeXLayout],
     authors = "David A. W. Barton <david.barton@bristol.ac.uk>",
-    repo = "https://github.com/dawbarton/TeXLayout.jl/blob/{commit}{path}#{line}",
+    repo = Remotes.GitHub("dawbarton", "TeXLayout.jl"),
     sitename = "TeXLayout.jl",
-    format = Documenter.HTML(; canonical = "https://dawbarton.github.io/TeXLayout.jl"),
+    format = Documenter.HTML(;
+        canonical = "https://dawbarton.github.io/TeXLayout.jl",
+        repolink = "https://github.com/dawbarton/TeXLayout.jl",
+    ),
     pages = list_pages(),
     checkdocs = :exports,
 )
