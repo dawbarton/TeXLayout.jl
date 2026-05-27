@@ -570,7 +570,7 @@ function write_png(path, canvas::Matrix{UInt8})
                 write(io, view(canvas, row, :))
             end
         end
-        imagemagick_cmd(["pgm:$tmp", "png:$path"])
+        run(imagemagick_cmd(["pgm:$tmp", "png:$path"]))
     finally
         isfile(tmp) && rm(tmp)
     end
