@@ -136,13 +136,50 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test rule_y >= radicand_y - 1.0e-6
 
         radical_glyphs = filter(b -> b.x == rad_x, glyphs)
-        radical_right = maximum(
-            b.x + b.element.x_max / FONT_UPM * b.scale
+        radical_advance = maximum(
+            b.element.advance_width / FONT_UPM * b.scale
                 for b in radical_glyphs
         )
         body_x = minimum(b.x for b in body_glyphs)
-        @test body_x ≈ radical_right atol = 1.0e-6
+        @test body_x - rad_x ≈ radical_advance atol = 1.0e-6
         @test body_x - rule.x ≈ rule.element.thickness / 2 atol = 1.0e-6
+    end
+
+    @testset "Nested sqrt: radicand starts at radical advance width" begin
+        boxes = layout(
+            parse_latex("\\sqrt{1 + \\sqrt{1 + \\sqrt{1 + \\sqrt{1 + x}}}}"),
+            family,
+            Text,
+        )
+        hrules = find_hrules(boxes)
+        radical_glyphs = filter(b -> startswith(b.element.glyph_name, "radical"), find_glyphs(boxes))
+        @test length(radical_glyphs) == 4
+        @test length(hrules) >= length(radical_glyphs)
+
+        for radical in radical_glyphs
+            radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
+            match = findfirst(hrules) do rule
+                rule_top = rule.y + rule.element.thickness
+                isapprox(rule_top, radical_top; atol = 1.0e-6)
+            end
+            @test match !== nothing
+            rule = hrules[match]
+            body_x = rule.x + rule.element.thickness / 2
+            expected = radical.element.advance_width / FONT_UPM * radical.scale
+            @test body_x - radical.x ≈ expected atol = 1.0e-6
+        end
+    end
+
+    @testset "Nested sqrt: repeated plus glyphs stay on one baseline" begin
+        boxes = layout(
+            parse_latex("\\sqrt{1 + \\sqrt{1 + \\sqrt{1 + \\sqrt{1 + x}}}}"),
+            family,
+            Text,
+        )
+        pluses = filter(b -> b.element.glyph_name == "plus", find_glyphs(boxes))
+        @test length(pluses) == 4
+        reference_y = pluses[1].y
+        @test all(isapprox(p.y, reference_y; atol = 1.0e-6) for p in pluses)
     end
 
     @testset "Horizontal advance: boxes are left-to-right" begin

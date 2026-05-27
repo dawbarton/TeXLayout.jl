@@ -1,4 +1,19 @@
 
+## 2026-05-27T22:24+00:00 Nested radical vertical alignment fix
+
+- Follow-up on the nested-radical investigation: the repeated `+` glyphs were also drifting downward in `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`.
+- Root cause: after the usual TeX/KaTeX-style clearance adjustment, `_layout_sqrt!` applied a second `body_shift` that lowered the radicand by half of the selected radical's excess cover.
+- LuaTeX `make_radical` does not do that extra centering step: it increases the clearance `clr` when needed and then packs the delimiter beside an overbar/radicand vlist.
+- Removed the extra body shift so nested radicands keep their original baseline, and added a regression test asserting that all four `+` glyphs in the deep nested example share the same `y` position.
+
+## 2026-05-27T22:18+00:00 Nested radical horizontal alignment fix
+
+- Investigated `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`: the repeated `1+` drifted slightly right at each larger radical variant.
+- Root cause in `src/layout.jl`: `_radical_body_offset_du` used `max(advance_width, x_max)`, so the radicand started after the radical ink overhang instead of after the radical delimiter box width.
+- In NewCMMath the prebuilt radical variants have `advance_width = 1000` du but `x_max = 1020` du (`radical` is `833` vs `853`), so each nested level picked up an unwanted extra `20` du.
+- Checked LuaTeX `make_radical` (`texk/web2c/luatexdir/tex/mlist.c`): TeX builds the result as delimiter box followed by the overbar/radicand hlist, so horizontal placement is by delimiter **width**, not ink bounds.
+- Fixed `_radical_body_offset_du` to use `advance_width` only and added a regression test that matches each nested radical glyph to its rule bar and asserts the radicand starts exactly one radical advance to the right.
+
 ## 2026-05-27T11:28+00:00 Signed PNG diff utility for stress-test comparisons
 
 - Added `tools/png_diff.jl` to compare two rendered PNGs from TeXLayout runs.

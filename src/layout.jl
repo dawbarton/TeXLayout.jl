@@ -1114,7 +1114,11 @@ end
 # radical assemblies are top-anchored.  Returns the horizontal offset at which
 # the radicand should start.
 @inline _radical_cover_du(g::Glyph) = Float64(g.y_max - g.y_min)
-@inline _radical_body_offset_du(g::Glyph) = max(Float64(g.advance_width), Float64(g.x_max))
+# TeX packs the radical delimiter and the overbar/radicand into an hlist, so the
+# body starts after the delimiter box width (advance width), not after the
+# radical ink's right edge. Using x_max makes larger radical variants drift
+# rightward in deep nesting because their ink overhang exceeds their advance.
+@inline _radical_body_offset_du(g::Glyph) = Float64(g.advance_width)
 
 function _assembly_total_du(parts::Vector{GlyphAssemblyPart}, overlaps::Vector{Int})::Float64
     isempty(parts) && return 0.0
@@ -2289,18 +2293,11 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     rule_top_em = y0 + rule_top_local
     body_x_offset = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
 
-    # When the selected radical variant is larger than the minimum required
-    # span, distribute the excess equally: shift the body DOWN by half the
-    # excess so it appears vertically centred in the hook area rather than
-    # crowded against the top bar.  The rule bar and radical stay in place.
-    body_shift = max(0.0, _peek_radical_cover_du(ctx, required_du) - required_cover_du) /
-        (2.0 * upm) * scale
-
     body_x = x0 + body_x_offset
     rule_overlap = rule_thickness / 2
     rule_x = body_x - rule_overlap
 
-    _emit_shifted!(boxes, tmp, body_x, y0 - body_shift)
+    _emit_shifted!(boxes, tmp, body_x, y0)
     push!(
         boxes, LayoutBox(
             HRule(body_w + rule_overlap, rule_thickness),
