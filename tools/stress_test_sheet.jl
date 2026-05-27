@@ -17,6 +17,14 @@ Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
 
+const IMAGEMAGICK = let magick = Sys.which("magick"), convert = Sys.which("convert")
+    magick !== nothing ? magick : convert
+end
+
+imagemagick_cmd(args::Vector{String}) =
+    IMAGEMAGICK === nothing ? error("ImageMagick not found (`magick` or `convert`)") :
+    Cmd(vcat([IMAGEMAGICK], args))
+
 const BASE_PX = 90    # pixels per em for math content
 const MARGIN = 14    # canvas border in pixels
 const EXPR_GAP = 30    # horizontal gap between side-by-side expressions (px)
@@ -562,7 +570,7 @@ function write_png(path, canvas::Matrix{UInt8})
                 write(io, view(canvas, row, :))
             end
         end
-        run(`magick pgm:$tmp png:$path`)
+        imagemagick_cmd(["pgm:$tmp", "png:$path"])
     finally
         isfile(tmp) && rm(tmp)
     end
