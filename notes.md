@@ -479,3 +479,22 @@
   - outline/origin/advance guides per glyph.
 - CLI shape: `julia tools/visualise_metrics.jl "expr" [out.png|out.ppm] [:font_symbol|/path/to/font.otf]`.
 - Added a subprocess smoke test in `test/test_tools.jl`; because the tool self-activates via `using Pkg`, the test restores `JULIA_LOAD_PATH=@:@stdlib` before launching it.
+
+## 2026-05-27T16:33+00:00 Plan CairoMakie visualise_metrics variant
+
+- New follow-on task: add `tools/visualise_metrics_makie.jl` so the expression itself is drawn by Makie's `text!`, with metric boxes layered over the top.
+- Dependency plan: use the existing `examples/` environment for CairoMakie, LaTeXStrings, and MathTeXEngine rather than adding Makie to the main package project.
+- Alignment plan: match the old MathTeXEngine prototype by placing the text at `(0, 0)` in data space with `align = (:left, :baseline)` and scaling all overlay geometry from TeXLayout `LayoutBox` coordinates by the chosen font size.
+- Need to confirm how best to make the local TeXLayout checkout visible from that environment, because the committed `examples/Manifest.toml` still points at a machine-local dev path.
+
+## 2026-05-27T16:48+00:00 Implement visualise_metrics_makie and fix Makie alignment
+
+- Added `tools/visualise_metrics_makie.jl`, a CairoMakie-backed companion to `visualise_metrics.jl`.
+- The tool activates the repo's `examples/` environment (for CairoMakie / LaTeXStrings / MathTeXEngine) and pushes the local TeXLayout checkout onto `LOAD_PATH` so the current workspace code is used.
+- Important debugging result: the first attempts misaligned the overlays because Makie applies an internal `tex_offset` inside `texelems_and_glyph_collection`; I also accidentally applied that offset to the whole `text!` call once, which shifted the rendered formula twice.
+- Final implementation:
+  - renders the formula with a single Makie `text!` call at `(0, 0)`,
+  - queries Makie's own `texelems_and_glyph_collection` helper to obtain the exact internal `tex_offset`,
+  - derives overlay rectangles from the same `MathTeXEngine.TeXChar` metrics that Makie uses to render,
+  - applies the internal offset only to the overlays and guide geometry, not to the `text!` anchor.
+- Smoke render for `\\frac{a}{b}` now aligns numerator and denominator overlays correctly in the saved PNG.
