@@ -119,6 +119,56 @@
 - 761 tests passing (25 new parser + 14 new layout + 5 new katex smoke tests).
 - Updated `CLAUDE.md` feature table (Array/matrix environments: ✗ → ✓).
 
+## 2026-05-27T08:48+00:00 Makie-path performance review and caching opportunities
+
+- Benchmarked the TeXLayout/Makie integration in a temporary Julia environment using `BenchmarkTools`, with `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` loaded so the package extension was active.
+- Current hot path findings:
+  - `src/layout.jl:2504-2515` calls `load_math_table(family.math)` on every layout.
+  - `src/math_table.jl:757-780` reparses the font file every time; there is no MATH-table cache.
+  - `src/fonts.jl:49-87` already caches FreeType font handles and parsed `hmtx` tables by path, so lower-level font-face reuse exists but higher-level math-font metadata reuse does not.
+  - `ext/MathTeXEngineExt.jl:147` uses `result = Tuple[]`, producing `Vector{Tuple}` and a type-unstable accumulation path in the Makie-facing conversion stage.
+- Benchmark summary on repeated calls with the default font:
+  - Small expression `x^2+y^2=z^2`: `parse_latex` ~0.7 μs; `load_math_table` ~0.97 ms; `layout(node, ff, Display)` ~0.65 ms; `MathTeXEngine.generate_tex_elements` ~0.70 ms.
+  - Larger expression with `\int`, `\frac`, and `\sum`: `parse_latex` ~5.9 μs; `load_math_table` ~0.95 ms; `layout(node, ff, Display)` ~1.11 ms; `MathTeXEngine.generate_tex_elements` ~1.06 ms.
+  - `load_math_table` alone allocates ~2.31 MiB per call, essentially dominating repeated-call cost.
+- Simulated the effect of a per-font cache by reusing a prebuilt `_LayoutCtx`:
+  - Cached lower-level layout: ~24 μs (small) and ~160 μs (large).
+  - Cached MTE conversion from existing boxes: ~21 μs (small) and ~249 μs (large).
+  - This suggests a per-font runtime cache could reduce repeated-call latency by roughly an order of magnitude for small formulas and by multiple times for larger ones, while also removing most current allocation pressure.
+
+## 2026-05-27T08:56+00:00 Performance implementation plan for Makie path
+
+- Agreed implementation scope for the first four speed-focused items:
+  1. cache parsed `MathTable` data by math-font path,
+  2. cache a higher-level Makie runtime bundle by effective `FontFamily`,
+  3. remove abstract tuple accumulation in the Makie extension,
+  4. cache glyph-name to glyph-index lookups per loaded font.
+- Added execution todos and dependencies in the session SQL tracker:
+  - `perf-cache-math-table`
+  - `perf-cache-makie-runtime` depends on `perf-cache-math-table`
+  - `perf-cache-glyph-index` depends on `perf-cache-makie-runtime`
+  - `perf-validate-benchmarks` depends on all implementation items
+- Plan emphasis: keep the public API unchanged, build on the existing font cache in `src/fonts.jl`, and benchmark each step separately so the impact of each optimization remains attributable.
+
+## 2026-05-27T08:59+00:00 Implement Makie-path caches and concrete conversion container
+
+- Implemented `MathTable` caching in `src/math_table.jl` via `_MATH_TABLE_CACHE`, keyed by math-font path. `load_math_table` now does a cached lookup instead of rereading and reparsing the font on repeated calls.
+- Implemented a cached Makie runtime bundle in `ext/MathTeXEngineExt.jl`, keyed by the effective `FontFamily` path tuple. The bundle reuses:
+  - loaded math and regular `FTFont` handles,
+  - the derived `MathTeXEngine.FontFamily`,
+  - separate glyph-name → glyph-index dictionaries for the math and regular font handles.
+- Replaced the old abstract `Tuple[]` accumulation with a concrete `_MTEElementTuple` vector, so `MathTeXEngine.generate_tex_elements(::LaTeXString)` now infers a concrete return type instead of `Vector{Tuple}`.
+- Minor helper cleanup: `_single_char` avoids `collect(name)` in glyph-name handling, reducing per-call string work in the conversion path.
+- Added a regression test in `test/test_math_table.jl` asserting that repeated `load_math_table(FIXTURE_FONT_PATH)` calls return the same cached object.
+- Validation results:
+  - test suite: 862/862 passing
+  - `parse_latex`: still ~0.7 us small / ~6.2 us large
+  - `load_math_table`: ~60 ns, 0 allocations after warm-up
+  - `layout`: ~25 us small / ~162 us large
+  - `TeXLayout.generate_tex_elements`: ~26 us small / ~169 us large
+  - `MathTeXEngine.generate_tex_elements`: ~48 us small / ~199 us large
+- Net effect versus the earlier baseline: repeated Makie rendering with the same font now avoids the ~0.95 ms MATH-table parse and multi-megabyte allocation spike on every call, moving the steady-state cost into the tens to low hundreds of microseconds for the benchmarked formulas.
+
 ## 2026-05-24T15:15+00:00 Demo sheets, CFF fix, and TeX Gyre font family scaffolding
 
 - Updated `README.md`: added matrix/array environments to key features; added Schola/Termes/Bonum pending entries to acknowledgements table.

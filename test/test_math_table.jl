@@ -12,6 +12,7 @@
 
     @test mt isa MathTable
     @test mt.upm == FONT_UPM
+    @test load_math_table(FIXTURE_FONT_PATH) === mt
 
     @testset "MathConstants — all 56 fields" begin
         c = mt.constants

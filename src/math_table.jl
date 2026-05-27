@@ -131,6 +131,10 @@ struct MathTable
     horiz_constructions::Dict{String, GlyphConstruction}
 end
 
+# Parsed MATH tables are immutable and depend only on the math-font path, so
+# repeated layouts can safely reuse them across calls.
+const _MATH_TABLE_CACHE = Dict{String, MathTable}()
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Parser implementation
 # ══════════════════════════════════════════════════════════════════════════════
@@ -752,29 +756,32 @@ end
 """
     load_math_table(font_path) -> MathTable
 
-Parse the MATH table from an OpenType font file.
+Parse the MATH table from an OpenType font file, caching the result by path.
 """
 function load_math_table(font_path::AbstractString)::MathTable
-    data = read(font_path)
-    upm = _parse_upm(data)
-    glyph_names = _parse_glyph_names(data)
+    path = String(font_path)
+    return get!(_MATH_TABLE_CACHE, path) do
+        data = read(path)
+        upm = _parse_upm(data)
+        glyph_names = _parse_glyph_names(data)
 
-    math_start, _ = _find_table(data, "MATH")
-    # MATH header: uint16 major + uint16 minor + three Offset16 sub-table pointers
-    mc_off = Int(_u16(data, math_start + 4))
-    info_off = Int(_u16(data, math_start + 6))
-    var_off = Int(_u16(data, math_start + 8))
+        math_start, _ = _find_table(data, "MATH")
+        # MATH header: uint16 major + uint16 minor + three Offset16 sub-table pointers
+        mc_off = Int(_u16(data, math_start + 4))
+        info_off = Int(_u16(data, math_start + 6))
+        var_off = Int(_u16(data, math_start + 8))
 
-    constants = _parse_math_constants(data, math_start + mc_off)
+        constants = _parse_math_constants(data, math_start + mc_off)
 
-    italic_corrections, top_accent_attachments, extended_shapes =
-        _parse_math_glyph_info(data, math_start + info_off, glyph_names)
+        italic_corrections, top_accent_attachments, extended_shapes =
+            _parse_math_glyph_info(data, math_start + info_off, glyph_names)
 
-    min_overlap, vert_constructions, horiz_constructions =
-        _parse_math_variants(data, math_start + var_off, glyph_names)
+        min_overlap, vert_constructions, horiz_constructions =
+            _parse_math_variants(data, math_start + var_off, glyph_names)
 
-    return MathTable(
-        upm, constants, italic_corrections, top_accent_attachments,
-        extended_shapes, min_overlap, vert_constructions, horiz_constructions
-    )
+        return MathTable(
+            upm, constants, italic_corrections, top_accent_attachments,
+            extended_shapes, min_overlap, vert_constructions, horiz_constructions
+        )
+    end
 end

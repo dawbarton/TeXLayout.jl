@@ -24,6 +24,23 @@ using LaTeXStrings: LaTeXString
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+const _MTEElement = Union{MathTeXEngine.TeXChar, MathTeXEngine.HLine, MathTeXEngine.VLine}
+const _MTEElementTuple = Tuple{_MTEElement, Point2f, Float64}
+const _RuntimeKey = Tuple{
+    String, Union{String, Nothing}, Union{String, Nothing},
+    Union{String, Nothing}, Union{String, Nothing}
+}
+
+mutable struct _RuntimeBundle
+    math_font::FreeTypeAbstraction.FTFont
+    reg_font::FreeTypeAbstraction.FTFont
+    mte_family::MathTeXEngine.FontFamily
+    math_glyph_indices::Dict{String, Culong}
+    reg_glyph_indices::Dict{String, Culong}
+end
+
+const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
+
 # Strip surrounding $ delimiters that LaTeXStrings add automatically.
 # L"x^2" stores "$x^2$" internally; TeXLayout's parser expects no delimiters.
 function _strip_math_delimiters(s::AbstractString)
@@ -32,9 +49,19 @@ function _strip_math_delimiters(s::AbstractString)
     return str
 end
 
+# Return the single character encoded by `name`, or `nothing` if the string is
+# empty or contains multiple characters.
+@inline function _single_char(name::String)::Union{Char, Nothing}
+    isempty(name) && return nothing
+    i = firstindex(name)
+    ch = name[i]
+    next_i = nextind(name, i)
+    return next_i > lastindex(name) ? ch : nothing
+end
+
 # Resolve a PostScript glyph name to a FreeType glyph index.
 # Strategy: PS name lookup → single-char codepoint → uniXXXX encoding.
-function _glyph_index(font, name::String)::Culong
+function _glyph_index_uncached(font, name::String)::Culong
     isempty(name) && return Culong(0)
 
     # Primary: PS name lookup (covers standard names like "parenleft", "alpha").
@@ -42,9 +69,9 @@ function _glyph_index(font, name::String)::Culong
     gid > 0 && return Culong(gid)
 
     # Single-character name: try as a Unicode codepoint.
-    chars = collect(name)
-    if length(chars) == 1
-        gid = FreeTypeAbstraction.glyph_index(font, chars[1])
+    ch = _single_char(name)
+    if ch !== nothing
+        gid = FreeTypeAbstraction.glyph_index(font, ch)
         gid > 0 && return Culong(gid)
     end
 
@@ -58,13 +85,19 @@ function _glyph_index(font, name::String)::Culong
     return Culong(0)
 end
 
+@inline function _glyph_index(cache::Dict{String, Culong}, font, name::String)::Culong
+    return get!(cache, name) do
+        _glyph_index_uncached(font, name)
+    end
+end
+
 # Best-effort Unicode character for a PostScript glyph name.
 # Used as TeXChar.represented_char; mainly matters for word-wrap in Makie
 # (spaces/newlines), which does not apply inside math mode.
 function _represented_char(name::String)::Char
     isempty(name) && return '?'
-    chars = collect(name)
-    length(chars) == 1 && return chars[1]
+    ch = _single_char(name)
+    ch !== nothing && return ch
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
     m !== nothing && return Char(parse(UInt32, m.captures[1], base = 16))
     return '?'
@@ -90,21 +123,56 @@ function _mte_font_family(tl_family::TeXLayout.FontFamily)
     )
 end
 
+@inline _runtime_key(tl_family::TeXLayout.FontFamily) = (
+    tl_family.math,
+    tl_family.regular,
+    tl_family.italic,
+    tl_family.bold,
+    tl_family.bolditalic,
+)
+
+function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
+    return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
+        math_font, _ = TeXLayout._load_font(tl_family.math)
+        reg_path = something(tl_family.regular, tl_family.math)
+        reg_font, _ = TeXLayout._load_font(reg_path)
+        _RuntimeBundle(
+            math_font,
+            reg_font,
+            _mte_font_family(tl_family),
+            Dict{String, Culong}(),
+            Dict{String, Culong}(),
+        )
+    end
+end
+
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
 # `font_slot` field selects which one to use for glyph-index resolution.
-function _box_to_mte(box, math_font, reg_font, mte_ff)
+function _box_to_mte(
+        box::TeXLayout.LayoutBox, runtime::_RuntimeBundle
+    )::Union{_MTEElementTuple, Nothing}
     pos = Point2f(box.x, box.y)
     scale = Float64(box.scale)
     el = box.element
 
     if el isa TeXLayout.Glyph
-        chosen = el.font_slot === :regular ? reg_font : math_font
-        gid = _glyph_index(chosen, el.glyph_name)
+        if el.font_slot === :regular
+            gid = _glyph_index(runtime.reg_glyph_indices, runtime.reg_font, el.glyph_name)
+            gid == 0 && return nothing
+            tc = MathTeXEngine.TeXChar(
+                gid, runtime.reg_font, runtime.mte_family, false,
+                _represented_char(el.glyph_name)
+            )
+            return (tc, pos, scale)
+        end
+
+        gid = _glyph_index(runtime.math_glyph_indices, runtime.math_font, el.glyph_name)
         gid == 0 && return nothing
         tc = MathTeXEngine.TeXChar(
-            gid, chosen, mte_ff, false, _represented_char(el.glyph_name)
+            gid, runtime.math_font, runtime.mte_family, false,
+            _represented_char(el.glyph_name)
         )
         return (tc, pos, scale)
     elseif el isa TeXLayout.HRule
@@ -134,19 +202,16 @@ ignored; TeXLayout's `default_font_family()` is used instead.
 """
 function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = MathTeXEngine.FontFamily())
     tl_family = TeXLayout.default_font_family()
+    runtime = _runtime_bundle(tl_family)
 
     input = _strip_math_delimiters(str)
     node = TeXLayout.parse_latex(input)
     boxes = TeXLayout.layout(node, tl_family, TeXLayout.Display)
 
-    math_font, _ = TeXLayout._load_font(tl_family.math)
-    reg_path = something(tl_family.regular, tl_family.math)
-    reg_font, _ = TeXLayout._load_font(reg_path)
-    mte_ff = _mte_font_family(tl_family)
-
-    result = Tuple[]
+    result = Vector{_MTEElementTuple}()
+    sizehint!(result, length(boxes))
     for box in boxes
-        t = _box_to_mte(box, math_font, reg_font, mte_ff)
+        t = _box_to_mte(box, runtime)
         t !== nothing && push!(result, t)
     end
     return result
