@@ -28,7 +28,7 @@ const _MTEElement = Union{MathTeXEngine.TeXChar, MathTeXEngine.HLine, MathTeXEng
 const _MTEElementTuple = Tuple{_MTEElement, Point2f, Float64}
 const _RuntimeKey = Tuple{
     String, Union{String, Nothing}, Union{String, Nothing},
-    Union{String, Nothing}, Union{String, Nothing}
+    Union{String, Nothing}, Union{String, Nothing},
 }
 
 mutable struct _RuntimeBundle
