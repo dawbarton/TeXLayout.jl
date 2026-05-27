@@ -1,4 +1,15 @@
 
+## 2026-05-27T11:28+00:00 Signed PNG diff utility for stress-test comparisons
+
+- Added `tools/png_diff.jl` to compare two rendered PNGs from TeXLayout runs.
+- The tool flattens each input onto white, converts to grayscale, and computes a signed pixel delta `after - before`.
+- Output encoding:
+  - zero delta -> white,
+  - positive delta -> green tint with intensity proportional to `abs(delta)`,
+  - negative delta -> red tint with intensity proportional to `abs(delta)`.
+- Dimension mismatches are now handled by padding both inputs onto a white canvas sized to the per-axis maximum of the two images; the tool emits a warning describing the original and padded sizes.
+- Implementation uses ImageMagick via whichever binary is available on the host (`magick` or `convert`), matching the existing toolchain approach.
+
 ## 2026-05-23T09:27+00:00 Fraction gap clamping fix and visualisation tools
 
 - Added two visualisation tools to `tools/`:
@@ -166,8 +177,28 @@
   - `load_math_table`: ~60 ns, 0 allocations after warm-up
   - `layout`: ~25 us small / ~162 us large
   - `TeXLayout.generate_tex_elements`: ~26 us small / ~169 us large
-  - `MathTeXEngine.generate_tex_elements`: ~48 us small / ~199 us large
+- `MathTeXEngine.generate_tex_elements`: ~48 us small / ~199 us large
 - Net effect versus the earlier baseline: repeated Makie rendering with the same font now avoids the ~0.95 ms MATH-table parse and multi-megabyte allocation spike on every call, moving the steady-state cost into the tens to low hundreds of microseconds for the benchmarked formulas.
+
+## 2026-05-27T11:05+00:00 Compare cached TeXLayout path against plain MathTeXEngine
+
+- Ran fresh steady-state `BenchmarkTools` benchmarks in two separate temporary Julia environments:
+  - **Plain MathTeXEngine**: loaded `MathTeXEngine` and `LaTeXStrings`, without loading `TeXLayout`
+  - **TeXLayout Makie path**: loaded `TeXLayout`, `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` so the package extension was active
+- Benchmarked the same two formulas in both cases via `MathTeXEngine.generate_tex_elements(::LaTeXString)` after warm-up:
+  - small: `x^2+y^2=z^2`
+  - large: `\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2} + \sum_{n=1}^{\infty} \frac{(-1)^n}{n^2}`
+- Median results:
+  - **Plain MathTeXEngine**
+    - small: 155864 ns, 74160 bytes, 1568 allocs
+    - large: 1131836 ns, 251256 bytes, 5747 allocs
+  - **TeXLayout extension**
+    - small: 48040 ns, 21528 bytes, 192 allocs
+    - large: 147548 ns, 51608 bytes, 439 allocs
+- Relative steady-state speedup of the cached TeXLayout path over plain MathTeXEngine:
+  - small formula: ~3.2x faster, ~3.4x less memory, ~8.2x fewer allocations
+  - large formula: ~7.7x faster, ~4.9x less memory, ~13.1x fewer allocations
+- Caveat: this is a Makie-facing end-to-end comparison, not a claim that the internal layout algorithms are directly equivalent. The formulas and output API were matched, but the two engines make different implementation choices and do not emit identical intermediate structures.
 
 ## 2026-05-24T15:15+00:00 Demo sheets, CFF fix, and TeX Gyre font family scaffolding
 
