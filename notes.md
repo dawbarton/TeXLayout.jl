@@ -498,3 +498,56 @@
   - derives overlay rectangles from the same `MathTeXEngine.TeXChar` metrics that Makie uses to render,
   - applies the internal offset only to the overlays and guide geometry, not to the `text!` anchor.
 - Smoke render for `\\frac{a}{b}` now aligns numerator and denominator overlays correctly in the saved PNG.
+## 2026-05-27T20:47+00:00 Radical hook / top-rule alignment investigation
+
+- Investigated the visible mismatch at the leading join of `\sqrt{...}` in `src/layout.jl`.
+- Current implementation in `_layout_radical!` places the radical glyph so that its overall `y_max` aligns with the top of the separately drawn `HRule`.
+- For NewCMMath this is not the correct visual anchor: raster inspection of the base `radical` glyph at a large size shows the topmost ink is a short slanted tip, while the long flat vinculum begins several pixels lower.
+- Relevant metrics for the base radical glyph are `advance_width = 833`, `x_max = 853`, `y_min = -960`, `y_max = 40`; the flat rule is therefore currently joined using box metrics that describe the full outline, not the actual hook-to-vinculum transition.
+- This explains why the hook appears slightly low relative to the top rule even though the layout boxes report exact `y_max`/rule-top agreement.
+- Secondary finding: `RadicalExtraAscender` is parsed from the MATH table (`40` du in NewCMMath) but is not currently used anywhere in radical layout. This is likely a separate completeness issue for overall radical height / reserved whitespace, but it does not explain the visible join mismatch by itself.
+- KaTeX avoids this exact problem by drawing the radical and vinculum as one SVG path (`external/KaTeX/src/svgGeometry.ts`) rather than splicing a font radical glyph to a separate rectangular rule.
+- Proposed implementation direction:
+  - derive a radical-specific vertical join metric from the chosen glyph / top assembly part, and align the rule to that metric rather than to `y_max`;
+  - audit the horizontal join point as well, since the current splice uses `advance_width` even though the glyph ink extends to `x_max`;
+  - fold `RadicalExtraAscender` into the radical box height / clearance calculation once the visual anchor is corrected;
+  - add a rendered regression test so this class of mismatch is caught by pixels, not only by layout-box bounds.
+
+## 2026-05-27T20:54+00:00 LuaTeX / unicode-math reference for radicals
+
+- Checked `unicode-math` / LuaTeX sources for how square roots are built.
+- `unicode-math` defines radicals in terms of engine primitives (`\Uradical` and `\Uroot`) rather than computing a visible hook/vinculum join from user-level box metrics.
+- The LaTeX tagging adaptation in `latex3/latex2e` (`required/latex-lab/latex-lab-unicode-math.dtx`) reinforces this: the preferred path for `\sqrt` and `\root...\of` is `\tex_Uradical:D` / `\tex_Uroot:D`, with older box constructions used only as fallbacks for some offset cases.
+- Takeaway for TeXLayout: LuaTeX is useful as a rendering oracle and as evidence that radicals should be treated as a font/engine construction problem. It does not expose a standard public “join metric”; that still appears to need deriving from the selected radical glyph / assembly geometry.
+
+## 2026-05-27T21:02+00:00 Radical join alignment fix
+
+- Updated `src/layout.jl` so radical variants are no longer aligned by raw glyph `y_max`; the rule now joins at a derived radical join height `y_max - RadicalExtraAscender`.
+- Radical selection now treats `RadicalExtraAscender` as part of the required total height, while body-centering and Rule 11 redistribution use the span from the radical bottom up to the rule join.
+- Changed the horizontal splice so the radicand begins at the radical's right ink bound (`x_max` / assembly max `x_max`) and the top rule starts half a rule thickness earlier for a small overlap, following the spirit of the old MathTeXEngine construction.
+- Extended the `\sqrt{x}` layout test to check:
+  - the radicand starts at the radical's right ink bound,
+  - the rule overlaps the join by half the rule thickness,
+  - the radical top sits `RadicalExtraAscender` above the rule top.
+- Full test suite passes after the change (867/867), and `\sqrt` smoke tests succeeded across all bundled font families.
+
+## 2026-05-27T21:09+00:00 Radical anchor correction
+
+- After visual feedback, backed out the vertical `RadicalExtraAscender` anchor change.
+- The mistake was treating `RadicalExtraAscender` as if it were the visible hook/vinculum join offset. Raster inspection does not support that for NewCMMath: the visible flat top sits much farther below `y_max` than one extra-ascender step.
+- Current state:
+  - keep the original vertical anchoring by glyph `y_max`,
+  - keep the horizontal splice fix (body starts at the radical right ink bound; rule overlaps by half a rule thickness),
+  - keep the stronger layout regression test for the horizontal join.
+- Full test suite passes after the correction (866/866).
+
+## 2026-05-27T21:32+00:00 Makie rule-anchor adapter fix
+
+- Fixed the TeXLayout → MathTeXEngine adapter in `ext/MathTeXEngineExt.jl` so rule positions are converted between the two geometry conventions:
+  - `TeXLayout.HRule.y` is the rule bottom edge, but `MathTeXEngine.HLine` expects the y centreline.
+  - `TeXLayout.VRule.x` is the rule left edge, but `MathTeXEngine.VLine` expects the x centreline.
+- `_box_to_mte` now shifts HRule positions by `+ thickness/2` in y and VRule positions by `+ thickness/2` in x before constructing `MathTeXEngine.HLine` / `VLine`.
+- Documented this geometry contract in `CLAUDE.md` under the Makie integration notes.
+- Validation:
+  - main test suite still passes (866/866),
+  - CairoMakie/MathTeXEngine-path checks confirm exported `HLine` and `VLine` coordinates now match the expected centerlines derived from TeXLayout boxes.

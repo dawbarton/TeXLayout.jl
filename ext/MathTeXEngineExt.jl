@@ -150,6 +150,9 @@ end
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
 # `font_slot` field selects which one to use for glyph-index resolution.
+# TeXLayout rules are rectangle-anchored (`HRule.y` / `VRule.x` are the bottom /
+# left edges).  MathTeXEngine's `HLine` / `VLine` instead use centered line
+# positions, so the adapter must shift by half the rule thickness.
 function _box_to_mte(
         box::TeXLayout.LayoutBox, runtime::_RuntimeBundle
     )::Union{_MTEElementTuple, Nothing}
@@ -176,9 +179,19 @@ function _box_to_mte(
         )
         return (tc, pos, scale)
     elseif el isa TeXLayout.HRule
-        return (MathTeXEngine.HLine(Float32(el.width), Float32(el.thickness)), pos, scale)
+        rule_pos = Point2f(box.x, box.y + el.thickness / 2)
+        return (
+            MathTeXEngine.HLine(Float32(el.width), Float32(el.thickness)),
+            rule_pos,
+            scale,
+        )
     elseif el isa TeXLayout.VRule
-        return (MathTeXEngine.VLine(Float32(el.height), Float32(el.thickness)), pos, scale)
+        rule_pos = Point2f(box.x + el.thickness / 2, box.y)
+        return (
+            MathTeXEngine.VLine(Float32(el.height), Float32(el.thickness)),
+            rule_pos,
+            scale,
+        )
     end
     # TeXLayout.Space boxes have no visible rendering; skip them.
     return nothing

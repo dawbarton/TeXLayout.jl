@@ -1111,7 +1111,20 @@ end
 
 # Lay out a radical glyph assembly so that the TOP of the assembly aligns with
 # `rule_top_em`.  Unlike delimiter assemblies (centred on the math axis),
-# radical assemblies are top-anchored.  Returns horizontal advance.
+# radical assemblies are top-anchored.  Returns the horizontal offset at which
+# the radicand should start.
+@inline _radical_cover_du(g::Glyph) = Float64(g.y_max - g.y_min)
+@inline _radical_body_offset_du(g::Glyph) = max(Float64(g.advance_width), Float64(g.x_max))
+
+function _assembly_total_du(parts::Vector{GlyphAssemblyPart}, overlaps::Vector{Int})::Float64
+    isempty(parts) && return 0.0
+    total_du = Float64(parts[1].full_advance)
+    for i in eachindex(overlaps)
+        total_du += parts[i + 1].full_advance - overlaps[i]
+    end
+    return total_du
+end
+
 function _layout_radical_assembly!(
         asm::GlyphAssembly,
         ctx::_LayoutCtx,
@@ -1133,28 +1146,25 @@ function _layout_radical_assembly!(
         overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
     end
 
-    total_du = Float64(parts[1].full_advance)
-    for i in eachindex(overlaps)
-        total_du += parts[i + 1].full_advance - overlaps[i]
-    end
+    total_du = _assembly_total_du(parts, overlaps)
 
     # All radical assembly parts have y_min=0, y_max=full_advance.
     # The top of the top cap is at asm_bot + total_du; pin it to rule_top_em.
     asm_bot_em = rule_top_em - total_du / upm * scale
 
-    max_adv_w = 0
+    max_body_offset_du = 0.0
     cursor_du = 0.0
     for i in eachindex(parts)
         p = parts[i]
         g = _cmd_glyph(ctx, p.glyph_name)
         if g !== nothing
             push!(boxes, LayoutBox(g, x0, asm_bot_em + cursor_du / upm * scale, scale))
-            max_adv_w = max(max_adv_w, g.advance_width)
+            max_body_offset_du = max(max_body_offset_du, _radical_body_offset_du(g))
         end
         i <= length(overlaps) && (cursor_du += Float64(p.full_advance) - overlaps[i])
     end
 
-    return max_adv_w / upm * scale
+    return max_body_offset_du / upm * scale
 end
 
 # Return the GlyphMetrics for the smallest radical variant that covers
@@ -1172,10 +1182,35 @@ function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph
     return _cmd_glyph(ctx, "radical")
 end
 
-# Choose and place a radical glyph (or assembly) whose ink top aligns with
+function _peek_radical_cover_du(ctx::_LayoutCtx, required_du::Float64)::Float64
+    rkey = _construction_key(ctx, "radical")
+    if haskey(ctx.vert_constructions, rkey)
+        vc = ctx.vert_constructions[rkey]
+        for v in vc.variants
+            if Float64(v.advance) >= required_du
+                g = _cmd_glyph(ctx, v.glyph_name)
+                return g === nothing ? 0.0 : _radical_cover_du(g)
+            end
+        end
+        if vc.assembly !== nothing
+            min_conn = ctx.min_connector_overlap
+            n = _min_extender_reps(vc.assembly.parts, required_du, min_conn)
+            parts = _expand_assembly_parts(vc.assembly.parts, n)
+            overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
+            for i in eachindex(overlaps)
+                overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
+            end
+            return _assembly_total_du(parts, overlaps)
+        end
+    end
+    g = _peek_radical_glyph(ctx, required_du)
+    return g === nothing ? 0.0 : _radical_cover_du(g)
+end
+
+# Choose and place a radical glyph (or assembly) whose top ink aligns with
 # `rule_top_em`.  `required_du` is the minimum vertical span (design units)
-# the radical must cover — from the body's bottom ink to the rule top.
-# Returns horizontal advance.
+# the radical must cover.
+# Returns the horizontal offset at which the radicand should start.
 function _layout_radical!(
         ctx::_LayoutCtx,
         required_du::Float64,
@@ -1189,9 +1224,8 @@ function _layout_radical!(
     function _place_variant(name::String)::Float64
         g = _cmd_glyph(ctx, name)
         g === nothing && return 0.0
-        # Place so the glyph's top ink (y_max) aligns with rule_top_em.
         push!(boxes, LayoutBox(g, x0, rule_top_em - g.y_max / upm * scale, scale))
-        return g.advance_width / upm * scale
+        return _radical_body_offset_du(g) / upm * scale
     end
 
     rkey = _construction_key(ctx, "radical")
@@ -2234,11 +2268,11 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     # KaTeX Rule 11: when the radical hook extends significantly below the body,
     # redistribute excess vertical space so it is shared equally above and below
     # rather than entirely below.  Peek at the glyph that would be selected,
-    # measure its hook depth (−y_min), and increase the gap if needed.
+    # measure its depth below the rule bottom, and increase the gap if needed.
     let peek_du = (body_top + gap + rule_thickness - body_bot) / scale * upm
-        g = _peek_radical_glyph(ctx, peek_du)
-        if g !== nothing
-            delim_depth = -g.y_min / upm * scale
+        cover_du = _peek_radical_cover_du(ctx, peek_du)
+        if cover_du > 0.0
+            delim_depth = cover_du / upm * scale - rule_thickness
             body_extent = body_top - body_bot
             if delim_depth > body_extent + gap
                 gap = (gap + delim_depth - body_extent) / 2
@@ -2249,33 +2283,31 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     rule_y_local = body_top + gap           # bottom of rule bar (em, relative to y0)
     rule_top_local = rule_y_local + rule_thickness
 
-    # required_du: vertical span from body bottom to rule top, in design units
-    # at scale=1 (matching the vert_constructions advance values).
-    required_du = (rule_top_local - body_bot) / scale * upm
+    # `required_cover_du` is the vertical span from body bottom to the rule top.
+    required_cover_du = (rule_top_local - body_bot) / scale * upm
+    required_du = required_cover_du
     rule_top_em = y0 + rule_top_local
-    rad_adv = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
+    body_x_offset = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
 
     # When the selected radical variant is larger than the minimum required
     # span, distribute the excess equally: shift the body DOWN by half the
     # excess so it appears vertically centred in the hook area rather than
     # crowded against the top bar.  The rule bar and radical stay in place.
-    body_shift = let g = _peek_radical_glyph(ctx, required_du)
-        if g !== nothing
-            excess = max(0.0, Float64(g.y_max - g.y_min) - required_du)
-            excess / (2.0 * upm) * scale
-        else
-            0.0
-        end
-    end
+    body_shift = max(0.0, _peek_radical_cover_du(ctx, required_du) - required_cover_du) /
+        (2.0 * upm) * scale
 
-    _emit_shifted!(boxes, tmp, x0 + rad_adv, y0 - body_shift)
+    body_x = x0 + body_x_offset
+    rule_overlap = rule_thickness / 2
+    rule_x = body_x - rule_overlap
+
+    _emit_shifted!(boxes, tmp, body_x, y0 - body_shift)
     push!(
         boxes, LayoutBox(
-            HRule(body_w, rule_thickness),
-            x0 + rad_adv, y0 + rule_y_local, scale
+            HRule(body_w + rule_overlap, rule_thickness),
+            rule_x, y0 + rule_y_local, scale
         )
     )
-    return rad_adv + body_w
+    return body_x_offset + body_w
 end
 
 function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)

@@ -131,8 +131,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             b.y + b.element.y_max / FONT_UPM * b.scale
                 for b in body_glyphs
         )
-        rule_y = hrules[1].y
+        rule = hrules[1]
+        rule_y = rule.y
         @test rule_y >= radicand_y - 1.0e-6
+
+        radical_glyphs = filter(b -> b.x == rad_x, glyphs)
+        radical_right = maximum(
+            b.x + b.element.x_max / FONT_UPM * b.scale
+                for b in radical_glyphs
+        )
+        body_x = minimum(b.x for b in body_glyphs)
+        @test body_x ≈ radical_right atol = 1.0e-6
+        @test body_x - rule.x ≈ rule.element.thickness / 2 atol = 1.0e-6
     end
 
     @testset "Horizontal advance: boxes are left-to-right" begin

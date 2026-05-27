@@ -365,6 +365,11 @@ A summary of major features and their status.
   The extension also maintains a per-font runtime cache so repeated Makie renders
   reuse the loaded math/regular faces, the derived `MathTeXEngine.FontFamily`, and
   glyph-name → glyph-index lookup tables.
+  **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
+  (`HRule.y` = bottom edge, `VRule.x` = left edge), while
+  `MathTeXEngine.HLine` / `VLine` use line-centre positions.  The adapter in
+  `_box_to_mte` is responsible for converting between these conventions by
+  shifting rule positions by half the thickness.
   **This is type piracy**: TeXLayout owns neither the function (`MathTeXEngine.generate_tex_elements`)
   nor the argument type (`LaTeXStrings.LaTeXString`).  It is pragmatic and confined
   to the extension, but alternative integration strategies (e.g. a dedicated Makie
