@@ -50,7 +50,7 @@ using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
 
 # Parser / AST node kinds
 using TeXLayout: NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
-    NKDecorated, NKFrac, NKGenfrac, NKSqrt, NKDelimited, NKAccent,
+    NKDecorated, NKFrac, NKGenfrac, NKSqrt, NKDelimited, NKBigDelim, NKAccent,
     NKCommand, NKSpace, NKOperator, NKFontSwitch,
     NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
     NKOverUnder, NKText,

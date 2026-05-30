@@ -332,6 +332,7 @@ A summary of major features and their status.
 | `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
 | `\dfrac`, `\tfrac` | ✓ | `NKStyleOverride`; forces Display or Text style (with absolute scale reset); `\dfrac` inside a subscript renders at full display size |
 | `\binom`, `\dbinom`, `\tbinom` | ✓ | `NKGenfrac`; Rule 15c (no-rule gap clamping); auto-sized `(` `)` delimiters via `_layout_delim!`; `\dbinom`/`\tbinom` wrap in `NKStyleOverride` |
+| Manual delimiter sizing (`\bigl`, `\bigr`, `\Bigl`, `\Bigr`, `\biggl`, `\biggr`, `\Biggl`, `\Biggr`, and `\bigm`/`\big` families) | ✓ | `NKBigDelim`; 4 size tiers (1.2/1.8/2.4/3.0 em × upm); reuses `_layout_delim!`; scale-independent variant selection; 16 commands + null delimiter support |
 | Style switches (`\displaystyle`, `\textstyle`, `\scriptstyle`, `\scriptscriptstyle`) | ✓ | `NKStyleOverride`; consumes rest of current group; absolute style and scale override matching KaTeX |
 | Font sizing (`\large`, `\tiny`, …) | ✓ | `NKSizing`; 10 commands from `\tiny` (0.5×) to `\Huge` (2.488×); multiplies current scale |
 | Extensible arrows (`\xrightarrow`, `\xleftarrow`, …) | ✓ | `NKXArrow`; 18 commands; arrow from `horiz_constructions`; centred on math axis; optional below label; labels at 0.111 em kern |

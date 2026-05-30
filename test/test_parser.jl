@@ -519,6 +519,60 @@
         @test node.children[1].kind === NKGenfrac
     end
 
+    @testset "\\bigl( produces NKBigDelim with correct fields" begin
+        tree = parse_latex(raw"\bigl( x \bigr)")
+        # First child is \bigl(, last child is \bigr)
+        ldelim = tree.children[1]
+        rdelim = tree.children[end]
+        @test ldelim.kind === NKBigDelim
+        @test rdelim.kind === NKBigDelim
+        # value format: "ps_name\x00size\x00class"
+        lparts = split(ldelim.value, "\x00")
+        @test lparts[1] == "parenleft"
+        @test lparts[2] == "1"
+        @test lparts[3] == "o"   # open
+        rparts = split(rdelim.value, "\x00")
+        @test rparts[1] == "parenright"
+        @test rparts[3] == "c"   # close
+        @test isempty(ldelim.children)
+    end
+
+    @testset "\\Bigr] has size 2 and close class" begin
+        node = parse_latex(raw"\Bigr]").children[1]
+        @test node.kind === NKBigDelim
+        parts = split(node.value, "\x00")
+        @test parts[1] == "bracketright"
+        @test parts[2] == "2"
+        @test parts[3] == "c"
+    end
+
+    @testset "\\bigm| has rel class" begin
+        node = parse_latex(raw"\bigm|").children[1]
+        @test node.kind === NKBigDelim
+        @test split(node.value, "\x00")[3] == "r"
+    end
+
+    @testset "\\Bigg. has null delimiter (empty ps_name)" begin
+        node = parse_latex(raw"\Bigg.").children[1]
+        @test node.kind === NKBigDelim
+        parts = split(node.value, "\x00")
+        @test parts[1] == ""   # null delimiter
+        @test parts[2] == "4"
+        @test parts[3] == "d"  # ord
+    end
+
+    @testset "\\bigl\\langle produces angleleft" begin
+        node = parse_latex(raw"\bigl\langle").children[1]
+        @test node.kind === NKBigDelim
+        @test split(node.value, "\x00")[1] == "angleleft"
+    end
+
+    @testset "\\bigl\\uparrow uses arrow delimiter" begin
+        node = parse_latex(raw"\bigl\uparrow").children[1]
+        @test node.kind === NKBigDelim
+        @test split(node.value, "\x00")[1] == "uparrow"
+    end
+
     @testset "\\displaystyle consumes rest of group" begin
         tree = parse_latex(raw"{\displaystyle a + b}")
         grp = tree.children[1]

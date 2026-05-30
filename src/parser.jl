@@ -17,6 +17,7 @@
     NKGenfrac       # \binom etc.: no-rule fraction + delimiters; value = "left_ps\x00right_ps"
     NKSqrt          # \sqrt[degree]{body}
     NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
+    NKBigDelim      # \bigl/\bigr/\big etc.; value = "ps_name\x00<size>\x00<class>" (size ∈ '1'-'4', class ∈ 'o','c','r','d')
     NKAccent        # \hat, \bar, \vec, etc.
     NKOverUnder     # \overline / \underline; value is "overline" or "underline"
     NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
@@ -95,7 +96,39 @@ const _DELIM_GLYPH_NAMES = Dict{String, String}(
     "\\rfloor" => "rfloor",
     "\\lceil" => "lceil",
     "\\rceil" => "rceil",
+    # Arrow delimiters — used by \bigl\uparrow, \left\uparrow, etc.
+    "\\uparrow" => "uparrow",
+    "\\downarrow" => "downarrow",
+    "\\updownarrow" => "updownarrow",
+    "\\Uparrow" => "Uparrow",
+    "\\Downarrow" => "Downarrow",
+    "\\Updownarrow" => "Updownarrow",
+    # Angle brackets via < > characters (KaTeX treats these as \langle/\rangle)
+    "<" => "angleleft",
+    ">" => "angleright",
     "." => "",   # null delimiter — renders nothing
+)
+
+# Manual delimiter sizing: \bigl/\bigr/\big etc.
+# Each entry maps a command to (size_char, class_char) where
+# size_char ∈ '1'-'4' and class_char ∈ 'o'(open), 'c'(close), 'r'(rel), 'd'(ord).
+const _BIG_DELIM_COMMANDS = Dict{String, Tuple{Char, Char}}(
+    "\\bigl" => ('1', 'o'),
+    "\\Bigl" => ('2', 'o'),
+    "\\biggl" => ('3', 'o'),
+    "\\Biggl" => ('4', 'o'),
+    "\\bigr" => ('1', 'c'),
+    "\\Bigr" => ('2', 'c'),
+    "\\biggr" => ('3', 'c'),
+    "\\Biggr" => ('4', 'c'),
+    "\\bigm" => ('1', 'r'),
+    "\\Bigm" => ('2', 'r'),
+    "\\biggm" => ('3', 'r'),
+    "\\Biggm" => ('4', 'r'),
+    "\\big" => ('1', 'd'),
+    "\\Big" => ('2', 'd'),
+    "\\bigg" => ('3', 'd'),
+    "\\Bigg" => ('4', 'd'),
 )
 
 # Math accent commands mapped to the Unicode codepoint of the accent glyph.
@@ -607,6 +640,12 @@ function _parse_command!(p::_Parser)::Node
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         return Node(NKStyleOverride, "Text", [Node(NKGenfrac, "parenleft\x00parenright", [num, den])])
+
+    elseif haskey(_BIG_DELIM_COMMANDS, cmd)
+        # \bigl( \bigr) \Bigl[ \bigm| etc.: consume the following delimiter token.
+        size_ch, cls_ch = _BIG_DELIM_COMMANDS[cmd]
+        ps = _parse_delim_name!(p)
+        return Node(NKBigDelim, "$(ps)\x00$(size_ch)\x00$(cls_ch)", Node[])
 
     elseif haskey(_STYLE_COMMANDS, cmd)
         # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the

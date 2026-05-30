@@ -164,6 +164,22 @@
         @test !isempty(smoke(expr))
     end
 
+    @testset "NullDelimiterInteraction" begin
+        # ss_data.yaml: a \bigl. + 2 \quad \left. + a \right)
+        expr = raw"a \bigl. + 2 \quad \left. + a \right)"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
+    @testset "DelimiterSizing" begin
+        # ss_data.yaml: first line of the multi-line entry.
+        # Arrow delimiters fall back to the base glyph when no vert_construction exists;
+        # brackets, braces, and rfloor use pre-built variants.
+        expr = raw"\bigl\uparrow\Bigl\downarrow\biggl\updownarrow\Biggl\Uparrow\Biggr\Downarrow\biggr\langle\Bigr\}\bigr\rfloor"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
 end
 
 @testset "KaTeX malformed-input" begin

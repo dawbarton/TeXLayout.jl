@@ -503,6 +503,12 @@ const _LIMITS_OP_COMMANDS = Set{String}(
 # selects a glyph variant wide enough to span the base, or assembles one.
 const _WIDE_ACCENT_COMMANDS = Set{String}(["\\widehat", "\\widetilde"])
 
+# Total heights (em units at base scale) for each \bigl/\Bigl/\biggl/\Biggl size tier.
+# From KaTeX's sizeToMaxHeight = [0, 1.2, 1.8, 2.4, 3.0] (delimiter.ts).
+# required_du = _BIG_DELIM_HEIGHTS[size] × upm — scale-independent, so the same
+# glyph variant is chosen regardless of the ambient style size.
+const _BIG_DELIM_HEIGHTS = [1.2, 1.8, 2.4, 3.0]
+
 # Fallback codepoints for accents that use combining forms (U+0300–U+036F) rather
 # than spacing modifier letters.  Fonts such as Luciole Math carry these glyphs
 # at the combining codepoints instead of the spacing modifier codepoints used in
@@ -583,6 +589,13 @@ const _CANONICAL_CODEPOINTS = Dict{String, UInt32}(
     "rfloor" => 0x230B,
     "lceil" => 0x2308,
     "rceil" => 0x2309,
+    # Arrow delimiters (used via \bigl\uparrow, \left\uparrow, etc.)
+    "uparrow" => 0x2191,
+    "downarrow" => 0x2193,
+    "updownarrow" => 0x2195,
+    "Uparrow" => 0x21D1,
+    "Downarrow" => 0x21D3,
+    "Updownarrow" => 0x21D5,
 )
 
 # Unicode codepoints for symbol commands, resolved by codepoint so the correct
@@ -789,6 +802,14 @@ function _atom_class(node::Node)::Symbol
         return get(_CMD_ATOM_CLASS, name, :ord)
     elseif k === NKOperator
         return :op
+    elseif k === NKBigDelim
+        # Class char is the last byte of value: 'o'=open, 'c'=close, 'r'=rel, 'd'=ord.
+        isempty(node.value) && return :ord
+        c = node.value[end]
+        c == 'o' && return :open
+        c == 'c' && return :close
+        c == 'r' && return :rel
+        return :ord
     elseif k === NKFrac || k === NKGenfrac || k === NKDelimited || k === NKHorizBrace || k === NKMatrix
         return :inner
     elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
@@ -2207,6 +2228,22 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     return total_w
 end
 
+# Layout for \bigl/\bigr/\big etc. (NKBigDelim): a single delimiter glyph
+# at a fixed size tier, centred on the math axis.  required_du is scale-independent:
+# the same glyph variant is selected at every style level; the glyph renders at the
+# current scale so it appears smaller in subscripts, matching KaTeX behaviour.
+function _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
+    isempty(node.value) && return 0.0
+    sep1 = findfirst('\x00', node.value)
+    sep2 = findlast('\x00', node.value)
+    (sep1 === nothing || sep2 === nothing || sep1 === sep2) && return 0.0
+    ps_name = node.value[1:prevind(node.value, sep1)]
+    size_ch = node.value[nextind(node.value, sep1):prevind(node.value, sep2)]
+    size = parse(Int, size_ch)
+    required_du = _BIG_DELIM_HEIGHTS[size] * ctx.upm
+    return _layout_delim!(ctx, ps_name, required_du, x0, y0, scale, boxes)
+end
+
 function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     num_node, den_node = node.children[1], node.children[2]
@@ -2573,6 +2610,7 @@ function _layout_node!(
     k === NKDecorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     k === NKFrac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     k === NKGenfrac        && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKBigDelim       && return _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
     k === NKSqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     k === NKDelimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     k === NKFontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)

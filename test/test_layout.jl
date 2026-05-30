@@ -1362,4 +1362,45 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test !isempty(boxes)
     end
 
+    # ── Manual delimiter sizing ────────────────────────────────────────────────
+
+    @testset "\\bigl( x \\bigr): left delimiter at smallest x, right at largest" begin
+        boxes = layout(parse_latex(raw"\bigl( x \bigr)"), family, Display)
+        glyphs = find_glyphs(boxes)
+        @test length(glyphs) >= 3   # left paren + x + right paren
+        left_x = minimum(g.x for g in glyphs)
+        right_x = maximum(g.x for g in glyphs)
+        @test right_x > left_x
+    end
+
+    @testset "\\bigl( advance_width > plain ( advance_width" begin
+        # \bigl selects a larger variant; its advance_width must exceed the base glyph.
+        boxes_big = layout(parse_latex(raw"\bigl("), family, Display)
+        boxes_plain = layout(parse_latex("("), family, Display)
+        glyphs_big = find_glyphs(boxes_big)
+        glyphs_plain = find_glyphs(boxes_plain)
+        @test !isempty(glyphs_big) && !isempty(glyphs_plain)
+        adv_big = glyphs_big[1].element.advance_width
+        adv_plain = glyphs_plain[1].element.advance_width
+        @test adv_big > adv_plain
+    end
+
+    @testset "\\Bigl( advance_width > \\bigl( advance_width (size 2 > size 1)" begin
+        boxes1 = layout(parse_latex(raw"\bigl("), family, Display)
+        boxes2 = layout(parse_latex(raw"\Bigl("), family, Display)
+        adv1 = find_glyphs(boxes1)[1].element.advance_width
+        adv2 = find_glyphs(boxes2)[1].element.advance_width
+        @test adv2 > adv1
+    end
+
+    @testset "\\bigl. produces no glyph boxes (null delimiter)" begin
+        boxes = layout(parse_latex(raw"\bigl."), family, Display)
+        @test isempty(find_glyphs(boxes))
+    end
+
+    @testset "\\bigl( x \\bigr)^2 does not crash" begin
+        boxes = layout(parse_latex(raw"\bigl( x \bigr)^2"), family, Display)
+        @test !isempty(boxes)
+    end
+
 end
