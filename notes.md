@@ -1,4 +1,24 @@
 
+## 2026-05-30T19:03+00:00 Fix section-header overlap in stress_test_makie.jl
+
+- **Root cause**: two compounding bugs in the Makie stress-test layout tool.
+  1. `em_bbox` used the glyph's actual ink extents for vertical bounds, but Makie's
+     `height_insensitive_boundingbox_with_advance` applies the *font-level* ascender/descender
+     as a floor/ceiling for every glyph — making Makie's bounding boxes much taller.
+  2. Makie's `text!` with `align = (:left, :baseline)` for `LaTeXString` falls through
+     to `:bottom` behaviour (placing the formula's bounding-box bottom at the anchor),
+     not the mathematical baseline.  These two errors compounded: formulas were shifted
+     ~30–70 px higher than intended, extending into the section header of the same row.
+- **Fix** (all changes in `tools/stress_test_makie.jl`):
+  - `em_bbox` now takes `font_ascender` and `font_descender` (from
+    `FreeTypeAbstraction.ascender/descender`) and applies per-glyph vertical clamping:
+    `min(font_descender, el.y_min / upm) * box.scale`, matching Makie exactly.
+  - `run_stress_test_makie` loads font-level metrics from the math face.
+  - Rendering loop changes `align` to `(:left, :bottom)` and lowers the anchor by each
+    expression's individual `below_px_i = round(Int, -by1_i * BASE_PX)` so the
+    mathematical baseline ends up at the intended screen y.
+- Rows are now correctly sized and expressions sit cleanly within their strips.
+
 ## 2026-05-27T22:24+00:00 Nested radical vertical alignment fix
 
 - Follow-up on the nested-radical investigation: the repeated `+` glyphs were also drifting downward in `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`.

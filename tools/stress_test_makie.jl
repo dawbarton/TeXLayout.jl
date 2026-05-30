@@ -34,16 +34,29 @@ const TITLE_PX = 16   # font size for title text
 
 # ── Bounding box ───────────────────────────────────────────────────────────────
 
-function em_bbox(boxes, upm; pad = 0.1)
+# Compute bounding box in em units, matching Makie's height_insensitive_boundingbox_with_advance.
+#
+# Makie gives every glyph a fixed-height bounding box of [font_descender, font_ascender]
+# (or the glyph's actual ink extent if that is more extreme).  Using just the ink extents
+# (as a naive implementation would) causes row heights to be underestimated and formulae
+# to be shifted well above the section header above them.  font_ascender and font_descender
+# must be in em units (as returned by FreeTypeAbstraction.ascender/descender).
+function em_bbox(boxes, upm, font_ascender::Float64, font_descender::Float64; pad = 0.1)
     bx1 = bx2 = by1 = by2 = 0.0
+    has_glyph = false
     for box in boxes
         el = box.element
         if el isa Glyph
+            has_glyph = true
             s = box.scale / upm
             bx1 = min(bx1, box.x + el.x_min * s)
             bx2 = max(bx2, box.x + el.x_max * s)
-            by1 = min(by1, box.y + el.y_min * s)
-            by2 = max(by2, box.y + el.y_max * s)
+            # Per-glyph vertical extent: clamp to font-level bounds so we match what
+            # Makie's GlyphExtent will report for this glyph.
+            y_min_em = min(font_descender, Float64(el.y_min) / upm) * box.scale
+            y_max_em = max(font_ascender, Float64(el.y_max) / upm) * box.scale
+            by1 = min(by1, box.y + y_min_em)
+            by2 = max(by2, box.y + y_max_em)
         elseif el isa HRule
             bx1 = min(bx1, box.x); bx2 = max(bx2, box.x + el.width)
             by1 = min(by1, box.y); by2 = max(by2, box.y + el.thickness)
@@ -55,7 +68,11 @@ function em_bbox(boxes, upm; pad = 0.1)
             bx2 = max(bx2, box.x, box.x + el.width)
         end
     end
-    by1 = min(by1, -0.15); by2 = max(by2, 0.35)
+    # Fallback for formulas with no glyphs (rules only): use font-level bounds.
+    if !has_glyph
+        by1 = min(by1, font_descender)
+        by2 = max(by2, font_ascender)
+    end
     return (bx1 - pad, bx2 + pad, by1 - pad, by2 + pad)
 end
 
@@ -71,26 +88,35 @@ function run_stress_test_makie(
     )
     set_default_font_family!(family)
     upm = mt.upm
+    face_math = FTFont(family.math)
+    font_ascender = Float64(FreeTypeAbstraction.ascender(face_math))
+    font_descender = Float64(FreeTypeAbstraction.descender(face_math))
 
     # ── Layout pass: compute per-row geometry ─────────────────────────────────
     # For each section, compute expression bboxes, pen x positions (pixels),
     # and row height; accumulate the maximum row width.
+    #
+    # Bounding boxes use font-level vertical extents (matching Makie's
+    # height_insensitive_boundingbox_with_advance) so that row heights and
+    # rendering positions are consistent with what Makie will actually draw.
 
     struct_rows = []    # (sec_title, items_data, pens_px, above_px, below_px, row_h_px)
     max_row_w = 0
 
     for (sec_title, items) in STRESS_SECTIONS
-        above_px = 0   # max ink above baseline in this row (pixels)
-        below_px = 0   # max ink below baseline (pixels)
+        above_px = 0   # max extent above baseline in this row (pixels)
+        below_px = 0   # max extent below baseline (pixels)
         items_data = []
 
         for (style, expr) in items
+            fa_default = max(font_ascender, 0.35)
+            fd_default = min(font_descender, -0.15)
             bx1, bx2, by1, by2 = try
                 boxes = layout(parse_latex(expr), family, style)
-                isempty(boxes) ? (0.0, 1.0, -0.2, 0.8) :
-                    em_bbox(boxes, upm; pad = 0.05)
+                isempty(boxes) ? (0.0, 1.0, fd_default, fa_default) :
+                    em_bbox(boxes, upm, font_ascender, font_descender; pad = 0.05)
             catch
-                (0.0, 1.0, -0.2, 0.8)
+                (0.0, 1.0, fd_default, fa_default)
             end
             above_px = max(above_px, round(Int, by2 * BASE_PX))
             below_px = max(below_px, round(Int, -by1 * BASE_PX))
@@ -172,16 +198,22 @@ function run_stress_test_makie(
         )
         y_screen += SEC_H
 
-        # Expression row — baseline is `above_px` below the row top plus MARGIN.
-        y_baseline = my(y_screen + MARGIN + above_px)
+        # Expression row — intended baseline is `above_px` below the row top plus MARGIN.
+        #
+        # Makie's text! with align=(:left,:bottom) places the formula's bounding-box
+        # bottom at the given y coordinate.  The bounding-box bottom is `below_px_i`
+        # pixels below the mathematical baseline.  To put the baseline at the intended
+        # screen y, we lower the anchor by `below_px_i` for each expression.
 
-        for ((style, expr, _, _, _, _), pen_x) in zip(items_data, pens_px)
+        for ((style, expr, _, _, by1_i, _), pen_x) in zip(items_data, pens_px)
+            below_px_i = round(Int, -by1_i * BASE_PX)
+            y_anchor = my(y_screen + MARGIN + above_px + below_px_i)
             try
                 CairoMakie.text!(
-                    ax, pen_x, y_baseline;
+                    ax, pen_x, y_anchor;
                     text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
                     fontsize = BASE_PX,
-                    align = (:left, :baseline),
+                    align = (:left, :bottom),
                     space = :data, markerspace = :data,
                 )
             catch e
