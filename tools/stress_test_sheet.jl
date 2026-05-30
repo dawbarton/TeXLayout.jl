@@ -429,11 +429,11 @@ const STRESS_SECTIONS = [
     "15. MATRICES — ENVIRONMENT GALLERY" => _D(
         [
             raw"\begin{pmatrix} \frac{\partial^2 f}{\partial x^2}" *
-                raw" & \frac{\partial^2 f}{\partial x\partial y} \\" *
-                raw" \frac{\partial^2 f}{\partial y\partial x}" *
+                raw" & \frac{\partial^2 f}{\partial x\partial y}" *
+                raw" \\ \frac{\partial^2 f}{\partial y\partial x}" *
                 raw" & \frac{\partial^2 f}{\partial y^2} \end{pmatrix}",
-            raw"\det\begin{pmatrix} 1-\lambda & 1 & 0 \\" *
-                raw" 0 & 1-\lambda & 1 \\ 0 & 0 & 1-\lambda \end{pmatrix}" *
+            raw"\det\begin{pmatrix} 1-\lambda & 1 & 0" *
+                raw" \\ 0 & 1-\lambda & 1 \\ 0 & 0 & 1-\lambda \end{pmatrix}" *
                 raw" = (1-\lambda)^3",
             raw"\begin{Bmatrix} a & b \\ c & d \end{Bmatrix}" *
                 raw" \quad \begin{Vmatrix} p & q \\ r & s \end{Vmatrix}",
@@ -442,10 +442,10 @@ const STRESS_SECTIONS = [
 
     "16. MATRICES — ARRAY COLSPEC & CASES" => _D(
         [
-            raw"\begin{array}{|r|c|l|} \alpha & \beta & \gamma \\" *
-                raw" \frac{1}{2} & \sqrt{3} & \pi^2 \end{array}",
-            raw"\begin{cases} x^2 & \text{if } x \ge 0 \\" *
-                raw" -x^2 & \text{if } x < 0 \end{cases}",
+            raw"\begin{array}{|r|c|l|} \alpha & \beta & \gamma" *
+                raw" \\ \frac{1}{2} & \sqrt{3} & \pi^2 \end{array}",
+            raw"\begin{cases} x^2 & \text{if } x \ge 0" *
+                raw" \\ -x^2 & \text{if } x < 0 \end{cases}",
             raw"\begin{array}{||c||} \frac{a+b}{c} \\ d \end{array}",
         ]
     ),
@@ -686,6 +686,14 @@ function run_stress_test_tex(outpath::String, font_name::String)
         println(io, "\\setlength{\\parindent}{0pt}")
         println(io, "\\setlength{\\parskip}{3pt}")
         println(io, "\\pagestyle{empty}")
+        println(io)
+        println(io, "% Fallback definitions for TeXLayout-specific commands:")
+        println(io, "% \\overparen / \\underparen have no standard equivalent;")
+        println(io, "% approximated with over/underset arc.")
+        println(io, "\\providecommand{\\overparen}[1]{\\overset{\\frown}{#1}}")
+        println(io, "\\providecommand{\\underparen}[1]{\\underset{\\smile}{#1}}")
+        println(io, "% \\degree: use superscript circle if gensymb unavailable.")
+        println(io, "\\providecommand{\\degree}{^{\\circ}}")
         println(io)
         println(io, "\\begin{document}")
         println(io)
