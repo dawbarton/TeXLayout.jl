@@ -8,17 +8,19 @@
 # along with baseline and math-axis guides.
 #
 # Usage:
-#   julia tools/visualise_metrics.jl "expr" [output.ppm] [:font_symbol|/path/to/font.otf]
+#   julia tools/visualise_metrics.jl "expr" [output.png] [:font_symbol|/path/to/font.otf]
 #
 # Examples:
-#   julia tools/visualise_metrics.jl "\\frac{a}{b}" metrics.ppm
-#   julia tools/visualise_metrics.jl "\\sum_{n=1}^\\infty n^{-2}" metrics.ppm :stix_two
+#   julia tools/visualise_metrics.jl "\\frac{a}{b}" metrics.png
+#   julia tools/visualise_metrics.jl "\\sum_{n=1}^\\infty n^{-2}" metrics.png :stix_two
 
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using FreeTypeAbstraction
 using TeXLayout
+using PNGFiles
+using Colors: RGB, N0f8
 
 @inline rgb(r, g, b) = (UInt8(r), UInt8(g), UInt8(b))
 
@@ -48,7 +50,7 @@ const OVERLAY_ALPHA = Dict(
 function usage(io::IO = stderr)
     println(
         io,
-        "Usage: julia tools/visualise_metrics.jl \"expr\" [output.png|output.ppm] " *
+        "Usage: julia tools/visualise_metrics.jl \"expr\" [output.png] " *
             "[:font_symbol|/path/to/font.otf]"
     )
     return nothing
@@ -185,24 +187,8 @@ end
 
 function write_image(path::AbstractString, canvas::Array{UInt8, 3})
     H, W, _ = size(canvas)
-    rowbuf = Vector{UInt8}(undef, 3W)
-
-    function write_ppm(io::IO)
-        write(io, "P6\n$W $H\n255\n")
-        for row in 1:H
-            idx = 1
-            for col in 1:W, ch in 1:3
-                @inbounds rowbuf[idx] = canvas[row, col, ch]
-                idx += 1
-            end
-            write(io, rowbuf)
-        end
-        return
-    end
-
-    return open(path, "w") do io
-        write_ppm(io)
-    end
+    perm = permutedims(canvas, (3, 1, 2))  # 3×H×W: channels innermost for reinterpret
+    return PNGFiles.save(path, reinterpret(reshape, RGB{N0f8}, perm))
 end
 
 function main()

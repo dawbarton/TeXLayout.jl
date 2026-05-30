@@ -1,17 +1,19 @@
-# Render a LaTeX expression to a PGM greyscale bitmap using FreeType glyph
+# Render a LaTeX expression to a PNG greyscale bitmap using FreeType glyph
 # rasterisation, providing a pixel-accurate sanity check of the layout engine.
 #
 # Each Glyph LayoutBox is rendered at its scaled pixel size; HRule elements are
 # filled directly.  A light-grey baseline and math-axis reference line are drawn
-# beneath the glyphs.  The result is written as a binary PGM (P5) file.
+# beneath the glyphs.  The result is written as a PNG file.
 #
-# Usage:  julia tools/visualise_bitmap.jl [expression] [output.pgm] [:font_sym|/path]
-# Defaults: expression = "\\frac{a}{b}", output = "output.pgm", font = :new_cm
+# Usage:  julia tools/visualise_bitmap.jl [expression] [output.png] [:font_sym|/path]
+# Defaults: expression = "\\frac{a}{b}", output = "output.png", font = :new_cm
 
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
+using PNGFiles
+using Colors: Gray, N0f8
 
 const BASE_PX = 100   # pixels per em at Text scale (box.scale = 1.0)
 const MARGIN = 20    # canvas border in pixels
@@ -70,15 +72,9 @@ function hline!(canvas, row, c1, c2, val::UInt8)
 end
 
 # ── Image output ─────────────────────────────────────────────────────────────
-# Write the canvas as a binary PGM (P5) file.
+# Write the canvas as a greyscale PNG file.
 function write_image(path::AbstractString, canvas::Matrix{UInt8})
-    H, W = size(canvas)
-    return open(path, "w") do io
-        write(io, "P5\n$W $H\n255\n")
-        for row in 1:H
-            write(io, view(canvas, row, :))
-        end
-    end
+    return PNGFiles.save(path, reinterpret(Gray{N0f8}, canvas))
 end
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -90,7 +86,7 @@ end
 
 function main()
     expr = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
-    outf = length(ARGS) >= 2 ? ARGS[2] : "output.pgm"
+    outf = length(ARGS) >= 2 ? ARGS[2] : "output.png"
     font_spec = length(ARGS) >= 3 ? ARGS[3] : ":new_cm"
     style = TeXLayout.Display
 

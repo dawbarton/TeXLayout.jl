@@ -78,16 +78,8 @@ All tools in `tools/` activate the package's own project environment and require
 | Script | Purpose | Key options |
 |--------|---------|-------------|
 | `visualise_bitmap.jl` | Pixel-accurate render of a single expression using FreeType glyph rasterisation.  Useful as a quick sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
-| `visualise_svg.jl` | Bounding-box diagram: each `LayoutBox` drawn as a coloured rectangle with glyph-name label, baseline and math-axis reference lines.  Best for debugging metric or positioning bugs. | `julia tools/visualise_svg.jl "expr" out.svg` |
-| `visualise_spacing.jl` | Multi-row grid of spacing test expressions with inter-atom gaps highlighted. | `julia tools/visualise_spacing.jl` |
-| `visualise_metrics.jl` | MathTeXEngine-style metric overlay view: rendered glyphs with coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png\|out.ppm] [:font_symbol\|/path/to/math.otf]` |
+| `visualise_metrics.jl` | MathTeXEngine-style metric overlay view: rendered glyphs with coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
 | `visualise_metrics_makie.jl` | CairoMakie-backed companion to `visualise_metrics.jl`: draws the expression via Makie's `text!` and overlays the same TeXLayout-derived metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font_symbol\|/path/to/math.otf]` |
-| `demo_features.jl` | Renders feature panels used for quick visual checks of accents, braces, over/under constructs, and related layout rules. | `julia tools/demo_features.jl /path/to/output/` |
-| `demo_sheet.jl` | Comprehensive single-page PNG demo sheet showing major layout features for a given font family. | `julia tools/demo_sheet.jl [:symbol\|/path/to/math.otf] [out.png]` |
-| `demo_makie.jl` / `demo_unified_fonts.jl` | Smoke-test the MathTeXEngine extension and show Makie figures with TeXLayout-driven math rendering. | `julia tools/demo_makie.jl` |
-| `demo_matrix.jl` / `stress_test_sheet.jl` | Focused demos for matrix/array layout and a broader regression-oriented stress sheet. | `julia tools/stress_test_sheet.jl [:symbol\|/path] [out.png]` |
-| `stress_test_all.sh` | Batch-renders the stress sheet for all bundled font families. | `bash tools/stress_test_all.sh` |
-| `png_diff.jl` | Signed red/green PNG diff for comparing two rendered outputs; pads mismatched image sizes onto a white canvas first. | `julia tools/png_diff.jl before.png after.png [diff.png]` |
 | `prepare_font_artifacts.jl` | Downloads fonts from CTAN/GitHub, builds Julia artifact tarballs and draft `Artifacts.toml` stanzas for all 8 font families.  Run once when adding new fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
 
 ### Formatting
