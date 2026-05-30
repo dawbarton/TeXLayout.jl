@@ -598,6 +598,148 @@ const STRESS_SECTIONS = [
                 raw" \xrightarrow{n\to\infty} {\Large \frac{\pi}{4}}",
         ]
     ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Overline / underline: tests _layout_overunder! (Rules 9 & 10).
+    # Rule 9: \overline renders body in cramped style; HRule above with gap
+    # from OverbarVerticalGap.  Rule 10: \underline uses UnderbarVerticalGap.
+    # ─────────────────────────────────────────────────────────────────────────
+    "28. OVERLINE & UNDERLINE" => _D(
+        [
+            raw"\overline{x + y} + \underline{z - w}",
+            raw"\overline{\frac{a}{b}} \ne \underline{\frac{c}{d}}",
+            raw"\overline{\mathbf{A}} = (\overline{A_{ij}})_{m \times n}",
+            raw"\overline{\overline{x}} \quad \underline{\underline{y}}" *
+                raw" \quad \overline{x^2 + \underline{2xy} + y^2}",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Absolute style overrides: tests \displaystyle, \textstyle, \scriptstyle,
+    # \scriptscriptstyle as explicit NKStyleOverride nodes (distinct from the
+    # implicit style changes already exercised by fractions/scripts).
+    # ─────────────────────────────────────────────────────────────────────────
+    "29. ABSOLUTE STYLE OVERRIDES" => _D(
+        [
+            raw"{\displaystyle\frac{1}{n}} + {\textstyle\frac{1}{n}}" *
+                raw" + {\scriptstyle\frac{1}{n}} + {\scriptscriptstyle\frac{1}{n}}",
+            raw"\sum_{k=1}^n {\textstyle\frac{k}{n^2}}" *
+                raw" = \frac{{\displaystyle\sum_{k=1}^n k}}{n^2}",
+            raw"{\displaystyle\int_0^\infty e^{-x}\,dx}" *
+                raw" \ne {\scriptscriptstyle\int_0^\infty e^{-x}\,dx}",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # All 18 extensible arrow commands: tests _layout_xarrow! with every
+    # codepoint in _XARROW_CODEPOINTS, covering both single-label (above only)
+    # and double-label (above + below) forms.
+    # ─────────────────────────────────────────────────────────────────────────
+    "30. EXTENSIBLE ARROWS — FULL FAMILY" => _D(
+        [
+            raw"\xleftarrow{f} \quad \xrightarrow{g} \quad" *
+                raw" \xleftrightarrow{h}",
+            raw"\xLeftarrow{\alpha} \quad \xRightarrow{\beta} \quad" *
+                raw" \xLeftrightarrow{\gamma}",
+            raw"\xhookleftarrow{} \quad \xhookrightarrow{a} \quad" *
+                raw" \xmapsto{T}",
+            raw"\xleftharpoonup{} \quad \xrightharpoonup{}" *
+                raw" \quad \xleftharpoondown{} \quad \xrightharpoondown{}",
+            raw"\xrightleftharpoons{K_{\!\text{eq}}}" *
+                raw" \quad \xleftrightharpoons{\Delta G}",
+            raw"\xtwoheadleftarrow{} \quad \xtwoheadrightarrow{\text{onto}}" *
+                raw" \quad \xlongequal{?}",
+            raw"\xrightarrow[n\to\infty]{} \quad \xleftarrow[k<0]{f(k)}" *
+                raw" \quad \xRightarrow[\text{by IVT}]{\exists c}",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Radical degrees and assembly: \sqrt[n] with degree > 2; nested radicals
+    # with non-trivial degree expressions; targets the degree-rendering and
+    # radical-bar extension code paths.
+    # ─────────────────────────────────────────────────────────────────────────
+    "31. RADICAL DEGREES & ASSEMBLY" => _D(
+        [
+            raw"\sqrt[3]{x} + \sqrt[4]{y^2} + \sqrt[5]{z^3}" *
+                raw" + \sqrt[n]{\frac{a+b}{c}}",
+            raw"\sqrt[3]{\sqrt[3]{x}} = \sqrt[9]{x}",
+            raw"\sqrt[\upsilon]{e^{2\pi i}} = 1 \quad" *
+                raw" \sqrt[\alpha+\beta]{\frac{p}{q}}",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Delimiter edge cases: brace pair with \left/\right; null delimiter (.);
+    # arrow delimiters; middle-size delimiters \bigm / \Bigm for rel/ord classes.
+    # ─────────────────────────────────────────────────────────────────────────
+    "32. DELIMITER EDGE CASES" => _D(
+        [
+            raw"\left\{ x \in \mathbb{R} \mid x^2 \le 1 \right\}",
+            raw"\left. \frac{\partial f}{\partial x} \right|_{x=0}" *
+                raw" + \left. g(t) \right|_{t=T}",
+            raw"\left\uparrow \frac{a}{b} \right\downarrow \quad" *
+                raw" \left\Uparrow x \right\Downarrow",
+            raw"a \bigm| b \quad p \bigm\| q \quad x \Bigm\{" *
+                raw" y \Bigm\} z",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Quad-integral and surface-integral large operators: \iiiint, \oiint,
+    # \oiiint — not yet covered by any earlier section.
+    # ─────────────────────────────────────────────────────────────────────────
+    "33. ADDITIONAL LARGE OPERATORS" => _D(
+        [
+            raw"\iiiint_V f\,dV \quad \oiint_{\partial V}" *
+                raw" \mathbf{F}\cdot d\mathbf{S} \quad" *
+                raw" \oiiint_W G\,dW",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Extended font variants: \mathscr and \bm (alias for \boldsymbol)
+    # — distinct code paths from the \mathfrak/\mathcal/\boldsymbol coverage
+    # already present in section 11.
+    # ─────────────────────────────────────────────────────────────────────────
+    "34. FONT VARIANTS — EXTENDED (mathscr / bm)" => _D(
+        [
+            raw"\mathscr{ABCDEFGH}",
+            raw"\bm{\alpha} + \bm{x}^T \bm{A} \bm{x}" *
+                raw" = \boldsymbol{\lambda}\|\bm{x}\|^2",
+            raw"\mathscr{F}\{f\}(s) = \int_{-\infty}^\infty" *
+                raw" f(t)\,e^{-2\pi ist}\,dt",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Spacing commands: \kern (positive, negative, fractional em), \qquad
+    # (explicit large spacing), and \colon (punctuation spacing vs `:` char).
+    # ─────────────────────────────────────────────────────────────────────────
+    "35. SPACING COMMANDS" => _D(
+        [
+            raw"A \kern{2em} B \kern{-1em} C \kern{0.5em} D",
+            raw"a \qquad b \qquad c \qquad d",
+            raw"f\colon X \to Y, \quad g\colon Y \to Z," *
+                raw" \quad h = g \circ f",
+        ]
+    ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Matrix edge cases: \begin{matrix} (no delimiters) and \begin{smallmatrix}
+    # (0.9× scale factor, intended for inline use).
+    # ─────────────────────────────────────────────────────────────────────────
+    "36. MATRIX EDGE CASES" => _D(
+        [
+            raw"\begin{matrix} a & b \\ c & d \end{matrix}",
+            raw"M = \frac{1}{2}\begin{matrix} 1 & -1 \\" *
+                raw" -1 & 1 \end{matrix}",
+            raw"\left(\begin{smallmatrix} a & b \\" *
+                raw" c & d \end{smallmatrix}\right)" *
+                raw" + \left(\begin{smallmatrix} e & f \\" *
+                raw" g & h \end{smallmatrix}\right)",
+        ]
+    ),
 ]
 
 # ── PPM output (pure Julia, no external dependencies) ─────────────────────────
@@ -676,24 +818,34 @@ function run_stress_test_tex(outpath::String, font_name::String)
     open(outpath, "w") do io
         println(io, "% TeXLayout.jl stress-test (approximate LaTeX equivalent)")
         println(io, "% Compile with: xelatex $(basename(outpath))")
-        println(io, "% Some commands require stmaryrd (\\bigsqcap) or mathtools")
-        println(io, "% (\\overbracket, \\underbracket).  \\overparen and \\underparen")
-        println(io, "% are TeXLayout extensions with no standard equivalent.")
+        println(io, "% Required packages beyond standard LaTeX:")
+        println(io, "%   stmaryrd  (\\bigsqcap, \\bigsqcup extensions)")
+        println(io, "%   mathtools (\\overbracket, \\underbracket)")
+        println(io, "%   esint     (\\iiiint, \\oiint, \\oiiint)")
+        println(io, "%   mathrsfs  (\\mathscr)")
+        println(io, "% Note: \\overparen, \\underparen, \\kern{...} are TeXLayout-")
+        println(io, "% specific; approximated below.  Font-size commands inside")
+        println(io, "% math (sections 25-27) have no standard LaTeX equivalent.")
         println(io, "\\documentclass[12pt,a4paper]{article}")
         println(io, "\\usepackage{amsmath,amssymb,mathtools,bm}")
         println(io, "\\usepackage{stmaryrd}")
+        println(io, "\\usepackage{esint}")
+        println(io, "\\usepackage{mathrsfs}")
         println(io, "\\usepackage[margin=1.5cm]{geometry}")
         println(io, "\\setlength{\\parindent}{0pt}")
         println(io, "\\setlength{\\parskip}{3pt}")
         println(io, "\\pagestyle{empty}")
         println(io)
         println(io, "% Fallback definitions for TeXLayout-specific commands:")
-        println(io, "% \\overparen / \\underparen have no standard equivalent;")
-        println(io, "% approximated with over/underset arc.")
         println(io, "\\providecommand{\\overparen}[1]{\\overset{\\frown}{#1}}")
         println(io, "\\providecommand{\\underparen}[1]{\\underset{\\smile}{#1}}")
-        println(io, "% \\degree: use superscript circle if gensymb unavailable.")
         println(io, "\\providecommand{\\degree}{^{\\circ}}")
+        println(io, "% Non-standard xarrow variants: approximate with standard ones.")
+        println(io, "\\providecommand{\\xtwoheadrightarrow}[1]{\\xrightarrow{#1}}")
+        println(io, "\\providecommand{\\xtwoheadleftarrow}[1]{\\xleftarrow{#1}}")
+        println(io, "\\providecommand{\\xlongequal}[1]{\\xrightarrow{\\;#1\\;}}")
+        println(io, "% \\oiiint not in esint; approximate with \\oiint.")
+        println(io, "\\providecommand{\\oiiint}{\\oiint}")
         println(io)
         println(io, "\\begin{document}")
         println(io)
@@ -714,7 +866,10 @@ function run_stress_test_tex(outpath::String, font_name::String)
                 println(io, "\\[")
                 for (k, expr) in enumerate(display_exprs)
                     sep = k < length(display_exprs) ? " \\qquad" : ""
-                    println(io, "  $expr$sep")
+                    # \kern{dim} is TeXLayout syntax; LaTeX \kern takes a bare
+                    # dimension.  Replace with \hspace which accepts braces.
+                    tex_expr = replace(expr, "\\kern{" => "\\hspace{")
+                    println(io, "  $tex_expr$sep")
                 end
                 println(io, "\\]")
             end
