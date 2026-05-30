@@ -14,6 +14,7 @@
     NKSubscript     # base_{subscript} when superscript is absent
     NKDecorated     # base with both sub and sup: x_i^2
     NKFrac          # \frac{num}{den}
+    NKGenfrac       # \binom etc.: no-rule fraction + delimiters; value = "left_ps\x00right_ps"
     NKSqrt          # \sqrt[degree]{body}
     NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
     NKAccent        # \hat, \bar, \vec, etc.
@@ -591,6 +592,21 @@ function _parse_command!(p::_Parser)::Node
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         return Node(NKStyleOverride, "Text", [Node(NKFrac, [num, den])])
+
+    elseif cmd == "\\binom"
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKGenfrac, "parenleft\x00parenright", [num, den])
+
+    elseif cmd == "\\dbinom"
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKStyleOverride, "Display", [Node(NKGenfrac, "parenleft\x00parenright", [num, den])])
+
+    elseif cmd == "\\tbinom"
+        num = _parse_argument!(p)
+        den = _parse_argument!(p)
+        return Node(NKStyleOverride, "Text", [Node(NKGenfrac, "parenleft\x00parenright", [num, den])])
 
     elseif haskey(_STYLE_COMMANDS, cmd)
         # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the

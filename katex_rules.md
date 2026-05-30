@@ -201,11 +201,19 @@ Minimum delimiter height:
 - ScriptScript: `delim2` (at Script size)
 - Otherwise: `delim2`
 
-**Status — matches KaTeX for `\frac`.**
+**Status — matches KaTeX for `\frac` and `\binom`.**
 Rules 15b and 15d are implemented using the OpenType MATH table constants
 `FractionNumeratorGapMin` / `FractionDenominatorGapMin` and their Display-style
-variants, which encode the clearance directly.  Rule 15c (no-rule fraction, i.e.
-`\atop`) and Rule 15e (`\genfrac` delimiters) are not implemented.
+variants, which encode the clearance directly.
+
+Rule 15c is implemented for `NKGenfrac` (`\binom`/`\dbinom`/`\tbinom`) via
+`_layout_genfrac!`.  KaTeX uses `num3` (no-rule non-display shift) which has no
+OpenType equivalent; TeXLayout uses `FractionNumeratorShiftUp` (`num2`) instead.
+The visual difference is negligible because the gap clamping still guarantees a
+reasonable minimum gap via `FractionNumeratorGapMin`.
+
+Rule 15e (`\genfrac` arbitrary delimiters) and `\atop` (no-rule, no delimiters)
+are not implemented.
 
 ---
 

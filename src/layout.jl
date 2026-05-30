@@ -789,7 +789,7 @@ function _atom_class(node::Node)::Symbol
         return get(_CMD_ATOM_CLASS, name, :ord)
     elseif k === NKOperator
         return :op
-    elseif k === NKFrac || k === NKDelimited || k === NKHorizBrace || k === NKMatrix
+    elseif k === NKFrac || k === NKGenfrac || k === NKDelimited || k === NKHorizBrace || k === NKMatrix
         return :inner
     elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
         return :ord
@@ -2253,6 +2253,73 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     return frac_w
 end
 
+# Layout for \binom / \dbinom / \tbinom (NKGenfrac): a no-rule fraction wrapped
+# in auto-sized delimiters.  Implements Rule 15c (no-rule gap clamping, i.e.
+# rule_thickness = 0) and sizes the delimiters symmetrically around the math
+# axis using the same algorithm as NKDelimited.
+function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
+    mc, upm = ctx.mc, ctx.upm
+
+    # Delimiter PS glyph names encoded in value as "left\x00right".
+    delim_sep = findfirst('\x00', node.value)
+    left_name = delim_sep === nothing ? "" : node.value[1:prevind(node.value, delim_sep)]
+    right_name = delim_sep === nothing ? "" : node.value[nextind(node.value, delim_sep):end]
+
+    num_node, den_node = node.children[1], node.children[2]
+    num_s = frac_num_style(style)
+    num_scale = _scale_for_child(scale, style, num_s, mc)
+    den_s = frac_den_style(style)
+    den_scale = _scale_for_child(scale, style, den_s, mc)
+
+    axis_h = mc.axis_height / upm * scale
+
+    # Initial shifts and gap minima from the MATH table (same constants as \frac).
+    if is_display(style)
+        num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
+        den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
+        num_gap = mc.fraction_num_display_style_gap_min / upm * scale
+        den_gap = mc.fraction_denom_display_style_gap_min / upm * scale
+    else
+        num_shift = mc.fraction_numerator_shift_up / upm * scale
+        den_shift = mc.fraction_denominator_shift_down / upm * scale
+        num_gap = mc.fraction_numerator_gap_min / upm * scale
+        den_gap = mc.fraction_denominator_gap_min / upm * scale
+    end
+
+    # Lay out numerator and denominator at origin to measure ink extents.
+    tmp_num = LayoutBox[]
+    tmp_den = LayoutBox[]
+    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
+    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
+
+    # Rule 15c: gap clamping with no rule (rule_thickness = 0).
+    num_depth = max(0.0, -_boxes_bottom(tmp_num, upm))
+    den_height = max(0.0, _boxes_top(tmp_den, upm))
+    num_shift = max(num_shift, axis_h + num_gap + num_depth)
+    den_shift = max(den_shift, den_height - axis_h + den_gap)
+
+    inner_w = max(num_w, den_w)
+
+    # Compute the vertical extent of the fraction for delimiter sizing.
+    # Both measured relative to y0 (i.e. the formula baseline).
+    inner_top = num_shift + _boxes_top(tmp_num, upm)
+    inner_bot = -den_shift + _boxes_bottom(tmp_den, upm)
+    h_above = max(0.0, inner_top - axis_h)
+    h_below = max(0.0, axis_h - inner_bot)
+    required_du = 2.0 * max(h_above, h_below) / scale * upm
+
+    # Place left delimiter, fraction content (centred), right delimiter.
+    cursor = x0
+    !isempty(left_name) && (cursor += _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes))
+    Δnum = (inner_w - num_w) / 2
+    Δden = (inner_w - den_w) / 2
+    _emit_shifted!(boxes, tmp_num, cursor + Δnum, y0 + num_shift)
+    _emit_shifted!(boxes, tmp_den, cursor + Δden, y0 - den_shift)
+    cursor += inner_w
+    !isempty(right_name) && (cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes))
+    return cursor - x0
+end
+
 function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     # \sqrt[degree]{body}: children are [body] or [degree, body].
@@ -2505,6 +2572,7 @@ function _layout_node!(
     k === NKSubscript      && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     k === NKDecorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     k === NKFrac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NKGenfrac        && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     k === NKSqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     k === NKDelimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     k === NKFontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)

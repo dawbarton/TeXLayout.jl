@@ -490,6 +490,35 @@
         @test node.children[1].kind === NKFrac
     end
 
+    @testset "\\binom produces NKGenfrac with paren delimiters" begin
+        tree = parse_latex(raw"\binom{n}{k}")
+        node = tree.children[1]
+        @test node.kind === NKGenfrac
+        # value encodes PS glyph names "parenleft\x00parenright"
+        @test contains(node.value, "\x00")
+        parts = split(node.value, "\x00")
+        @test parts[1] == "parenleft"
+        @test parts[2] == "parenright"
+        @test length(node.children) == 2
+    end
+
+    @testset "\\dbinom wraps NKGenfrac in NKStyleOverride(Display)" begin
+        tree = parse_latex(raw"\dbinom{a}{b}")
+        node = tree.children[1]
+        @test node.kind === NKStyleOverride
+        @test node.value == "Display"
+        @test length(node.children) == 1
+        @test node.children[1].kind === NKGenfrac
+    end
+
+    @testset "\\tbinom wraps NKGenfrac in NKStyleOverride(Text)" begin
+        tree = parse_latex(raw"\tbinom{x}{y}")
+        node = tree.children[1]
+        @test node.kind === NKStyleOverride
+        @test node.value == "Text"
+        @test node.children[1].kind === NKGenfrac
+    end
+
     @testset "\\displaystyle consumes rest of group" begin
         tree = parse_latex(raw"{\displaystyle a + b}")
         grp = tree.children[1]

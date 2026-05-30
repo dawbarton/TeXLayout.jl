@@ -1316,4 +1316,50 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test w_long > w_short
     end
 
+    # ── Binomial coefficients ──────────────────────────────────────────────────
+
+    @testset "\\binom{a}{b} produces more boxes than \\frac{a}{b}" begin
+        # \binom adds two delimiter glyphs (parenleft + parenright) that \frac lacks.
+        boxes_frac = layout(parse_latex(raw"\frac{a}{b}"), family, Display)
+        boxes_binom = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
+        @test length(boxes_binom) > length(boxes_frac)
+    end
+
+    @testset "\\binom{a}{b}: numerator above denominator" begin
+        boxes = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
+        glyphs = find_glyphs(boxes)
+        # The 'a' (numerator) and 'b' (denominator) glyphs should be present.
+        # The numerator glyph should have a strictly higher y than the denominator.
+        @test length(glyphs) >= 4   # left paren + a + b + right paren
+        ys = sort(unique(round(g.y; digits = 6) for g in glyphs))
+        @test length(ys) >= 2   # at least two distinct y-levels
+        @test maximum(g.y for g in glyphs) > minimum(g.y for g in glyphs)
+    end
+
+    @testset "\\binom{a}{b} contains no HRule (no fraction bar)" begin
+        boxes = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
+        @test isempty(find_hrules(boxes))
+    end
+
+    @testset "\\dbinom forces Display scale vs \\binom in Text style" begin
+        # In Text style \binom uses Text-style shifts (smaller); \dbinom forces Display.
+        boxes_binom = layout(parse_latex(raw"\binom{a}{b}"), family, Text)
+        boxes_dbinom = layout(parse_latex(raw"\dbinom{a}{b}"), family, Text)
+        # Display style makes the whole thing taller.
+        top_binom = maximum(
+            b.y + (b.element isa Glyph ? b.element.y_max / mt.upm * b.scale : 0.0)
+                for b in boxes_binom
+        )
+        top_dbinom = maximum(
+            b.y + (b.element isa Glyph ? b.element.y_max / mt.upm * b.scale : 0.0)
+                for b in boxes_dbinom
+        )
+        @test top_dbinom > top_binom
+    end
+
+    @testset "\\binom with complex arguments does not crash" begin
+        boxes = layout(parse_latex(raw"\binom{\frac{x}{y}}{z}"), family, Display)
+        @test !isempty(boxes)
+    end
+
 end

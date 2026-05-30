@@ -157,6 +157,13 @@
         @test !isempty(smoke(expr))
     end
 
+    @testset "BinomTest" begin
+        # ss_data.yaml: \dbinom{a}{b}\tbinom{a}{b}^{\binom{a}{b}+17}{\scriptscriptstyle \binom a b}
+        expr = raw"\dbinom{a}{b}\tbinom{a}{b}^{\binom{a}{b}+17}{\scriptscriptstyle \binom a b}"
+        @test (parse_latex(expr); true)
+        @test !isempty(smoke(expr))
+    end
+
 end
 
 @testset "KaTeX malformed-input" begin
