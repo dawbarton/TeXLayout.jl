@@ -1916,6 +1916,17 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     if ctx.font_variant !== :default
         vcp = _math_variant_codepoint(ctx.font_variant, Char(cp))
         vcp !== nothing && (cp = vcp)
+    else
+        # In default math mode, Greek lowercase letters, their variants, and ∂
+        # are italic (LaTeX convention).  ∇ is intentionally excluded: it is
+        # upright in LaTeX.  Uppercase Greek is also excluded (upright by default).
+        ch = Char(cp)
+        if 'α' <= ch <= 'ω' || ch === '∂' ||
+                ch === 'ϵ' || ch === 'ϑ' || ch === 'ϰ' ||
+                ch === 'ϕ' || ch === 'ϱ' || ch === 'ϖ'
+            vcp = _math_variant_codepoint(:mathit, ch)
+            vcp !== nothing && (cp = vcp)
+        end
     end
     m = glyph_metrics_by_codepoint(ctx.family, cp)
     m === nothing && return 0.0

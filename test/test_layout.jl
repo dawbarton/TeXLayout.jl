@@ -772,6 +772,66 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test gs_bs[1].element.glyph_name != gs_bf[1].element.glyph_name
     end
 
+    # ── Greek italic rendering ────────────────────────────────────────────────
+
+    @testset "Greek: \\alpha default uses math-italic form (same as \\mathit{\\alpha})" begin
+        # After the fix, default \alpha maps to U+1D6FC (math-italic α) explicitly,
+        # matching \mathit{\alpha}.  Previously it relied on the font cmap at U+03B1.
+        boxes_def = layout(parse_latex("\\alpha"), family, Text)
+        boxes_it = layout(parse_latex("\\mathit{\\alpha}"), family, Text)
+        g_def = find_glyphs(boxes_def)
+        g_it = find_glyphs(boxes_it)
+        @test length(g_def) == 1
+        @test length(g_it) == 1
+        @test g_def[1].element.advance_width > 0
+        @test g_def[1].element.glyph_name == g_it[1].element.glyph_name
+    end
+
+    @testset "Greek: \\Gamma default is upright (differs from \\mathit{\\Gamma})" begin
+        # Uppercase Greek is upright in LaTeX by default.
+        boxes_def = layout(parse_latex("\\Gamma"), family, Text)
+        boxes_it = layout(parse_latex("\\mathit{\\Gamma}"), family, Text)
+        g_def = find_glyphs(boxes_def)
+        g_it = find_glyphs(boxes_it)
+        @test length(g_def) == 1
+        @test length(g_it) == 1
+        @test g_def[1].element.advance_width > 0
+        @test g_def[1].element.glyph_name != g_it[1].element.glyph_name
+    end
+
+    @testset "Greek: \\partial default uses math-italic form" begin
+        boxes_def = layout(parse_latex("\\partial"), family, Text)
+        boxes_it = layout(parse_latex("\\mathit{\\partial}"), family, Text)
+        g_def = find_glyphs(boxes_def)
+        g_it = find_glyphs(boxes_it)
+        @test length(g_def) == 1
+        @test length(g_it) == 1
+        @test g_def[1].element.advance_width > 0
+        @test g_def[1].element.glyph_name == g_it[1].element.glyph_name
+    end
+
+    @testset "Greek: \\epsilon (U+03F5, out-of-range variant) default uses math-italic form" begin
+        boxes_def = layout(parse_latex("\\epsilon"), family, Text)
+        boxes_it = layout(parse_latex("\\mathit{\\epsilon}"), family, Text)
+        g_def = find_glyphs(boxes_def)
+        g_it = find_glyphs(boxes_it)
+        @test length(g_def) == 1
+        @test length(g_it) == 1
+        @test g_def[1].element.advance_width > 0
+        @test g_def[1].element.glyph_name == g_it[1].element.glyph_name
+    end
+
+    @testset "Greek: \\phi (U+03D5, out-of-range variant) default uses math-italic form" begin
+        boxes_def = layout(parse_latex("\\phi"), family, Text)
+        boxes_it = layout(parse_latex("\\mathit{\\phi}"), family, Text)
+        g_def = find_glyphs(boxes_def)
+        g_it = find_glyphs(boxes_it)
+        @test length(g_def) == 1
+        @test length(g_it) == 1
+        @test g_def[1].element.advance_width > 0
+        @test g_def[1].element.glyph_name == g_it[1].element.glyph_name
+    end
+
     # ── Accent layout (Rule 12) ───────────────────────────────────────────────
 
     @testset "Accent: \\hat{x} emits base and accent glyphs" begin
