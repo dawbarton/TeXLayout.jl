@@ -740,6 +740,23 @@ const STRESS_SECTIONS = [
                 raw" g & h \end{smallmatrix}\right)",
         ]
     ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Binomial coefficients: \binom (display style, NKGenfrac with paren
+    # delimiters and no fraction bar), \dbinom (forced display), \tbinom
+    # (forced text).  Tests Rule 15c gap clamping, delimiter sizing around
+    # the num/den pair, and style-override wrapping for \dbinom/\tbinom.
+    # ─────────────────────────────────────────────────────────────────────────
+    "37. BINOMIAL COEFFICIENTS" => _D(
+        [
+            raw"\binom{n}{k} = \frac{n!}{k!(n-k)!}",
+            raw"\binom{n}{0} + \binom{n}{1} + \cdots + \binom{n}{n} = 2^n",
+            raw"\dbinom{n}{k} \quad \tbinom{n}{k}" *
+                raw" \quad \binom{n}{k} + \binom{n}{k+1} = \binom{n+1}{k+1}",
+            raw"\dbinom{a}{b}\tbinom{a}{b}^{\binom{a}{b}+17}" *
+                raw"{\scriptscriptstyle \binom{a}{b}}",
+        ]
+    ),
 ]
 
 # ── PPM output (pure Julia, no external dependencies) ─────────────────────────
