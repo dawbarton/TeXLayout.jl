@@ -14,7 +14,7 @@
 #   julia tools/prepare_font_artifacts.jl [output_dir]
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
+Pkg.activate(@__DIR__; io = devnull)
 
 using Pkg.Artifacts
 using SHA

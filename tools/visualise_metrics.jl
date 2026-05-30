@@ -8,14 +8,14 @@
 # along with baseline and math-axis guides.
 #
 # Usage:
-#   julia tools/visualise_metrics.jl "expr" [output.png|output.ppm] [:font_symbol|/path/to/font.otf]
+#   julia tools/visualise_metrics.jl "expr" [output.ppm] [:font_symbol|/path/to/font.otf]
 #
 # Examples:
-#   julia tools/visualise_metrics.jl "\\frac{a}{b}" metrics.png
+#   julia tools/visualise_metrics.jl "\\frac{a}{b}" metrics.ppm
 #   julia tools/visualise_metrics.jl "\\sum_{n=1}^\\infty n^{-2}" metrics.ppm :stix_two
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
+Pkg.activate(@__DIR__; io = devnull)
 
 using FreeTypeAbstraction
 using TeXLayout
@@ -200,14 +200,8 @@ function write_image(path::AbstractString, canvas::Array{UInt8, 3})
         return
     end
 
-    return if endswith(lowercase(path), ".png")
-        open(`convert ppm:- png:$path`, "w") do io
-            write_ppm(io)
-        end
-    else
-        open(path, "w") do io
-            write_ppm(io)
-        end
+    return open(path, "w") do io
+        write_ppm(io)
     end
 end
 

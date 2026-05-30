@@ -5,22 +5,16 @@
 # filled directly.  A light-grey baseline and math-axis reference line are drawn
 # beneath the glyphs.  The result is written as a binary PGM (P5) file.
 #
-# Usage:  julia tools/visualise_bitmap.jl [expression] [output.pgm]
-# Defaults: expression = "\\frac{a}{b}", output = "output.png"
+# Usage:  julia tools/visualise_bitmap.jl [expression] [output.pgm] [:font_sym|/path]
+# Defaults: expression = "\\frac{a}{b}", output = "output.pgm", font = :new_cm
 
 using Pkg
-Pkg.activate(joinpath(@__DIR__, ".."); io = devnull)
+Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
 using FreeTypeAbstraction
 
 const BASE_PX = 100   # pixels per em at Text scale (box.scale = 1.0)
 const MARGIN = 20    # canvas border in pixels
-
-const FONT_PATH = joinpath(
-    @__DIR__, "..", "..", "external",
-    "MathTeXEngine.jl", "assets", "fonts", "NewComputerModern",
-    "NewCMMath-Regular.otf"
-)
 
 # ── Canvas helpers ─────────────────────────────────────────────────────────────
 
@@ -76,36 +70,33 @@ function hline!(canvas, row, c1, c2, val::UInt8)
 end
 
 # ── Image output ─────────────────────────────────────────────────────────────
-# Writes the canvas as PGM or PNG (detected from the file extension).
-# PNG uses ImageMagick's `convert` via a pipe; no extra Julia packages needed.
-function write_image(path, canvas::Matrix{UInt8})
+# Write the canvas as a binary PGM (P5) file.
+function write_image(path::AbstractString, canvas::Matrix{UInt8})
     H, W = size(canvas)
-    return if endswith(path, ".png")
-        open(`convert pgm:- png:$path`, "w") do io
-            write(io, "P5\n$W $H\n255\n")
-            for row in 1:H
-                write(io, view(canvas, row, :))
-            end
-        end
-    else
-        open(path, "w") do io
-            write(io, "P5\n$W $H\n255\n")
-            for row in 1:H
-                write(io, view(canvas, row, :))
-            end
+    return open(path, "w") do io
+        write(io, "P5\n$W $H\n255\n")
+        for row in 1:H
+            write(io, view(canvas, row, :))
         end
     end
 end
 
 # ── Main ───────────────────────────────────────────────────────────────────────
+function _parse_font(spec::AbstractString)
+    startswith(spec, ":") && return font_family(Symbol(spec[2:end]))
+    isfile(spec) && return FontFamily(spec)
+    return font_family(Symbol(spec))
+end
+
 function main()
     expr = length(ARGS) >= 1 ? ARGS[1] : "\\frac{a}{b}"
-    outf = length(ARGS) >= 2 ? ARGS[2] : "output.png"
+    outf = length(ARGS) >= 2 ? ARGS[2] : "output.pgm"
+    font_spec = length(ARGS) >= 3 ? ARGS[3] : ":new_cm"
     style = TeXLayout.Display
 
-    isfile(FONT_PATH) || error("Font not found: $FONT_PATH")
-    family = FontFamily(FONT_PATH)
-    mt = TeXLayout.load_math_table(FONT_PATH)
+    family = _parse_font(font_spec)
+    math_path = family.math
+    mt = TeXLayout.load_math_table(math_path)
     boxes = layout(parse_latex(expr), family, style)
 
     if isempty(boxes)
@@ -115,26 +106,21 @@ function main()
 
     upm = mt.upm
     bx1, bx2, by1, by2 = em_bbox(boxes, upm)
-    # Add padding
     pad_em = 0.1
     bx1 -= pad_em; bx2 += pad_em; by1 -= pad_em; by2 += pad_em
 
     W = 2MARGIN + round(Int, (bx2 - bx1) * BASE_PX)
     H = 2MARGIN + round(Int, (by2 - by1) * BASE_PX)
 
-    # Canvas is row-major: canvas[screen_y, screen_x], white background
     canvas = fill(0xff, H, W)
 
-    # Convert em coords to canvas pixels (y flipped: math y↑, canvas y↓)
     em_to_px_x(ex) = MARGIN + round(Int, (ex - bx1) * BASE_PX)
     em_to_px_y(ey) = MARGIN + round(Int, (by2 - ey) * BASE_PX)
 
-    # Reference lines (light grey = 0xcc)
-    hline!(canvas, em_to_px_y(0.0), 1, W, 0xcc)                          # baseline
-    hline!(canvas, em_to_px_y(mt.constants.axis_height / upm), 1, W, 0xcc)  # math axis
+    hline!(canvas, em_to_px_y(0.0), 1, W, 0xcc)
+    hline!(canvas, em_to_px_y(mt.constants.axis_height / upm), 1, W, 0xcc)
 
-    # Load FreeType face for rendering
-    face = FTFont(FONT_PATH)
+    face = FTFont(math_path)
 
     for box in boxes
         el = box.element

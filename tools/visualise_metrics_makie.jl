@@ -11,17 +11,14 @@
 # plus baseline / math-axis guides and per-glyph origin / advance markers.
 #
 # Usage:
-#   julia tools/visualise_metrics_makie.jl "expr" [output.png|output.svg|output.pdf] [:font_symbol|/path/to/font.otf]
+#   julia tools/visualise_metrics_makie.jl "expr" \
+#         [output.png|output.svg|output.pdf] [:font_symbol|/path/to/font.otf]
 
 using Pkg
-
-const REPO_ROOT = normpath(joinpath(@__DIR__, ".."))
-const EXAMPLES_ENV = joinpath(REPO_ROOT, "examples")
-
-Pkg.activate(EXAMPLES_ENV; io = devnull)
-pushfirst!(LOAD_PATH, REPO_ROOT)
+Pkg.activate(@__DIR__; io = devnull)
 
 using CairoMakie
+import Makie
 using LaTeXStrings: LaTeXString
 import MathTeXEngine
 using TeXLayout
