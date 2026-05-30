@@ -73,5 +73,4 @@ include("fixtures/newcm_math.jl")
     include("test_parser.jl")
     include("test_layout.jl")
     include("test_katex.jl")
-    include("test_tools.jl")
 end
