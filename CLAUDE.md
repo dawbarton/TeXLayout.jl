@@ -40,20 +40,15 @@ TeXLayout.jl/
 │   ├── test_layout.jl      # Tests for layout engine invariants and feature coverage
 │   └── test_katex.jl       # KaTeX-derived test suite (smoke, malformed, nested)
 ├── tools/
-│   ├── visualise_bitmap.jl      # Rasterise one expression to PNG
-│   ├── visualise_svg.jl         # SVG bounding-box / baseline / axis visualiser
-│   ├── visualise_spacing.jl     # Inter-atom spacing visualiser
-│   ├── visualise_metrics.jl     # MathTeXEngine-style glyph metric overlay visualiser
+│   ├── visualise_bitmap.jl        # Rasterise one expression to PNG via FreeType
+│   ├── visualise_metrics.jl       # MathTeXEngine-style glyph metric overlay visualiser
 │   ├── visualise_metrics_makie.jl # CairoMakie text! + metric overlay visualiser
-│   ├── demo_features.jl         # Feature panels for accents / over-under / braces / etc.
-│   ├── demo_sheet.jl            # General single-page feature sheet for a font family
-│   ├── demo_matrix.jl           # Matrix / array environment demo output
-│   ├── demo_makie.jl            # Smoke test and CairoMakie integration demo
-│   ├── demo_unified_fonts.jl    # Makie text+math font matching demo
-│   ├── stress_test_sheet.jl     # Stress sheet targeting edge cases and regressions
-│   ├── stress_test_all.sh       # Batch-render stress sheets for bundled families
-│   ├── png_diff.jl              # Signed PNG diff visualiser for rendered outputs
-│   └── prepare_font_artifacts.jl # Build artifact tarballs + draft Artifacts.toml stanzas
+│   ├── stress_test_content.jl     # Shared test expression definitions (library, not executable)
+│   ├── stress_test_freetype.jl    # Render stress-test sheet via FreeType (no Makie required)
+│   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
+│   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
+│   ├── stress_test_all.jl         # Batch-render all font families and compare with reference images
+│   └── prepare_font_artifacts.jl  # Build artifact tarballs + draft Artifacts.toml stanzas
 ├── docs/
 │   ├── make.jl             # Documenter.jl build script
 │   ├── Project.toml
@@ -64,6 +59,7 @@ TeXLayout.jl/
 │   └── MathTeXEngine.jl/
 ├── artifacts/              # Bundled font payloads and extracted font files
 ├── Artifacts.toml          # Artifact definitions for bundled fonts
+├── CHANGELOG.md            # Keep a Changelog format; update [Unreleased] with every change
 ├── CLAUDE.md               # This architecture/developer guide
 ├── katex_rules.md          # Rule-by-rule implementation notes against KaTeX/TeX
 ├── notes.md                # Cross-session engineering notes
@@ -73,14 +69,17 @@ TeXLayout.jl/
 
 ### Rendering tools
 
-All tools in `tools/` activate the package's own project environment and require no extra setup beyond the registered dependencies.  `FreeTypeAbstraction` must be present (it is listed in `Project.toml`).  PNG output uses `convert` from ImageMagick, which must be available on `PATH`.
+All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activate automatically via `julia --project=tools/ tools/<script>.jl`.  PNG output uses ImageMagick (`magick` / `convert`), which must be available on `PATH`.
 
-| Script | Purpose | Key options |
-|--------|---------|-------------|
-| `visualise_bitmap.jl` | Pixel-accurate render of a single expression using FreeType glyph rasterisation.  Useful as a quick sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
-| `visualise_metrics.jl` | MathTeXEngine-style metric overlay view: rendered glyphs with coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
-| `visualise_metrics_makie.jl` | CairoMakie-backed companion to `visualise_metrics.jl`: draws the expression via Makie's `text!` and overlays the same TeXLayout-derived metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font_symbol\|/path/to/math.otf]` |
-| `prepare_font_artifacts.jl` | Downloads fonts from CTAN/GitHub, builds Julia artifact tarballs and draft `Artifacts.toml` stanzas for all 8 font families.  Run once when adding new fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
+| Script | Purpose | Key invocation |
+|--------|---------|----------------|
+| `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
+| `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
+| `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
+| `stress_test_freetype.jl` | Full stress-test sheet rendered via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [out.png] [:font_symbol]` |
+| `stress_test_makie.jl` | Full stress-test sheet rendered via CairoMakie. | `julia tools/stress_test_makie.jl [out.png\|out.pdf] [:font_symbol]` |
+| `stress_test_all.jl` | Batch-render all 8 bundled families and diff against reference images from the `v0.1.0-stress` release. | `julia tools/stress_test_all.jl` |
+| `prepare_font_artifacts.jl` | Download fonts from CTAN/GitHub, build artifact tarballs, and draft `Artifacts.toml` stanzas.  Run when adding fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
 
 ### Formatting
 
@@ -116,138 +115,62 @@ caches the Makie-facing runtime bundle by effective `FontFamily`.
 
 ## Key types
 
-### `Token` / `TokenKind` (`lexer.jl`)
-- Kinds: `TKChar`, `TKCommand`, `TKSup` (`^`), `TKSub` (`_`), `TKLBrace`, `TKRBrace`,
-  `TKMathShift`, `TKAmpersand`, `TKSpace`, `TKEOF`.
-- The lexer always appends a single `TKEOF` sentinel at position `ncodeunits(s)+1`.
-  **The parser must never advance past this sentinel** — the `_parse_primary!` function
-  returns `Node(NKSpace, "")` without advancing when it sees `TKEOF`.
-
 ### `Node` / `NodeKind` (`parser.jl`)
 - Immutable struct: `kind::NodeKind`, `value::String`, `children::Vector{Node}`,
-  `width::Float64`.
-- Leaf nodes (chars, spaces, commands, operators) have empty `children`; interior nodes
-  have empty or placeholder `value`.  The `width` field is only meaningful for `NKSpace`
-  nodes (em units); all other node kinds leave it at `0.0`.
-- Key node kinds:
-  - `NKChar` — single character; `value` is the one-character string.
-  - `NKCommand` — unrecognised command; `value` is the full token including `\`.
-  - `NKSpace` — explicit horizontal space; the em width (possibly negative for `\!` and
-    similar) is stored in `node.width::Float64`.  `value` is always `""` for this kind.
-    Commands `\,` `\:` `\;` `\!` `\quad` `\qquad` `\kern` `\mkern` `\hskip` `\mskip`
-    and their aliases all produce this node.  1 mu = 1/18 em.
-  - `NKOperator` — named math operator (e.g. `\sin`); `value` is the bare name (`"sin"`).
-    Rendered upright using `glyph_metrics_upright`.  In Display style, operators in
-    `_LIMITS_OPERATORS` (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`,
-    `gcd`, `Pr`) automatically use limits placement.
-  - `NKDecorated` — children are `[base, sub, sup]` (always in that order regardless of
-    source order).
-  - `NKFrac` — children `[numerator, denominator]`.
-  - `NKSqrt` — children `[body]` or `[degree, body]`.
-  - `NKDelimited` — children are the interior sequence (no `\right` node); `value` encodes
-    the PostScript glyph names of the left and right delimiters separated by `\x00`
-    (e.g. `"parenleft\x00parenright"`).  An empty substring means a null delimiter (no glyph
-    rendered).  The layout engine looks up `vert_constructions` from the MATH table to pick
-    the smallest variant tall enough to cover the inner content, centred on the math axis.
-  - `NKFontSwitch` — produced by `\mathbf{…}`, `\mathit{…}`, `\mathrm{…}`, `\mathbb{…}`,
-    `\mathcal{…}`, `\mathfrak{…}`, `\mathsf{…}`, `\mathtt{…}`, `\boldsymbol{…}`, and
-    aliases.  `value` is the variant name (e.g. `"mathbf"`); `children[1]` is the body
-    sequence.  The layout engine recurses with `ctx.font_variant` set to the variant.
-  - `NKHorizBrace` — produced by `\overbrace`, `\underbrace`, `\overbracket`,
-    `\underbracket`, `\overparen`, `\underparen`.  `value` is the bare command name;
-    `children[1]` is the body.  The layout engine selects the widest-fitting variant
-    (or extensible assembly) from `horiz_constructions`, then applies limits-style
-    note placement for any sub/superscript on the brace node.
-  - `NKLimitsOverride` — produced by `\limits` or `\nolimits`; wraps the preceding base
-    node as its sole child; `value` is `"limits"` or `"nolimits"`.  The layout engine
-    checks this before dispatching the script placement algorithm.
-  - `NKStyleOverride` — produced by `\dfrac`, `\tfrac`, `\displaystyle`, `\textstyle`,
-    `\scriptstyle`, `\scriptscriptstyle`.  `value` is one of `"Display"`, `"Text"`,
-    `"Script"`, `"ScriptScript"`; `children[1]` is the body.  For `\dfrac`/`\tfrac` the
-    body is an `NKFrac` node; for style-switch commands the body is an `NKSequence`
-    containing the rest of the current group.  The layout engine resets both style and
-    scale to `size_scale(new_style, mc)`, so `\dfrac` inside a subscript renders at
-    full display size (matching KaTeX behaviour).
-  - `NKSizing` — produced by `\large`, `\tiny`, `\normalsize`, etc.  `value` is the
-    Float64 multiplier as a decimal string; `children[1]` is an `NKSequence` wrapping
-    the rest of the current group.  The layout engine multiplies the current scale by
-    this factor (style is unchanged).
-  - `NKXArrow` — produced by `\xrightarrow`, `\xleftarrow`, and 16 other extensible-arrow
-    commands.  `value` is the command string (e.g. `"\\xrightarrow"`); `children[1]` is
-    the mandatory above-label argument; `children[2]` (optional) is the below-label from
-    `[…]`.  The layout engine stretches the arrow to cover the labels with padding, centres
-    it on the math axis, and places the labels at `_XARROW_KERN` (0.111 em) clearance.
-  - `NKMatrix` — produced by `\begin{env}…\end{env}`; `value` encodes
-    `"env\x00nrow\x00colspec"` where `colspec` is either the verbatim column-spec
-    string from `\begin{array}{…}` (e.g. `"|l|c|r|"`) or a derived string of
-    `'c'`/`'l'` characters for shorthand environments.  Children are a flat row-major
-    list of `NKGroup` cells (one per cell, padded to a rectangular grid).  The layout
-    engine calls `_parse_colspec` to recover per-column alignments and vertical-rule
-    counts; `\begin{array}` is the only environment in `_COLSPEC_ENVS` (reads a
-    mandatory `{colspec}` argument); all others derive the colspec automatically.
-    `||` in a colspec produces two adjacent rules separated by `_MATRIX_DOUBLERULESEP`.
+  `width::Float64`.  The `width` field is only meaningful for `NKSpace` nodes
+  (em units; 1 mu = 1/18 em); all other kinds leave it at `0.0`.  See the
+  `@enum NodeKind` block in `parser.jl` for the full kind list.
+- **Non-obvious encodings** — several kinds pack structured data into `value`
+  using `\x00` as a field separator:
+  - `NKDecorated` — children are always `[base, sub, sup]` regardless of source
+    order.  (`NKSuperscript`/`NKSubscript` have children `[base, script]` when
+    only one script is present.)
+  - `NKDelimited` — `value = "left_ps\x00right_ps"` (PostScript glyph names;
+    empty string = null delimiter, no glyph rendered).
+  - `NKGenfrac` — same `"left_ps\x00right_ps"` convention; children =
+    `[numerator, denominator]`.
+  - `NKBigDelim` — `value = "ps_name\x00<size>\x00<class>"` where size ∈
+    `'1'`–`'4'` (1.2 / 1.8 / 2.4 / 3.0 em) and class ∈ `'o'` / `'c'` / `'r'` /
+    `'d'` (open/close/rel/ord atom class).
+  - `NKMatrix` — `value = "env\x00nrow\x00colspec"`; children are a flat
+    row-major list of `NKGroup` cells.  For `\begin{array}` the colspec string
+    is taken verbatim (e.g. `"|l|c|r|"`); for shorthand environments it is
+    derived automatically.  `||` produces two rules separated by
+    `_MATRIX_DOUBLERULESEP`.
+  - `NKStyleOverride` — for `\displaystyle` / `\textstyle` / etc. the body
+    `NKSequence` consumes the **rest of the current group**; for `\dfrac`/`\tfrac`
+    the body is the single `NKFrac` node.  Both reset style *and* scale
+    absolutely, so `\dfrac` inside a subscript renders at full display size.
+  - `NKOperator` — `value` is the bare operator name (e.g. `"sin"`).  Operators
+    in `_LIMITS_OPERATORS` automatically use limits placement in Display style.
 
-### `TexStyle` (`style.jl`)
-Eight styles: `Display`, `CrampedDisplay`, `Text`, `CrampedText`, `Script`,
-`CrampedScript`, `ScriptScript`, `CrampedScriptScript`.  Use `sup_style`,
-`sub_style`, `frac_num_style`, `frac_den_style`, `cramp_style` to transition.
-`size_scale` returns the font-size multiplier for a style (1.0 / 0.7 / 0.5 by default,
-driven by `MathConstants.script_percent_scale_down` and
-`MathConstants.script_script_percent_scale_down`).
+### Glyph lookup (`fonts.jl`)
+Three functions with different portability:
+- `glyph_metrics(family, name)` — PS glyph name in the math font.  **Avoid for
+  letters and symbols** — naming conventions diverge across fonts (AGL in
+  NewCMMath/Pagella/STIXTwo, `uni`-style in FiraMath, font-specific in Luciole).
+- `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint; the portable
+  path for all math symbols and letters.  Returns `nothing` on miss.
+- `glyph_metrics_upright(family, ch)` — upright (roman) form; uses the `regular`
+  font slot if present, else falls back to the math font's codepoint map.  Used
+  by `NKOperator` and `\text{}`/`\mbox{}` rendering.
 
-### `FontFamily` / `GlyphMetrics` (`fonts.jl`)
-- `FontFamily` holds font paths: `math` (mandatory), `regular`, `italic`, `bold`,
-  `bolditalic` (all optional).
-- **Constructors:** `font_family(::Symbol)` looks up a named artifact (`:new_cm`,
-  `:pagella`, `:termes`, `:schola`, `:bonum`, `:luciole`, `:stix_two`, `:fira_math`);
-  `font_family(math_path; regular,
-  bold, italic, bolditalic)` accepts file paths directly; `default_font_family()` returns
-  the current session-wide default (initially `:new_cm`; overrideable with
-  `set_default_font_family!`).
-- **Three glyph lookup functions:**
-  - `glyph_metrics(family, name)` — metrics for a PostScript glyph name in the math font
-    (e.g. `"parenleft"`, `"alpha"`).  The form of single-letter names depends on the font;
-    in NewCMMath, `"x"` maps to the *upright* roman form, not italic — use
-    `glyph_metrics_by_codepoint` with a Unicode math-variant codepoint for italic letters.
-  - `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint in the math font (returns
-    `nothing` on miss).
-  - `glyph_metrics_upright(family, ch)` — upright character; uses `regular` font if
-    present, otherwise falls back to math font codepoint mapping which yields upright
-    forms in OpenType math fonts like NewCMMath (returns `nothing` on miss).
-- Fonts are cached by path in `_FONT_CACHE`; safe to call repeatedly.
+Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
 
 ### `LayoutBox` / `TeXElement` (`layout.jl`)
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
   Positions are in em units (design units / UPM × scale); x right, y up, origin at
   formula baseline.
-- Element subtypes:
-  - `Glyph` — PS name + `font_slot::Symbol` (`:math` or `:regular`) + advance/bearing/bbox
-    metrics in design units.  `font_slot` tells the renderer which font file to use for
-    glyph-index resolution: `:math` → `family.math`, `:regular` → `family.regular` (falls
-    back to `family.math` when `regular` is `nothing`).  All math-mode glyphs carry `:math`;
-    glyphs from `\text{}`/`\mbox{}` carry `:regular` when a companion regular font is
-    configured.
-  - `HRule` — width + thickness in em.
-  - `VRule` — height + thickness in em.
-  - `Space` — width in em.
-- `_LayoutCtx` carries: `family` (`FontFamily`), `mc` (`MathConstants`), `upm`
-  (design units per em), `vert_constructions` and `horiz_constructions` (extensible glyph
-  tables from the MATH table), `top_accent_attachments` (PS name → x offset for accent
-  alignment), `italic_corrections` (PS glyph name → design units; from the MATH table;
-  used to shift subscripts on slanted bases such as `\int`), `min_connector_overlap`
-  (minimum overlap between assembly parts), `mode` (`:math` or `:text`), and
-  `font_variant` (`:default` or a `\mathXX` variant symbol).
-- **`_base_italic_correction_em(boxes, ctx, scale)`** — helper that returns the italic
-  correction of the first `Glyph` element in a box list, converted to em units (design
-  units × scale / upm).  Returns 0.0 if no glyph is found or the glyph has no IC entry.
-  Used by all script placement branches to implement the italic correction rules.
-
-### `MathConstants` (`math_table.jl`)
-Parsed directly from the font's OpenType MATH table.  All constants are in design units;
-divide by `upm` (from `_LayoutCtx.upm`) to get em values.  No hard-coded fallbacks are
-used anywhere — if the font lacks a MATH table, `load_math_table` throws.
-`load_math_table(path)` returns a cached `MathTable` object keyed by the math-font
-path, so repeated layouts with the same font do not reparse the binary table.
+- Element subtypes: `Glyph` (PS name + metrics), `HRule` (width + thickness in em),
+  `VRule` (height + thickness in em), `Space` (width in em).
+- `Glyph.font_slot` — `:math` or `:regular`.  Tells the renderer which font file to
+  use for glyph-index resolution (`:regular` falls back to `:math` when no companion
+  regular font is configured).  All math-mode glyphs carry `:math`; glyphs from
+  `\text{}`/`\mbox{}` carry `:regular`.
+- `_LayoutCtx` carries: `family`, `mc` (all MATH constants), `upm`,
+  `vert_constructions` / `horiz_constructions` (extensible glyph tables),
+  `top_accent_attachments`, `italic_corrections`, `min_connector_overlap`,
+  `mode` (`:math` or `:text`), `font_variant` (`:default` or a `\mathXX` symbol).
 
 ---
 
@@ -297,37 +220,13 @@ path, so repeated layouts with the same font do not reparse the binary table.
 
 ---
 
-## Implemented features
+## Feature index
 
-A summary of major features and their status.
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Fractions (`\frac`) | ✓ | TeX Rule 15d/15e gap clamping; fraction rule from MATH table |
-| Square roots (`\sqrt`, `\sqrt[n]`) | ✓ | Pre-built variants + extensible assembly; top-anchored |
-| Delimiters (`\left`/`\right`) | ✓ | Auto-sized from `vert_constructions`; centred on math axis |
-| Sub/superscripts | ✓ | Standard beside-base placement using MATH shift constants; italic correction applied to subscripts on slanted single-glyph bases (e.g. `\int`) — full IC shift left, matching KaTeX `supsub.ts` |
-| Named operators (`\sin`, `\cos`, `\lim`, …) | ✓ | Upright glyphs; 27 operators including `\limsup`, `\liminf` |
-| Large operators (`\sum`, `\prod`, `\int`, …) | ✓ | Display-size variant selected via `display_operator_min_height` |
-| Limits placement | ✓ | Sub/sup centred below/above in Display style; 4 MATH constants used |
-| `\limits` / `\nolimits` override | ✓ | Parsed as `NKLimitsOverride`; respected in all script branches |
-| Explicit spacing (`\,` `\;` `\quad` `\kern` …) | ✓ | Width in em; negative spaces supported |
-| Inter-atom spacing | ✓ | TeX atom-class table (ord/bin/rel/op/open/close/punct/inner) |
-| Accents (`\hat`, `\bar`, `\vec`, …) | ✓ | Rule 12; `MathTopAccentAttachment` alignment; 11 non-stretchy commands |
-| `\overline`, `\underline` | ✓ | Rules 9 & 10; gap and thickness from MATH table |
-| Horizontal extensibles (`\widehat`, `\widetilde`) | ✓ | Variant selection + extensible assembly from `horiz_constructions`; centred over base |
-| Font switching (`\mathbf`, `\mathrm`, …) | ✓ | Unicode math-variant codepoints; `\mathrm` uses `_char_glyph` (math font codepoint); propagates into sub/superscripts |
-| Horizontal braces (`\overbrace`, `\underbrace`, …) | ✓ | `NKHorizBrace`; variant selection from `horiz_constructions`; limits-style note placement; 6 commands |
-| Array/matrix environments | ✓ | `NKMatrix`; 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double (`||`) vertical rules from colspec; two-pass grid layout centred on math axis |
-| `\middle` delimiter | ✓ | `NKMiddle`; auto-sized to the same height as the enclosing `\left`/`\right` pair; multiple `\middle` delimiters per group are supported |
-| `\text{}`, `\mbox{}` | ✓ | `NKText`; switches to upright (regular-font) glyph lookup via `_with_text_mode`; spaces preserved as `Space` elements (word-space advance from font); inter-atom spacing suppressed inside text fragments |
-| `default_font_family()` / `set_default_font_family!()` | ✓ | Returns current default (`:new_cm` initially); override with any `Symbol` or `FontFamily`; lazy download |
-| `\dfrac`, `\tfrac` | ✓ | `NKStyleOverride`; forces Display or Text style (with absolute scale reset); `\dfrac` inside a subscript renders at full display size |
-| `\binom`, `\dbinom`, `\tbinom` | ✓ | `NKGenfrac`; Rule 15c (no-rule gap clamping); auto-sized `(` `)` delimiters via `_layout_delim!`; `\dbinom`/`\tbinom` wrap in `NKStyleOverride` |
-| Manual delimiter sizing (`\bigl`, `\bigr`, `\Bigl`, `\Bigr`, `\biggl`, `\biggr`, `\Biggl`, `\Biggr`, and `\bigm`/`\big` families) | ✓ | `NKBigDelim`; 4 size tiers (1.2/1.8/2.4/3.0 em × upm); reuses `_layout_delim!`; scale-independent variant selection; 16 commands + null delimiter support |
-| Style switches (`\displaystyle`, `\textstyle`, `\scriptstyle`, `\scriptscriptstyle`) | ✓ | `NKStyleOverride`; consumes rest of current group; absolute style and scale override matching KaTeX |
-| Font sizing (`\large`, `\tiny`, …) | ✓ | `NKSizing`; 10 commands from `\tiny` (0.5×) to `\Huge` (2.488×); multiplies current scale |
-| Extensible arrows (`\xrightarrow`, `\xleftarrow`, …) | ✓ | `NKXArrow`; 18 commands; arrow from `horiz_constructions`; centred on math axis; optional below label; labels at 0.111 em kern |
+`katex_rules.md` is the authoritative per-feature reference: it records the KaTeX/TeX
+rule number, the OpenType MATH table field names used, implementation notes, and any
+deviations from KaTeX behaviour.  Features without a KaTeX rule number (font switching,
+array environments, text mode, etc.) are in the "Feature implementation index" section
+at the end of that file.
 
 ## Known limitations / future work
 - **Multi-codepoint Unicode symbols** — a subset of negated and variant relations
@@ -374,6 +273,17 @@ A summary of major features and their status.
   with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
   Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
   before rendering; the extension will pick up the new default automatically.
+
+---
+
+## Changelog
+
+`CHANGELOG.md` follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+Every user-visible change — new features, bug fixes, removals, and breaking changes — must be
+recorded in the `[Unreleased]` section at the time it is made, grouped under the appropriate
+heading (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).  When a version
+is released, the `[Unreleased]` section is retitled with the version number and date, and a
+fresh `[Unreleased]` section is opened above it.
 
 ---
 

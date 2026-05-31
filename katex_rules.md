@@ -304,5 +304,35 @@ Defines the inter-atom spacing table for atom class pairs
 (ord/op/bin/rel/open/close/punct/inner).  KaTeX uses this to insert thin,
 medium, or thick spaces (or no space) between adjacent atoms.
 
-**Status:** Inter-atom spacing implemented in `_interatom_space` in `layout.jl`.
-Binary reclassification (Rules 5 & 6) not yet applied.
+**Status:** Matches KaTeX.  Inter-atom spacing implemented in `_interatom_space`
+in `layout.jl`.  Binary reclassification (Rules 5 & 6) applied via two-pass
+`_layout_children!` — see the Rule 5 & 6 entry above.
+
+---
+
+## Feature implementation index
+
+Features not covered by a numbered TeX/KaTeX rule.  NodeKind names and key
+constants are noted for quick lookup.
+
+| Feature | NodeKind | Key implementation detail |
+|---------|----------|--------------------------|
+| `\left`/`\right` auto-sized delimiters | `NKDelimited` | Smallest variant from `vert_constructions` that clears the inner content height; centred on math axis |
+| `\middle` delimiter | `NKMiddle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
+| `\bigl`/`\bigr`/`\big` families | `NKBigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
+| Named operators (`\sin`, `\lim`, …) | `NKOperator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
+| Large operators (`\sum`, `\int`, …) | `NKCommand` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
+| Limits placement | `NKDecorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
+| `\limits`/`\nolimits` override | `NKLimitsOverride` | Wraps the preceding base; checked before script dispatch |
+| Horizontal extensibles (`\widehat`, `\widetilde`) | `NKAccent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
+| Horizontal braces (`\overbrace`, `\underbrace`, …) | `NKHorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
+| Extensible arrows (`\xrightarrow`, …) | `NKXArrow` | 18 commands; arrow stretched to cover labels; labels at `_XARROW_KERN` (0.111 em) clearance |
+| Font switching (`\mathbf`, `\mathrm`, …) | `NKFontSwitch` | Maps Latin/Greek/symbols to Unicode math-variant codepoints; propagates through sub/superscripts via `ctx.font_variant` |
+| Style switches (`\displaystyle`, …) | `NKStyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see CLAUDE.md encoding note) |
+| Font sizing (`\large`, `\tiny`, …) | `NKSizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
+| `\dfrac`, `\tfrac` | `NKStyleOverride` wrapping `NKFrac` | Forces Display or Text style with absolute scale reset |
+| `\binom`, `\dbinom`, `\tbinom` | `NKGenfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
+| Array/matrix environments | `NKMatrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
+| `\text{}`, `\mbox{}` | `NKText` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
+| `default_font_family()` / `set_default_font_family!()` | — | Session-wide default; lazy artifact download; Makie extension picks up changes automatically |
+| Explicit spacing (`\,` `\;` `\quad` `\kern` …) | `NKSpace` | Width in `node.width` (em); negative spaces supported; 1 mu = 1/18 em |
