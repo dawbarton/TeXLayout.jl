@@ -1,4 +1,16 @@
 
+## 2026-05-31T09:05+00:00 Bug fix: STIX Two \middle| overshoots \langle/\rangle height
+
+- **Symptom**: with STIX Two, `\left\langle \frac{a}{b} \,\middle|\, \frac{c}{d} \right\rangle` rendered the bar ~38% taller than the angle brackets.
+- **Root cause**: STIX Two provides only one pre-built bar variant (advance=941). For display-mode fractions the required height is ~1820 DU; the single variant is insufficient, so the glyph assembly is used.
+  - `_layout_assembly!` used **minimum overlaps** (= maximum assembly height): with `n=2` extenders and min overlap=100, total_du = 2623 ≫ required_du ≈ 1820.
+  - The angle brackets have a 13-variant ladder and select the closest one (advance=1907), so they render at the correct height.
+- **Fix** (`src/layout.jl:_layout_assembly!`): after selecting the minimum `n`, increase overlaps uniformly (proportional to each gap's connector capacity) to shrink total_du toward required_du. Each gap is clamped to its per-gap connector limit.
+  - Result after fix: bar ink height ≈ 1819 DU vs langle 1906 DU — near-match (bar is slightly shorter than brackets, which is cosmetically acceptable and far better than 38% overshoot).
+  - The slight residual discrepancy is because the langle variant overshoots by the quantisation of its size ladder (~87 DU), while the assembly can be sized almost exactly.
+- **Not affected**: `_layout_radical_assembly!` (top-anchored, different centering semantics).
+- All 950 tests pass.
+
 ## 2026-05-30T19:03+00:00 Fix section-header overlap in stress_test_makie.jl
 
 - **Root cause**: two compounding bugs in the Makie stress-test layout tool.
