@@ -3,16 +3,12 @@
 This file documents key architectural decisions, invariants, and caveats for
 Claude (and human developers) working on this codebase.
 
----
-
 ## Purpose
 
 TeXLayout.jl is a Julia-idiomatic OpenType-aware LaTeX math typesetter.  It is intended
 as a drop-in replacement for MathTeXEngine.jl in Makie.jl.  The design reference is
 [KaTeX](https://katex.org/); the implementation is not a direct port but follows the same
 algorithmic structure where it is sound.
-
----
 
 ## File structure
 
@@ -88,30 +84,16 @@ from the repository root; Runic is also installed in the global Julia
 environment `@runic`.  Any touched Julia source or test files should be left in
 Runic format before finishing a change.
 
----
-
 ## Pipeline
 
 ```
-String  ──tokenize──►  Vector{Token}
-                              │
-                        parse_latex
-                              │
-                              ▼
-                           Node (AST)
-                              │
-                    layout(node, family, style)
-                              │
-                              ▼
-                     Vector{LayoutBox}
+String  ──tokenize──►  Vector{Token}  ──parse_latex──►  Node (AST)  ──layout(node, family, style)──►  Vector{LayoutBox}
 ```
 
 Each stage is stateless and pure apart from memoization caches: `fonts.jl`
 caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
 parsed `MathTable` values by math-font path, and `ext/MathTeXEngineExt.jl`
 caches the Makie-facing runtime bundle by effective `FontFamily`.
-
----
 
 ## Key types
 
@@ -172,8 +154,6 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
   `top_accent_attachments`, `italic_corrections`, `min_connector_overlap`,
   `mode` (`:math` or `:text`), `font_variant` (`:default` or a `\mathXX` symbol).
 
----
-
 ## Architectural invariants
 
 1. **The TKEOF sentinel is never consumed.** Every loop in the parser checks for TKEOF
@@ -217,8 +197,6 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
 7. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
    removes or modifies existing entries.  Temporary `LayoutBox` vectors (used for
    centering fractions and limits) are merged in with adjusted coordinates.
-
----
 
 ## Feature index
 
@@ -274,8 +252,6 @@ at the end of that file.
   Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
   before rendering; the extension will pick up the new default automatically.
 
----
-
 ## Changelog
 
 `CHANGELOG.md` follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
@@ -285,8 +261,6 @@ heading (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).  Whe
 is released, the `[Unreleased]` section is retitled with the version number and date, and a
 fresh `[Unreleased]` section is opened above it.
 
----
-
 ## Test suite
 
 Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
@@ -294,3 +268,13 @@ Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with
 inline comments citing the originating KaTeX file and line numbers.
+
+## Note taking
+
+Take notes incrementally during a session at natural breakpoints (end of a discussion phase, after a plan is agreed, after a significant result). Do not wait until the end of the session. Add notes to the end of `notes.md` in the project root using the section heading:
+
+```
+## <ISO datetime> <descriptive title>
+```
+
+followed by bullet points covering key ideas, decisions, results, and open questions. Include references to external sources where relevant. Keep notes concise and high-signal; this is cross-session context, not a transcript. Ensure the correct ISO datetime is used by calling `date -Iminutes` with Bash.

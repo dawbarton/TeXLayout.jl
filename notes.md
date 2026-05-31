@@ -1,62 +1,4 @@
 
-## 2026-05-31T09:05+00:00 Bug fix: STIX Two \middle| overshoots \langle/\rangle height
-
-- **Symptom**: with STIX Two, `\left\langle \frac{a}{b} \,\middle|\, \frac{c}{d} \right\rangle` rendered the bar ~38% taller than the angle brackets.
-- **Root cause**: STIX Two provides only one pre-built bar variant (advance=941). For display-mode fractions the required height is ~1820 DU; the single variant is insufficient, so the glyph assembly is used.
-  - `_layout_assembly!` used **minimum overlaps** (= maximum assembly height): with `n=2` extenders and min overlap=100, total_du = 2623 ≫ required_du ≈ 1820.
-  - The angle brackets have a 13-variant ladder and select the closest one (advance=1907), so they render at the correct height.
-- **Fix** (`src/layout.jl:_layout_assembly!`): after selecting the minimum `n`, increase overlaps uniformly (proportional to each gap's connector capacity) to shrink total_du toward required_du. Each gap is clamped to its per-gap connector limit.
-  - Result after fix: bar ink height ≈ 1819 DU vs langle 1906 DU — near-match (bar is slightly shorter than brackets, which is cosmetically acceptable and far better than 38% overshoot).
-  - The slight residual discrepancy is because the langle variant overshoots by the quantisation of its size ladder (~87 DU), while the assembly can be sized almost exactly.
-- **Not affected**: `_layout_radical_assembly!` (top-anchored, different centering semantics).
-- All 950 tests pass.
-
-## 2026-05-30T19:03+00:00 Fix section-header overlap in stress_test_makie.jl
-
-- **Root cause**: two compounding bugs in the Makie stress-test layout tool.
-  1. `em_bbox` used the glyph's actual ink extents for vertical bounds, but Makie's
-     `height_insensitive_boundingbox_with_advance` applies the *font-level* ascender/descender
-     as a floor/ceiling for every glyph — making Makie's bounding boxes much taller.
-  2. Makie's `text!` with `align = (:left, :baseline)` for `LaTeXString` falls through
-     to `:bottom` behaviour (placing the formula's bounding-box bottom at the anchor),
-     not the mathematical baseline.  These two errors compounded: formulas were shifted
-     ~30–70 px higher than intended, extending into the section header of the same row.
-- **Fix** (all changes in `tools/stress_test_makie.jl`):
-  - `em_bbox` now takes `font_ascender` and `font_descender` (from
-    `FreeTypeAbstraction.ascender/descender`) and applies per-glyph vertical clamping:
-    `min(font_descender, el.y_min / upm) * box.scale`, matching Makie exactly.
-  - `run_stress_test_makie` loads font-level metrics from the math face.
-  - Rendering loop changes `align` to `(:left, :bottom)` and lowers the anchor by each
-    expression's individual `below_px_i = round(Int, -by1_i * BASE_PX)` so the
-    mathematical baseline ends up at the intended screen y.
-- Rows are now correctly sized and expressions sit cleanly within their strips.
-
-## 2026-05-27T22:24+00:00 Nested radical vertical alignment fix
-
-- Follow-up on the nested-radical investigation: the repeated `+` glyphs were also drifting downward in `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`.
-- Root cause: after the usual TeX/KaTeX-style clearance adjustment, `_layout_sqrt!` applied a second `body_shift` that lowered the radicand by half of the selected radical's excess cover.
-- LuaTeX `make_radical` does not do that extra centering step: it increases the clearance `clr` when needed and then packs the delimiter beside an overbar/radicand vlist.
-- Removed the extra body shift so nested radicands keep their original baseline, and added a regression test asserting that all four `+` glyphs in the deep nested example share the same `y` position.
-
-## 2026-05-27T22:18+00:00 Nested radical horizontal alignment fix
-
-- Investigated `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`: the repeated `1+` drifted slightly right at each larger radical variant.
-- Root cause in `src/layout.jl`: `_radical_body_offset_du` used `max(advance_width, x_max)`, so the radicand started after the radical ink overhang instead of after the radical delimiter box width.
-- In NewCMMath the prebuilt radical variants have `advance_width = 1000` du but `x_max = 1020` du (`radical` is `833` vs `853`), so each nested level picked up an unwanted extra `20` du.
-- Checked LuaTeX `make_radical` (`texk/web2c/luatexdir/tex/mlist.c`): TeX builds the result as delimiter box followed by the overbar/radicand hlist, so horizontal placement is by delimiter **width**, not ink bounds.
-- Fixed `_radical_body_offset_du` to use `advance_width` only and added a regression test that matches each nested radical glyph to its rule bar and asserts the radicand starts exactly one radical advance to the right.
-
-## 2026-05-27T11:28+00:00 Signed PNG diff utility for stress-test comparisons
-
-- Added `tools/png_diff.jl` to compare two rendered PNGs from TeXLayout runs.
-- The tool flattens each input onto white, converts to grayscale, and computes a signed pixel delta `after - before`.
-- Output encoding:
-  - zero delta -> white,
-  - positive delta -> green tint with intensity proportional to `abs(delta)`,
-  - negative delta -> red tint with intensity proportional to `abs(delta)`.
-- Dimension mismatches are now handled by padding both inputs onto a white canvas sized to the per-axis maximum of the two images; the tool emits a warning describing the original and padded sizes.
-- Implementation uses ImageMagick via whichever binary is available on the host (`magick` or `convert`), matching the existing toolchain approach.
-
 ## 2026-05-23T09:27+00:00 Fraction gap clamping fix and visualisation tools
 
 - Added two visualisation tools to `tools/`:
@@ -94,6 +36,19 @@
 - "Sqrt: radical bar above radicand" test updated to exclude the radical glyph (leftmost x) from radicand_y computation
 - All 513 tests pass
 
+## 2026-05-23T11:55+00:00 Inter-atom spacing implementation
+
+- Implemented full TeX atom-class spacing (Knuth Ch. 17 / KaTeX `spacingData.ts`).
+- `_CHAR_ATOM_CLASS`: maps characters (including U+2212 minus, U+2217 asterisk) to `ord/bin/rel/open/close/punct/inner`.
+- `_CMD_ATOM_CLASS`: maps LaTeX command names (all Greek, common operators, arrows, delimiters, etc.) similarly.
+- `_SPACINGS` / `_TIGHT_SPACINGS`: thin=3/18, medium=4/18, thick=5/18 em lookup tables for Display/Text and Script/ScriptScript styles.
+- `_atom_class(node)`: scripted nodes (NKSuperscript/NKSubscript/NKDecorated) inherit base atom class; NKSpace is `:neutral`.
+- `_interatom_space(prev, next, style)`: selects tight table for Script/ScriptScript styles.
+- `NKSequence`/`NKGroup` branch now inserts auto-spacing `Space` elements in `:math` mode; neutral explicit spaces reset the context preventing double-spacing.
+- 6 new layout tests (523 total, all passing): `a+b` medium, `a=b` thick, `a,b` thin, `\sin x` thin, Script suppression, explicit-space no double-gap.
+- Added `tools/visualise_spacing.jl`: 13-row grid rendering with auto-spacing gaps shaded.
+- Open items remaining: limits placement (`\lim_{x}` in Display), inter-atom spacing for `\text{}`/`\mbox{}`, accent rendering, font switching commands, array/matrix environments.
+
 ## 2026-05-23T12:44+00:00 Limits placement and large operator display-size glyphs
 
 ### Bug fixed: large operators (`\sum`, `\prod`, `\int`, etc.) were invisible
@@ -118,19 +73,6 @@
 - `limsup` and `liminf` added to `_OPERATOR_NAMES` in `parser.jl` (were previously falling through as `NKCommand`).
 - 33 new test assertions across 8 `@testset` blocks; 556 total tests, all passing.
 
-## 2026-05-23T11:55+00:00 Inter-atom spacing implementation
-
-- Implemented full TeX atom-class spacing (Knuth Ch. 17 / KaTeX `spacingData.ts`).
-- `_CHAR_ATOM_CLASS`: maps characters (including U+2212 minus, U+2217 asterisk) to `ord/bin/rel/open/close/punct/inner`.
-- `_CMD_ATOM_CLASS`: maps LaTeX command names (all Greek, common operators, arrows, delimiters, etc.) similarly.
-- `_SPACINGS` / `_TIGHT_SPACINGS`: thin=3/18, medium=4/18, thick=5/18 em lookup tables for Display/Text and Script/ScriptScript styles.
-- `_atom_class(node)`: scripted nodes (NKSuperscript/NKSubscript/NKDecorated) inherit base atom class; NKSpace is `:neutral`.
-- `_interatom_space(prev, next, style)`: selects tight table for Script/ScriptScript styles.
-- `NKSequence`/`NKGroup` branch now inserts auto-spacing `Space` elements in `:math` mode; neutral explicit spaces reset the context preventing double-spacing.
-- 6 new layout tests (523 total, all passing): `a+b` medium, `a=b` thick, `a,b` thin, `\sin x` thin, Script suppression, explicit-space no double-gap.
-- Added `tools/visualise_spacing.jl`: 13-row grid rendering with auto-spacing gaps shaded.
-- Open items remaining: limits placement (`\lim_{x}` in Display), inter-atom spacing for `\text{}`/`\mbox{}`, accent rendering, font switching commands, array/matrix environments.
-
 ## 2026-05-23T22:14+00:00 Accents, overline/underline, binary reclassification
 
 - Implemented KaTeX Rule 12 (accents): base in cramped style; vertical placement via `AccentBaseHeight`; horizontal via `MathTopAccentAttachment`; accent does not widen advance. 11 non-stretchy commands: `\hat`, `\acute`, `\grave`, `\ddot`, `\tilde`, `\bar`, `\breve`, `\check`, `\dot`, `\mathring`, `\vec`.
@@ -139,17 +81,6 @@
 - Implemented TeX Rules 5 & 6 (binary atom reclassification) via two-pass algorithm in `_layout_children!`: left-to-right (Rule 5) then right-to-left (Rule 6). Neutral atoms (spaces) transparent to both passes. Constants `_BIN_LEFT_CANCEL`/`_BIN_RIGHT_CANCEL` as module-level tuples.
 - All planned items (2 → 3 → 4) complete; 649 tests passing.
 - Next: `default_font_family()` via Artifacts, array/matrix environments, or wide accents (`\widehat`/`\widetilde`).
-
-## 2026-05-23T23:49+00:00 Implement horizontal brace family (\overbrace, \underbrace, etc.)
-
-- Added `NKHorizBrace` node kind (`value = command name`, `children[1] = body`). Six commands: `\overbrace` (uni23DE), `\underbrace` (uni23DF), `\overbracket` (uni23B4), `\underbracket` (uni23B5), `\overparen` (uni23DC), `\underparen` (uni23DD).
-- Normal `^`/`_` parsing naturally wraps `NKHorizBrace` in `NKSuperscript`/`NKSubscript`/`NKDecorated`; the layout engine intercepts these before the standard script algorithm.
-- Atom class: `NKHorizBrace → :inner` (matching KaTeX's `minner`).
-- `_layout_horiz_brace!` algorithm: body → brace (horizontally stretched via `_layout_wide_accent!`) → note (primary script, limits-style centered over max(body_w, note_w)) → secondary script (side-placed to the right using standard shift constants).
-- Brace placement: gap between body ink edge and brace ink edge = `0.1 * scale`; gap between brace ink edge and note ink edge = `0.2 * scale`. Reference glyph y_min/y_max obtained by same variant-selection logic as `_layout_wide_accent!` to derive brace_y from the chosen glyph's actual metrics.
-- "Over" braces (overbrace/overbracket/overparen): note is the `sup`, placed above. "Under" braces (underbrace/underbracket/underparen): note is the `sub`, placed below. The opposite script becomes the secondary (side-placed).
-- 712 tests passing (46 new: 9 parser + 11 layout, plus the existing KaTeX suite was unaffected).
-- Updated `CLAUDE.md` feature table; added `horiz_braces.png` demo panel to `demo_features.jl`.
 
 ## 2026-05-23T22:52+00:00 Implement \widehat and \widetilde (horizontal extensible accents)
 
@@ -161,6 +92,17 @@
 - `NKAccent` branch now dispatches wide accents to `_layout_wide_accent!` immediately after computing `accent_y`; fixed-size path unchanged.
 - 666 tests passing (added 3 parser tests + 4 layout tests for wide accents).
 - Updated `CLAUDE.md` feature table, `katex_rules.md` Rule 12 status, and `demo_features.jl` accent panel.
+
+## 2026-05-23T23:49+00:00 Implement horizontal brace family (\overbrace, \underbrace, etc.)
+
+- Added `NKHorizBrace` node kind (`value = command name`, `children[1] = body`). Six commands: `\overbrace` (uni23DE), `\underbrace` (uni23DF), `\overbracket` (uni23B4), `\underbracket` (uni23B5), `\overparen` (uni23DC), `\underparen` (uni23DD).
+- Normal `^`/`_` parsing naturally wraps `NKHorizBrace` in `NKSuperscript`/`NKSubscript`/`NKDecorated`; the layout engine intercepts these before the standard script algorithm.
+- Atom class: `NKHorizBrace → :inner` (matching KaTeX's `minner`).
+- `_layout_horiz_brace!` algorithm: body → brace (horizontally stretched via `_layout_wide_accent!`) → note (primary script, limits-style centered over max(body_w, note_w)) → secondary script (side-placed to the right using standard shift constants).
+- Brace placement: gap between body ink edge and brace ink edge = `0.1 * scale`; gap between brace ink edge and note ink edge = `0.2 * scale`. Reference glyph y_min/y_max obtained by same variant-selection logic as `_layout_wide_accent!` to derive brace_y from the chosen glyph's actual metrics.
+- "Over" braces (overbrace/overbracket/overparen): note is the `sup`, placed above. "Under" braces (underbrace/underbracket/underparen): note is the `sub`, placed below. The opposite script becomes the secondary (side-placed).
+- 712 tests passing (46 new: 9 parser + 11 layout, plus the existing KaTeX suite was unaffected).
+- Updated `CLAUDE.md` feature table; added `horiz_braces.png` demo panel to `demo_features.jl`.
 
 ## 2026-05-24T13:52+00:00 Implement \begin/\end environment parsing and matrix/array layout
 
@@ -176,76 +118,6 @@
 - Key bugs fixed during implementation: (1) Julia mutable aliasing bug with `current_cell` reference, (2) wrong `y0` argument to `_layout_delim!` (should not pre-add axis height — the function does this internally), (3) sort direction bug in layout test (negating y, not reversing both keys).
 - 761 tests passing (25 new parser + 14 new layout + 5 new katex smoke tests).
 - Updated `CLAUDE.md` feature table (Array/matrix environments: ✗ → ✓).
-
-## 2026-05-27T08:48+00:00 Makie-path performance review and caching opportunities
-
-- Benchmarked the TeXLayout/Makie integration in a temporary Julia environment using `BenchmarkTools`, with `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` loaded so the package extension was active.
-- Current hot path findings:
-  - `src/layout.jl:2504-2515` calls `load_math_table(family.math)` on every layout.
-  - `src/math_table.jl:757-780` reparses the font file every time; there is no MATH-table cache.
-  - `src/fonts.jl:49-87` already caches FreeType font handles and parsed `hmtx` tables by path, so lower-level font-face reuse exists but higher-level math-font metadata reuse does not.
-  - `ext/MathTeXEngineExt.jl:147` uses `result = Tuple[]`, producing `Vector{Tuple}` and a type-unstable accumulation path in the Makie-facing conversion stage.
-- Benchmark summary on repeated calls with the default font:
-  - Small expression `x^2+y^2=z^2`: `parse_latex` ~0.7 μs; `load_math_table` ~0.97 ms; `layout(node, ff, Display)` ~0.65 ms; `MathTeXEngine.generate_tex_elements` ~0.70 ms.
-  - Larger expression with `\int`, `\frac`, and `\sum`: `parse_latex` ~5.9 μs; `load_math_table` ~0.95 ms; `layout(node, ff, Display)` ~1.11 ms; `MathTeXEngine.generate_tex_elements` ~1.06 ms.
-  - `load_math_table` alone allocates ~2.31 MiB per call, essentially dominating repeated-call cost.
-- Simulated the effect of a per-font cache by reusing a prebuilt `_LayoutCtx`:
-  - Cached lower-level layout: ~24 μs (small) and ~160 μs (large).
-  - Cached MTE conversion from existing boxes: ~21 μs (small) and ~249 μs (large).
-  - This suggests a per-font runtime cache could reduce repeated-call latency by roughly an order of magnitude for small formulas and by multiple times for larger ones, while also removing most current allocation pressure.
-
-## 2026-05-27T08:56+00:00 Performance implementation plan for Makie path
-
-- Agreed implementation scope for the first four speed-focused items:
-  1. cache parsed `MathTable` data by math-font path,
-  2. cache a higher-level Makie runtime bundle by effective `FontFamily`,
-  3. remove abstract tuple accumulation in the Makie extension,
-  4. cache glyph-name to glyph-index lookups per loaded font.
-- Added execution todos and dependencies in the session SQL tracker:
-  - `perf-cache-math-table`
-  - `perf-cache-makie-runtime` depends on `perf-cache-math-table`
-  - `perf-cache-glyph-index` depends on `perf-cache-makie-runtime`
-  - `perf-validate-benchmarks` depends on all implementation items
-- Plan emphasis: keep the public API unchanged, build on the existing font cache in `src/fonts.jl`, and benchmark each step separately so the impact of each optimization remains attributable.
-
-## 2026-05-27T08:59+00:00 Implement Makie-path caches and concrete conversion container
-
-- Implemented `MathTable` caching in `src/math_table.jl` via `_MATH_TABLE_CACHE`, keyed by math-font path. `load_math_table` now does a cached lookup instead of rereading and reparsing the font on repeated calls.
-- Implemented a cached Makie runtime bundle in `ext/MathTeXEngineExt.jl`, keyed by the effective `FontFamily` path tuple. The bundle reuses:
-  - loaded math and regular `FTFont` handles,
-  - the derived `MathTeXEngine.FontFamily`,
-  - separate glyph-name → glyph-index dictionaries for the math and regular font handles.
-- Replaced the old abstract `Tuple[]` accumulation with a concrete `_MTEElementTuple` vector, so `MathTeXEngine.generate_tex_elements(::LaTeXString)` now infers a concrete return type instead of `Vector{Tuple}`.
-- Minor helper cleanup: `_single_char` avoids `collect(name)` in glyph-name handling, reducing per-call string work in the conversion path.
-- Added a regression test in `test/test_math_table.jl` asserting that repeated `load_math_table(FIXTURE_FONT_PATH)` calls return the same cached object.
-- Validation results:
-  - test suite: 862/862 passing
-  - `parse_latex`: still ~0.7 us small / ~6.2 us large
-  - `load_math_table`: ~60 ns, 0 allocations after warm-up
-  - `layout`: ~25 us small / ~162 us large
-  - `TeXLayout.generate_tex_elements`: ~26 us small / ~169 us large
-- `MathTeXEngine.generate_tex_elements`: ~48 us small / ~199 us large
-- Net effect versus the earlier baseline: repeated Makie rendering with the same font now avoids the ~0.95 ms MATH-table parse and multi-megabyte allocation spike on every call, moving the steady-state cost into the tens to low hundreds of microseconds for the benchmarked formulas.
-
-## 2026-05-27T11:05+00:00 Compare cached TeXLayout path against plain MathTeXEngine
-
-- Ran fresh steady-state `BenchmarkTools` benchmarks in two separate temporary Julia environments:
-  - **Plain MathTeXEngine**: loaded `MathTeXEngine` and `LaTeXStrings`, without loading `TeXLayout`
-  - **TeXLayout Makie path**: loaded `TeXLayout`, `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` so the package extension was active
-- Benchmarked the same two formulas in both cases via `MathTeXEngine.generate_tex_elements(::LaTeXString)` after warm-up:
-  - small: `x^2+y^2=z^2`
-  - large: `\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2} + \sum_{n=1}^{\infty} \frac{(-1)^n}{n^2}`
-- Median results:
-  - **Plain MathTeXEngine**
-    - small: 155864 ns, 74160 bytes, 1568 allocs
-    - large: 1131836 ns, 251256 bytes, 5747 allocs
-  - **TeXLayout extension**
-    - small: 48040 ns, 21528 bytes, 192 allocs
-    - large: 147548 ns, 51608 bytes, 439 allocs
-- Relative steady-state speedup of the cached TeXLayout path over plain MathTeXEngine:
-  - small formula: ~3.2x faster, ~3.4x less memory, ~8.2x fewer allocations
-  - large formula: ~7.7x faster, ~4.9x less memory, ~13.1x fewer allocations
-- Caveat: this is a Makie-facing end-to-end comparison, not a claim that the internal layout algorithms are directly equivalent. The formulas and output API were matched, but the two engines make different implementation choices and do not emit identical intermediate structures.
 
 ## 2026-05-24T15:15+00:00 Demo sheets, CFF fix, and TeX Gyre font family scaffolding
 
@@ -494,6 +366,87 @@
 
 - All three fixes are in commit `4a22217`; verified visually with Luciole stress test and demo sheets, and NewCM regression check passed
 
+## 2026-05-27T08:48+00:00 Makie-path performance review and caching opportunities
+
+- Benchmarked the TeXLayout/Makie integration in a temporary Julia environment using `BenchmarkTools`, with `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` loaded so the package extension was active.
+- Current hot path findings:
+  - `src/layout.jl:2504-2515` calls `load_math_table(family.math)` on every layout.
+  - `src/math_table.jl:757-780` reparses the font file every time; there is no MATH-table cache.
+  - `src/fonts.jl:49-87` already caches FreeType font handles and parsed `hmtx` tables by path, so lower-level font-face reuse exists but higher-level math-font metadata reuse does not.
+  - `ext/MathTeXEngineExt.jl:147` uses `result = Tuple[]`, producing `Vector{Tuple}` and a type-unstable accumulation path in the Makie-facing conversion stage.
+- Benchmark summary on repeated calls with the default font:
+  - Small expression `x^2+y^2=z^2`: `parse_latex` ~0.7 μs; `load_math_table` ~0.97 ms; `layout(node, ff, Display)` ~0.65 ms; `MathTeXEngine.generate_tex_elements` ~0.70 ms.
+  - Larger expression with `\int`, `\frac`, and `\sum`: `parse_latex` ~5.9 μs; `load_math_table` ~0.95 ms; `layout(node, ff, Display)` ~1.11 ms; `MathTeXEngine.generate_tex_elements` ~1.06 ms.
+  - `load_math_table` alone allocates ~2.31 MiB per call, essentially dominating repeated-call cost.
+- Simulated the effect of a per-font cache by reusing a prebuilt `_LayoutCtx`:
+  - Cached lower-level layout: ~24 μs (small) and ~160 μs (large).
+  - Cached MTE conversion from existing boxes: ~21 μs (small) and ~249 μs (large).
+  - This suggests a per-font runtime cache could reduce repeated-call latency by roughly an order of magnitude for small formulas and by multiple times for larger ones, while also removing most current allocation pressure.
+
+## 2026-05-27T08:56+00:00 Performance implementation plan for Makie path
+
+- Agreed implementation scope for the first four speed-focused items:
+  1. cache parsed `MathTable` data by math-font path,
+  2. cache a higher-level Makie runtime bundle by effective `FontFamily`,
+  3. remove abstract tuple accumulation in the Makie extension,
+  4. cache glyph-name to glyph-index lookups per loaded font.
+- Added execution todos and dependencies in the session SQL tracker:
+  - `perf-cache-math-table`
+  - `perf-cache-makie-runtime` depends on `perf-cache-math-table`
+  - `perf-cache-glyph-index` depends on `perf-cache-makie-runtime`
+  - `perf-validate-benchmarks` depends on all implementation items
+- Plan emphasis: keep the public API unchanged, build on the existing font cache in `src/fonts.jl`, and benchmark each step separately so the impact of each optimization remains attributable.
+
+## 2026-05-27T08:59+00:00 Implement Makie-path caches and concrete conversion container
+
+- Implemented `MathTable` caching in `src/math_table.jl` via `_MATH_TABLE_CACHE`, keyed by math-font path. `load_math_table` now does a cached lookup instead of rereading and reparsing the font on repeated calls.
+- Implemented a cached Makie runtime bundle in `ext/MathTeXEngineExt.jl`, keyed by the effective `FontFamily` path tuple. The bundle reuses:
+  - loaded math and regular `FTFont` handles,
+  - the derived `MathTeXEngine.FontFamily`,
+  - separate glyph-name → glyph-index dictionaries for the math and regular font handles.
+- Replaced the old abstract `Tuple[]` accumulation with a concrete `_MTEElementTuple` vector, so `MathTeXEngine.generate_tex_elements(::LaTeXString)` now infers a concrete return type instead of `Vector{Tuple}`.
+- Minor helper cleanup: `_single_char` avoids `collect(name)` in glyph-name handling, reducing per-call string work in the conversion path.
+- Added a regression test in `test/test_math_table.jl` asserting that repeated `load_math_table(FIXTURE_FONT_PATH)` calls return the same cached object.
+- Validation results:
+  - test suite: 862/862 passing
+  - `parse_latex`: still ~0.7 us small / ~6.2 us large
+  - `load_math_table`: ~60 ns, 0 allocations after warm-up
+  - `layout`: ~25 us small / ~162 us large
+  - `TeXLayout.generate_tex_elements`: ~26 us small / ~169 us large
+- `MathTeXEngine.generate_tex_elements`: ~48 us small / ~199 us large
+- Net effect versus the earlier baseline: repeated Makie rendering with the same font now avoids the ~0.95 ms MATH-table parse and multi-megabyte allocation spike on every call, moving the steady-state cost into the tens to low hundreds of microseconds for the benchmarked formulas.
+
+## 2026-05-27T11:05+00:00 Compare cached TeXLayout path against plain MathTeXEngine
+
+- Ran fresh steady-state `BenchmarkTools` benchmarks in two separate temporary Julia environments:
+  - **Plain MathTeXEngine**: loaded `MathTeXEngine` and `LaTeXStrings`, without loading `TeXLayout`
+  - **TeXLayout Makie path**: loaded `TeXLayout`, `MathTeXEngine`, `LaTeXStrings`, and `GeometryBasics` so the package extension was active
+- Benchmarked the same two formulas in both cases via `MathTeXEngine.generate_tex_elements(::LaTeXString)` after warm-up:
+  - small: `x^2+y^2=z^2`
+  - large: `\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2} + \sum_{n=1}^{\infty} \frac{(-1)^n}{n^2}`
+- Median results:
+  - **Plain MathTeXEngine**
+    - small: 155864 ns, 74160 bytes, 1568 allocs
+    - large: 1131836 ns, 251256 bytes, 5747 allocs
+  - **TeXLayout extension**
+    - small: 48040 ns, 21528 bytes, 192 allocs
+    - large: 147548 ns, 51608 bytes, 439 allocs
+- Relative steady-state speedup of the cached TeXLayout path over plain MathTeXEngine:
+  - small formula: ~3.2x faster, ~3.4x less memory, ~8.2x fewer allocations
+  - large formula: ~7.7x faster, ~4.9x less memory, ~13.1x fewer allocations
+- Caveat: this is a Makie-facing end-to-end comparison, not a claim that the internal layout algorithms are directly equivalent. The formulas and output API were matched, but the two engines make different implementation choices and do not emit identical intermediate structures.
+
+## 2026-05-27T11:28+00:00 Signed PNG diff utility for stress-test comparisons
+
+- Added `tools/png_diff.jl` to compare two rendered PNGs from TeXLayout runs.
+- The tool flattens each input onto white, converts to grayscale, and computes a signed pixel delta `after - before`.
+- Output encoding:
+  - zero delta -> white,
+  - positive delta -> green tint with intensity proportional to `abs(delta)`,
+  - negative delta -> red tint with intensity proportional to `abs(delta)`.
+- Dimension mismatches are now handled by padding both inputs onto a white canvas sized to the per-axis maximum of the two images; the tool emits a warning describing the original and padded sizes.
+- Implementation uses ImageMagick via whichever binary is available on the host (`magick` or `convert`), matching the existing toolchain approach.
+
 ## 2026-05-27T11:38+00:00 Refresh CLAUDE.md for current repository state
 
 - Updated `CLAUDE.md` to reflect the current tree layout, including `ext/MathTeXEngineExt.jl`, the broader `tools/` set, artifact-managed fonts, and repo-level notes files.
@@ -598,3 +551,50 @@
 - Validation:
   - main test suite still passes (866/866),
   - CairoMakie/MathTeXEngine-path checks confirm exported `HLine` and `VLine` coordinates now match the expected centerlines derived from TeXLayout boxes.
+## 2026-05-27T22:18+00:00 Nested radical horizontal alignment fix
+
+- Investigated `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`: the repeated `1+` drifted slightly right at each larger radical variant.
+- Root cause in `src/layout.jl`: `_radical_body_offset_du` used `max(advance_width, x_max)`, so the radicand started after the radical ink overhang instead of after the radical delimiter box width.
+- In NewCMMath the prebuilt radical variants have `advance_width = 1000` du but `x_max = 1020` du (`radical` is `833` vs `853`), so each nested level picked up an unwanted extra `20` du.
+- Checked LuaTeX `make_radical` (`texk/web2c/luatexdir/tex/mlist.c`): TeX builds the result as delimiter box followed by the overbar/radicand hlist, so horizontal placement is by delimiter **width**, not ink bounds.
+- Fixed `_radical_body_offset_du` to use `advance_width` only and added a regression test that matches each nested radical glyph to its rule bar and asserts the radicand starts exactly one radical advance to the right.
+
+## 2026-05-27T22:24+00:00 Nested radical vertical alignment fix
+
+- Follow-up on the nested-radical investigation: the repeated `+` glyphs were also drifting downward in `\sqrt{1 + \sqrt{1 + \sqrt{1 + \sqrt{1 + x}}}}`.
+- Root cause: after the usual TeX/KaTeX-style clearance adjustment, `_layout_sqrt!` applied a second `body_shift` that lowered the radicand by half of the selected radical's excess cover.
+- LuaTeX `make_radical` does not do that extra centering step: it increases the clearance `clr` when needed and then packs the delimiter beside an overbar/radicand vlist.
+- Removed the extra body shift so nested radicands keep their original baseline, and added a regression test asserting that all four `+` glyphs in the deep nested example share the same `y` position.
+
+## 2026-05-30T19:03+00:00 Fix section-header overlap in stress_test_makie.jl
+
+- **Root cause**: two compounding bugs in the Makie stress-test layout tool.
+  1. `em_bbox` used the glyph's actual ink extents for vertical bounds, but Makie's
+     `height_insensitive_boundingbox_with_advance` applies the *font-level* ascender/descender
+     as a floor/ceiling for every glyph — making Makie's bounding boxes much taller.
+  2. Makie's `text!` with `align = (:left, :baseline)` for `LaTeXString` falls through
+     to `:bottom` behaviour (placing the formula's bounding-box bottom at the anchor),
+     not the mathematical baseline.  These two errors compounded: formulas were shifted
+     ~30–70 px higher than intended, extending into the section header of the same row.
+- **Fix** (all changes in `tools/stress_test_makie.jl`):
+  - `em_bbox` now takes `font_ascender` and `font_descender` (from
+    `FreeTypeAbstraction.ascender/descender`) and applies per-glyph vertical clamping:
+    `min(font_descender, el.y_min / upm) * box.scale`, matching Makie exactly.
+  - `run_stress_test_makie` loads font-level metrics from the math face.
+  - Rendering loop changes `align` to `(:left, :bottom)` and lowers the anchor by each
+    expression's individual `below_px_i = round(Int, -by1_i * BASE_PX)` so the
+    mathematical baseline ends up at the intended screen y.
+- Rows are now correctly sized and expressions sit cleanly within their strips.
+
+## 2026-05-31T09:05+00:00 Bug fix: STIX Two \middle| overshoots \langle/\rangle height
+
+- **Symptom**: with STIX Two, `\left\langle \frac{a}{b} \,\middle|\, \frac{c}{d} \right\rangle` rendered the bar ~38% taller than the angle brackets.
+- **Root cause**: STIX Two provides only one pre-built bar variant (advance=941). For display-mode fractions the required height is ~1820 DU; the single variant is insufficient, so the glyph assembly is used.
+  - `_layout_assembly!` used **minimum overlaps** (= maximum assembly height): with `n=2` extenders and min overlap=100, total_du = 2623 ≫ required_du ≈ 1820.
+  - The angle brackets have a 13-variant ladder and select the closest one (advance=1907), so they render at the correct height.
+- **Fix** (`src/layout.jl:_layout_assembly!`): after selecting the minimum `n`, increase overlaps uniformly (proportional to each gap's connector capacity) to shrink total_du toward required_du. Each gap is clamped to its per-gap connector limit.
+  - Result after fix: bar ink height ≈ 1819 DU vs langle 1906 DU — near-match (bar is slightly shorter than brackets, which is cosmetically acceptable and far better than 38% overshoot).
+  - The slight residual discrepancy is because the langle variant overshoots by the quantisation of its size ladder (~87 DU), while the assembly can be sized almost exactly.
+- **Not affected**: `_layout_radical_assembly!` (top-anchored, different centering semantics).
+- All 950 tests pass.
+
