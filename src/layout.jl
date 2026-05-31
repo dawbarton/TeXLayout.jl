@@ -1107,8 +1107,10 @@ function _layout_assembly!(
     # capacity; each gap is clamped to its per-gap maximum.
     if !isempty(overlaps) && total_du > required_du
         excess = total_du - required_du
-        max_extra = [min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
-                     for i in eachindex(overlaps)]
+        max_extra = [
+            min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
+                for i in eachindex(overlaps)
+        ]
         total_cap = Float64(sum(max_extra))
         if total_cap > 0.0
             for i in eachindex(overlaps)
