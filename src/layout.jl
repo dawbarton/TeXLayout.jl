@@ -1085,17 +1085,41 @@ function _layout_assembly!(
     parts = _expand_assembly_parts(asm.parts, n)
     isempty(parts) && return 0.0
 
-    # Overlap for each gap between adjacent parts (minimum overlap, so the
-    # assembly is as tall as the required extent).
+    # Start with minimum overlaps at each gap (giving the maximum possible height
+    # for this n), then increase them uniformly to shrink the assembly toward
+    # required_du.  Without this adjustment, fonts that provide only one pre-built
+    # variant (e.g. STIX Two bar/|) always overshoot: n extenders round the height
+    # up to the nearest multiple, making assembled delimiters visibly taller than
+    # their \left/\right companions (which use exact pre-built variants).
     overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
-    for i in 1:length(overlaps)
+    for i in eachindex(overlaps)
         overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
     end
 
-    # Total assembly height in design units.
+    # Total assembly height in design units with minimum overlaps.
     total_du = Float64(parts[1].full_advance)
-    for i in 1:length(overlaps)
+    for i in eachindex(overlaps)
         total_du += parts[i + 1].full_advance - overlaps[i]
+    end
+
+    # Distribute extra overlap to bring total_du toward required_du.
+    # Excess is spread proportionally across gaps by their available connector
+    # capacity; each gap is clamped to its per-gap maximum.
+    if !isempty(overlaps) && total_du > required_du
+        excess = total_du - required_du
+        max_extra = [min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
+                     for i in eachindex(overlaps)]
+        total_cap = Float64(sum(max_extra))
+        if total_cap > 0.0
+            for i in eachindex(overlaps)
+                extra = round(Int, excess * max_extra[i] / total_cap)
+                overlaps[i] += min(extra, max_extra[i])
+            end
+            total_du = Float64(parts[1].full_advance)
+            for i in eachindex(overlaps)
+                total_du += parts[i + 1].full_advance - overlaps[i]
+            end
+        end
     end
 
     # Derive ink bounds from first/last glyph metrics.  When assembly parts have

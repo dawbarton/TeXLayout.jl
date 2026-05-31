@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Raw-string backslash parsing bug; added TEX fallback command definitions
 - Section-header overlap in `stress_test_makie.jl`
+- Glyph assembly (`\left`/`\right`/`\middle` extensible delimiters) now sizes to
+  `required_du` instead of using minimum overlaps (maximum height): fixes STIX Two
+  `\middle|` visibly exceeding `\langle`/`\rangle` height because the bar has only
+  one pre-built variant and the assembly was rounding up to the next extender multiple
 
 ## [0.1.0] - 2026-05-28
 
