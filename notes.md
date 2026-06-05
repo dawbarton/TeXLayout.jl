@@ -598,3 +598,35 @@
 - **Not affected**: `_layout_radical_assembly!` (top-anchored, different centering semantics).
 - All 950 tests pass.
 
+
+## 2026-06-05T19:07+00:00 Text + multi-line layer design (branch latex-text)
+
+- Goal: lay out general strings mixing styled text, `\\` line breaks, inline `$…$`
+  math, and display environments (`align`). Auto line-breaking / full justification
+  remain out of scope. Example target:
+  `\textbf{Hello} world\\\begin{align}x&=y\\y&=x^2-z\end{align}`.
+- Diagnosis: current engine is single-tree, single-baseline, dimensionless flat
+  output, math-only top level. Missing abstraction = a *measured, composable box*
+  (TeX hbox/vbox).
+- Decision: **Option 1** (wrapper layer) now; **Option 2** (unified box-and-glue
+  IR) is the long-term target. Wrote `future.md` grounding Option 2 and explaining
+  how Option 1's `TeXBox`/`vstack`/`hconcat` are the eagerly-shaped degenerate form
+  of `Box`/`VBox`/`HBox`, so migration is incremental, not a rewrite.
+- Wrote `text-spec.md`: full, self-contained implementation spec. Key points:
+  - New `src/{shaping,document,compose}.jl`; no breaking changes; renderer contract
+    (`Vector{LayoutBox}`) preserved.
+  - Document AST (`Block`/`Line`/`Run`/`TextSpan`/`TextAttrs`) separate from math
+    `Node`; **text kept as source strings (spans), not NKChar** — required so a
+    future HarfBuzz shaper can kern/ligature whole runs.
+  - Pluggable `TextShaper` seam (`MetricShaper` in core; `HarfBuzzShaper` in a
+    documented-but-unbuilt extension). Shaper contract: emit PS-name `Glyph(:regular)`
+    boxes in em, baseline y=0, so renderer/Makie path is untouched (no GID glyphs in v1).
+  - Decisions locked: y-origin = first baseline; bold/italic/bolditalic font slots
+    used via new `glyph_metrics_slot`; width = widest line by default, optional fixed
+    width; alignment per block (:left default; display blocks :center).
+  - **Line height = LaTeX semantics**: baseline advance = `max(baselineskip,
+    prevdepth + ascent(next) + lineskip)` (defaults 1.2 em / 0.1 em).
+  - `align` reuses the matrix machinery (add to `_MATRIX_ENVS`; derive `rl…` colspec).
+    Known v1 approximation: `&` uses matrix column gap, not true relation spacing.
+- Open/limitations recorded in spec: align spacing approx; `\textsf`/`\texttt`→regular;
+  blank-line paragraph breaks not honoured; HarfBuzz extension not yet implemented.
