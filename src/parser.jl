@@ -204,6 +204,11 @@ const _MATRIX_ENVS = Dict{String, _MatrixEnvInfo}(
     "cases" => (left = "braceleft", right = "", align = :left, scale = 1.0),
     # \begin{array}{colspec} — explicit per-column alignment and vertical rules.
     "array" => (left = "", right = "", align = :center, scale = 1.0),
+    # Display-math environments (document layer treats these as DisplayBlocks).
+    "align" => (left = "", right = "", align = :center, scale = 1.0),
+    "aligned" => (left = "", right = "", align = :center, scale = 1.0),
+    "gather" => (left = "", right = "", align = :center, scale = 1.0),
+    "equation" => (left = "", right = "", align = :center, scale = 1.0),
 )
 
 # Mapping from style-switch commands to the target TeX style name (Display/Text/Script/ScriptScript).
@@ -498,6 +503,9 @@ end
 # Consumes '{', all TKChar/TKCommand tokens, and '}' (lenient: stops at EOF).
 # Used to extract the environment name from \begin{pmatrix} and \end{pmatrix}.
 function _read_brace_word!(p::_Parser)::String
+    while _current(p).kind === TKSpace
+        _advance!(p)
+    end
     _current(p).kind === TKLBrace && _advance!(p)   # consume '{'
     buf = Char[]
     while _current(p).kind !== TKEOF && _current(p).kind !== TKRBrace
@@ -587,9 +595,16 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
 
     # Derive colspec from env alignment if not explicitly provided.
     if isempty(colspec)
-        info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
-        align_ch = info.align === :left ? 'l' : 'c'
-        colspec = repeat(align_ch, ncol)
+        if env_name ∈ ("align", "aligned")
+            # alternating right/left pairs across observed column count
+            colspec = String(collect(Iterators.take(Iterators.cycle("rl"), ncol)))
+        elseif env_name == "gather"
+            colspec = repeat("c", ncol)
+        else
+            info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
+            align_ch = info.align === :left ? 'l' : 'c'
+            colspec = repeat(align_ch, ncol)
+        end
     end
 
     return Node(NKMatrix, "$(env_name)\x00$(nrow)\x00$(colspec)", cells)
@@ -752,6 +767,19 @@ function _parse_command!(p::_Parser)::Node
     end
 end
 
+# Parse math atoms until TKMathShift or TKEOF, without consuming the closing $.
+# Used by the document parser to handle inline $…$ math.
+function _parse_math_until_shift!(p::_Parser)::Node
+    children = Node[]
+    while true
+        k = _current(p).kind
+        (k === TKEOF || k === TKMathShift) && break
+        k === TKSpace && (_advance!(p); continue)
+        push!(children, _parse_atom!(p))
+    end
+    return Node(NKSequence, children)
+end
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 """
@@ -773,4 +801,35 @@ Convenience wrapper: lex and parse in one call.
 """
 function parse_latex(input::AbstractString)::Node
     return parse_latex(tokenize(input))
+end
+
+# Advance past all tokens up to and including the matching \end{…}.
+# Used by parse_environment! when the environment name is unrecognised.
+function _skip_to_end_env!(p::_Parser, env_name::String)
+    while _current(p).kind !== TKEOF
+        if _current(p).kind === TKCommand && _current(p).value == "\\end"
+            _advance!(p)
+            _read_brace_word!(p)   # consume {name}; correctness not checked
+            return
+        end
+        _advance!(p)
+    end
+    return
+end
+
+"""
+    parse_environment!(p, env_name) -> Node
+
+Parse the body of a known environment, returning its Node. `p` must be
+positioned immediately after the `{env_name}` token that follows `\\begin`.
+Called by the document parser after it has consumed `\\begin{env_name}`.
+"""
+function parse_environment!(p::_Parser, env_name::String)::Node
+    if haskey(_MATRIX_ENVS, env_name)
+        colspec = env_name ∈ _COLSPEC_ENVS ? _read_brace_word!(p) : ""
+        return _parse_matrix_body!(p, env_name, colspec)
+    else
+        _skip_to_end_env!(p, env_name)
+        return Node(NKSequence, Node[])
+    end
 end

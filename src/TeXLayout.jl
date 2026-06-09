@@ -17,6 +17,9 @@ include("style.jl")
 include("lexer.jl")
 include("parser.jl")
 include("layout.jl")
+include("shaping.jl")
+include("document.jl")
+include("compose.jl")
 
 # Public API — minimal surface for typical users.
 #
@@ -38,5 +41,7 @@ export parse_latex, layout
 export LayoutBox, TeXElement, Glyph, HRule, VRule, Space
 # Makie integration
 export generate_tex_elements
+# Text-layer API (layout_document and its option/shaper types)
+export layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper
 
 end

@@ -21,7 +21,10 @@ TeXLayout.jl/
 │   ├── style.jl            # TexStyle enum (D/T/S/SS × cramped), style transition helpers
 │   ├── lexer.jl            # Tokeniser: LaTeX string → Vector{Token}
 │   ├── parser.jl           # Recursive-descent parser: tokens → Node AST
-│   └── layout.jl           # Layout engine: Node + style → Vector{LayoutBox}
+│   ├── layout.jl           # Layout engine: Node + style → Vector{LayoutBox}
+│   ├── shaping.jl          # TextShaper interface, MetricShaper, per-span glyph shaping
+│   ├── document.jl         # Document AST (Block/Line/Run/TextSpan/TextAttrs) + parse_document
+│   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
 ├── ext/
 │   └── MathTeXEngineExt.jl # Makie/MathTeXEngine extension + cached runtime conversion bundle
 ├── test/
@@ -44,6 +47,7 @@ TeXLayout.jl/
 │   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
 │   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
 │   ├── stress_test_all.jl         # Batch-render all font families and compare with reference images
+│   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
 │   └── prepare_font_artifacts.jl  # Build artifact tarballs + draft Artifacts.toml stanzas
 ├── docs/
 │   ├── make.jl             # Documenter.jl build script
@@ -246,6 +250,17 @@ at the end of that file.
   to the extension, but alternative integration strategies (e.g. a dedicated Makie
   recipe or a proper upstream extension point in MathTeXEngine) will be investigated
   in future.
+- **`align` column-spacing approximation** — `\begin{align}` reuses the matrix column
+  machinery, so the `&` gap is `_MATRIX_COLSEP` rather than true relation spacing.
+  This renders `x = y` with a small column gap instead of TeX's full relation spacing.
+  A later refinement can classify the post-`&` cell's leading atom as a relation.
+- **`\textsf` / `\texttt` mapped to `:regular` slot** — no dedicated sans-serif or
+  monospace font is wired to those slot names in v1; they render identically to `\textrm`.
+- **Blank-line paragraph breaks not honoured** — a blank line between text runs produces
+  no extra vertical space in v1 (same as a non-blank empty line: dropped).
+- **HarfBuzz shaper not yet implemented** — the `TextShaper` interface and extension seam
+  are in place (`ext/HarfBuzzExt.jl` is documented in `text-spec.md` but not yet built).
+  Users opt in with `shaper = HarfBuzzShaper()` once the extension is available.
 - **Makie extension ignores caller-specified font family** — the overridden
   `generate_tex_elements` accepts a `font_family` argument (for API compatibility
   with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
