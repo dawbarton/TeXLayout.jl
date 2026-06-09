@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `layout_document(input; family, align, line_height, lineskip, width, display_align,
+  abovedisplayskip, belowdisplayskip, shaper)` — top-level text/paragraph layout entry
+  point producing a `TeXBox` (flat `Vector{LayoutBox}` + measured extents)
+- Text mode with significant spaces and literal characters; styled text via `\textbf`,
+  `\textit`, `\textrm`, `\textnormal`, `\emph`, `\textsf`, `\texttt`, `\text`, `\mbox`
+  with correct bold/italic nesting and `\emph` toggle
+- Explicit line breaks (`\\`) and configurable `\baselineskip` / `\lineskip` spacing
+- Inline math (`$…$`) embedded in text lines; display-math blocks (`\begin{align}`,
+  `\begin{aligned}`, `\begin{gather}`, `\begin{equation}`) as free-standing vertical items
+- `TeXBox`, `LayoutOptions`, `TextShaper`, `MetricShaper` exported types
+- Pluggable text shaper interface (`TextShaper` abstract type, `MetricShaper` default);
+  extension seam in place for a future HarfBuzz shaper via `ext/HarfBuzzExt.jl`
+- `parse_document` (internal) — Document AST parser producing `ParagraphBlock` /
+  `DisplayBlock` from mixed text/math input
+- `hconcat` / `vstack` composition primitives (internal)
+- `tools/visualise_text.jl` — render a mixed text/math string to PNG via FreeType
 - `\binom`, `\dbinom`, `\tbinom` via `NKGenfrac` with auto-sized parenthesis delimiters and
   TeX Rule 15c no-rule gap clamping
 - Manual delimiter sizing via `\bigl`/`\bigr`/`\Bigl`/`\Bigr`/`\biggl`/`\biggr`/`\Biggl`/`\Biggr`

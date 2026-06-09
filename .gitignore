@@ -37,6 +37,7 @@ artifacts/
 *.png
 *.svg
 *.pdf
+flowchart.md
 
 # macOS AppleDouble resource fork files
 ._*

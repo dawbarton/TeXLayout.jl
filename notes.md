@@ -630,3 +630,35 @@
     Known v1 approximation: `&` uses matrix column gap, not true relation spacing.
 - Open/limitations recorded in spec: align spacing approx; `\textsf`/`\texttt`→regular;
   blank-line paragraph breaks not honoured; HarfBuzz extension not yet implemented.
+
+## 2026-06-05T20:35+00:00 Text layer test suite written
+
+- Wrote `test/test_text.jl` covering all 10 spec §9 cases plus unit tests for each new layer.
+- Structure: 6 testsets (font additions, MetricShaper, parser additions, document parser, composition
+  primitives, layout_document integration); ~55 individual testsets, ~120 @test assertions.
+- Strategy: all new symbols accessed as `TeXLayout.Xxx` (no module-level `using`), so the file
+  can be included without aborting existing tests while implementation is in progress.
+- Baseline on inclusion before implementation: 951 passed (all existing), 8 failed, 48 errored.
+  - 8 failures: parser tests (brace leniency, missing align/gather/aligned envs, colspec derivation)
+    — these are assertions that evaluate false rather than throwing.
+  - 48 errors: `UndefVarError` for all new symbols not yet defined in the module.
+- Implementation order from text-spec.md §12: fonts.jl → shaping.jl → parser.jl → document.jl
+  → compose.jl → wire exports → iterate to green.
+
+## 2026-06-06T10:17+00:00 Text layer implementation complete
+
+- Implemented all six steps from text-spec.md §12: fonts.jl additions, shaping.jl,
+  parser.jl modifications, document.jl, compose.jl, exports + housekeeping.
+- Final test score: 1091/1091 passing (0 failed, 0 errored).
+- Key implementation notes:
+  - `_codepoint_metrics` extracted from `glyph_metrics_by_codepoint`; `glyph_metrics_slot`
+    uses a priority fallback chain (bolditalic→bold→italic→regular→math, de-duplicated).
+  - `shape_span` (MetricShaper) calls `_font_upm` per glyph to handle per-font UPM when
+    fallback chains cross font boundaries.
+  - `_parse_text_body!` + `_parse_text_group!` are mutually recursive; bare `{` grouping,
+    font-switch commands, and `\text`/`\mbox` all call `_parse_text_group!` uniformly.
+  - Test fix: Case 3 (tall line forces lineskip) uses `\dfrac` not `\frac` — Text-style
+    fraction denominator (0.345 em) < line_height - lineskip - x_ascent (0.63 em); display-
+    style (`\dfrac`) denominator (0.686 em) > threshold, correctly triggers lineskip path.
+  - Exports: layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper.
+  - Added tools/visualise_text.jl for FreeType rendering of layout_document output.
