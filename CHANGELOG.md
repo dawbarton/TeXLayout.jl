@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.1.1] - 2026-06-19
 
 ### Added
 - `\binom`, `\dbinom`, `\tbinom` via `NKGenfrac` with auto-sized parenthesis delimiters and
@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `\bigm`/`\big` families (`NKBigDelim`; 4 size tiers; 16 commands + null delimiter support)
 
 ### Changed
-- Greek lowercase letters remapped to the math-italic Unicode block in default math mode
 - Tools overhaul: unified project environment, callable stress-test module, PPM image comparison
 
 ### Fixed
@@ -24,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `required_du` instead of using minimum overlaps (maximum height): fixes STIX Two
   `\middle|` visibly exceeding `\langle`/`\rangle` height because the bar has only
   one pre-built variant and the assembly was rounding up to the next extender multiple
+- Greek lowercase letters remapped to the math-italic Unicode block in default math mode
 
 ## [0.1.0] - 2026-05-28
 
