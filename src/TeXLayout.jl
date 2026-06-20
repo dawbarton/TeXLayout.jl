@@ -32,7 +32,7 @@ include("compose.jl")
 
 # Public API — minimal surface for typical users.
 #
-# Internal types (NodeKind, NKxxx, TokenKind, TKxxx, MathTable, GlyphMetrics,
+# Internal types (NodeKind, TokenKind, TKxxx, MathTable, GlyphMetrics,
 # style helpers, glyph-metric functions) are accessible as TeXLayout.Xxx but
 # are not exported so they do not pollute the caller's namespace.
 #

@@ -1,6 +1,6 @@
 # Symbol, delimiter, accent, and operator lookup tables used by layout.jl.
 
-# NKOperator names that use limits placement in Display style (\lim, \max, etc.).
+# NodeKind.Operator names that use limits placement in Display style (\lim, \max, etc.).
 const _LIMITS_OPERATORS = Set{String}(
     [
         "lim", "limsup", "liminf",
@@ -8,7 +8,7 @@ const _LIMITS_OPERATORS = Set{String}(
     ]
 )
 
-# Unicode codepoints for all large-operator symbols rendered via NKCommand.
+# Unicode codepoints for all large-operator symbols rendered via NodeKind.Command.
 # These are looked up by codepoint (not PS name) so the correct glyph is found.
 const _DISPLAY_OP_CODEPOINTS = Dict{String, UInt32}(
     "sum" => 0x2211, "prod" => 0x220F, "coprod" => 0x2210,

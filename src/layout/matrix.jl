@@ -32,7 +32,7 @@ function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Int}
     return col_aligns, vrule
 end
 
-# Lay out a matrix/array environment (NKMatrix node).
+# Lay out a matrix/array environment (NodeKind.Matrix node).
 # Two-pass algorithm: measure all cells first, then place on a rectangular grid.
 # Cells are laid out in Text style (even in Display), centred on the math axis.
 # Returns the total horizontal advance in em units.

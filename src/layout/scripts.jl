@@ -2,7 +2,7 @@
 
 function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
     base, sup = node.children[1], node.children[2]
-    base.kind === NKHorizBrace &&
+    base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     sup_s = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
@@ -46,7 +46,7 @@ end
 
 function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     base, sub = node.children[1], node.children[2]
-    base.kind === NKHorizBrace &&
+    base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
@@ -92,7 +92,7 @@ end
 
 function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     base, sub, sup = node.children[1], node.children[2], node.children[3]
-    base.kind === NKHorizBrace &&
+    base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)

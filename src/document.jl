@@ -46,7 +46,7 @@ end
 
 """A display-math environment occupying its own vertical space."""
 struct DisplayBlock <: Block
-    node::Node     # NKMatrix (align/aligned/gather/equation) or NKSequence
+    node::Node     # NodeKind.Matrix (align/aligned/gather/equation) or NodeKind.Sequence
     kind::Symbol   # :align | :aligned | :gather | :equation
 end
 

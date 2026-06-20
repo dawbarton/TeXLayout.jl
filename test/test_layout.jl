@@ -49,7 +49,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test sub_y < 0.0   # below baseline
     end
 
-    @testset "NKDecorated: both sub and sup positioned correctly" begin
+    @testset "NodeKind.Decorated: both sub and sup positioned correctly" begin
         # x_i^2 should produce three glyphs: base at y=0, sup above baseline, sub below.
         boxes = layout(parse_latex("x_i^2"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -190,7 +190,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Operator: \\sin x produces four glyphs" begin
-        # \sin → NKOperator("sin"): three upright glyphs; x → one italic glyph.
+        # \sin → NodeKind.Operator("sin"): three upright glyphs; x → one italic glyph.
         boxes = layout(parse_latex("\\sin x"), family, Display)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 4
@@ -571,7 +571,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Limits: \\limsup and \\liminf are recognised operators" begin
-        # limsup and liminf should render as upright text (NKOperator).
+        # limsup and liminf should render as upright text (NodeKind.Operator).
         for cmd in ("\\limsup", "\\liminf")
             boxes = layout(parse_latex(cmd), family, Display)
             @test !isempty(find_glyphs(boxes))

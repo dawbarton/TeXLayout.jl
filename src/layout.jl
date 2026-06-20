@@ -64,7 +64,7 @@ end
 # `mode` is either LayoutMode.Math (default) or LayoutMode.Text (inside \text{…}/\mbox{…}).
 # Math-mode character remapping and automatic inter-atom spacing are suppressed
 # in text mode.
-# `font_variant` is :default or the variant name set by an enclosing NKFontSwitch
+# `font_variant` is :default or the variant name set by an enclosing NodeKind.FontSwitch
 # node (e.g. :mathbf, :mathbb).  Propagates through all recursive calls so that
 # \mathbf{x_i} produces bold x and bold subscript i.
 struct _LayoutCtx
@@ -80,7 +80,7 @@ struct _LayoutCtx
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
 end
 
-# Return a copy of `ctx` with `font_variant` replaced.  Used by NKFontSwitch so
+# Return a copy of `ctx` with `font_variant` replaced.  Used by NodeKind.FontSwitch so
 # the rest of the context (family, math constants, mode, …) is inherited.
 @inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
@@ -105,7 +105,7 @@ end
     scale * (size_scale(child_s, mc) / size_scale(parent_s, mc))
 
 # Return a copy of `ctx` with mode set to :text, preserving all other fields.
-# Used by NKText so that character lookup uses upright (regular-font) glyphs and
+# Used by NodeKind.Text so that character lookup uses upright (regular-font) glyphs and
 # math-mode italic remapping and inter-atom spacing are suppressed.
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
@@ -114,22 +114,22 @@ end
 )
 
 # Return the TeX atom class for a given AST node.
-# Scripted nodes (NKSuperscript, NKSubscript, NKDecorated) inherit from their
+# Scripted nodes (NodeKind.Superscript, NodeKind.Subscript, NodeKind.Decorated) inherit from their
 # base (first child).  Groups and sequences are treated as ordinary atoms.
-# NKSpace yields :neutral — these nodes are transparent to auto-spacing.
+# NodeKind.Space yields :neutral — these nodes are transparent to auto-spacing.
 function _atom_class(node::Node)::Symbol
     k = node.kind
-    if k === NKChar
+    if k === NodeKind.Char
         ch = only(node.value)
         ch = get(_MATH_CHAR_REMAP, ch, ch)   # same remap as _char_glyph
         return get(_CHAR_ATOM_CLASS, ch, :ord)
-    elseif k === NKCommand
+    elseif k === NodeKind.Command
         cmd = node.value
         name = startswith(cmd, "\\") ? cmd[2:end] : cmd
         return get(_CMD_ATOM_CLASS, name, :ord)
-    elseif k === NKOperator
+    elseif k === NodeKind.Operator
         return :op
-    elseif k === NKBigDelim
+    elseif k === NodeKind.BigDelim
         # Class char is the last byte of value: 'o'=open, 'c'=close, 'r'=rel, 'd'=ord.
         isempty(node.value) && return :ord
         c = node.value[end]
@@ -137,28 +137,28 @@ function _atom_class(node::Node)::Symbol
         c == 'c' && return :close
         c == 'r' && return :rel
         return :ord
-    elseif k === NKFrac || k === NKGenfrac || k === NKDelimited || k === NKHorizBrace || k === NKMatrix
+    elseif k === NodeKind.Frac || k === NodeKind.Genfrac || k === NodeKind.Delimited || k === NodeKind.HorizBrace || k === NodeKind.Matrix
         return :inner
-    elseif k === NKSqrt || k === NKAccent || k === NKOverUnder || k === NKText
+    elseif k === NodeKind.Sqrt || k === NodeKind.Accent || k === NodeKind.OverUnder || k === NodeKind.Text
         return :ord
-    elseif k === NKSuperscript || k === NKSubscript || k === NKDecorated
+    elseif k === NodeKind.Superscript || k === NodeKind.Subscript || k === NodeKind.Decorated
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from base
-    elseif k === NKLimitsOverride
+    elseif k === NodeKind.LimitsOverride
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from wrapped base
-    elseif k === NKFontSwitch
+    elseif k === NodeKind.FontSwitch
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from body (e.g. \mathbf{+} is :bin)
-    elseif k === NKStyleOverride || k === NKSizing
+    elseif k === NodeKind.StyleOverride || k === NodeKind.Sizing
         isempty(node.children) && return :ord
         return _atom_class(node.children[1])   # inherit from wrapped body
-    elseif k === NKXArrow
+    elseif k === NodeKind.XArrow
         return :rel   # extensible arrows are relation atoms
-    elseif k === NKSpace
+    elseif k === NodeKind.Space
         return :neutral   # explicit spaces reset the spacing context
     else
-        return :ord   # NKSequence, NKGroup: braced sub-expressions are ordinary
+        return :ord   # NodeKind.Sequence, NodeKind.Group: braced sub-expressions are ordinary
     end
 end
 
@@ -339,8 +339,8 @@ end
 
 # ── Limits-placement helpers ─────────────────────────────────────────────────
 
-# Unwrap NKLimitsOverride to expose the actual operator node for layout.
-_limits_base(node::Node) = node.kind === NKLimitsOverride ? node.children[1] : node
+# Unwrap NodeKind.LimitsOverride to expose the actual operator node for layout.
+_limits_base(node::Node) = node.kind === NodeKind.LimitsOverride ? node.children[1] : node
 
 # Return the italic correction (in em units) of the first Glyph in `boxes`, or 0.0.
 # Used to shift limits of slanted operators (e.g. ∫) so they track the diagonal stroke.
@@ -361,11 +361,11 @@ end
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).
 function _use_limits(base::Node, style::TexStyle)::Bool
-    base.kind === NKLimitsOverride && return base.value == "limits"
-    if base.kind === NKOperator
+    base.kind === NodeKind.LimitsOverride && return base.value == "limits"
+    if base.kind === NodeKind.Operator
         return base.value ∈ _LIMITS_OPERATORS && is_display(style)
     end
-    if base.kind === NKCommand
+    if base.kind === NodeKind.Command
         name = startswith(base.value, "\\") ? base.value[2:end] : base.value
         return name ∈ _LIMITS_OP_COMMANDS && is_display(style)
     end
@@ -376,8 +376,8 @@ end
 # to the glyph extents in Display style (integral-family operators).  Unlike
 # _use_limits, this returns true for integrals and oint which use side placement.
 function _is_large_op(node::Node)::Bool
-    n = node.kind === NKLimitsOverride ? node.children[1] : node
-    n.kind === NKCommand || return false
+    n = node.kind === NodeKind.LimitsOverride ? node.children[1] : node
+    n.kind === NodeKind.Command || return false
     name = startswith(n.value, "\\") ? n.value[2:end] : n.value
     return haskey(_DISPLAY_OP_CODEPOINTS, name)
 end
@@ -386,21 +386,21 @@ end
 # TeX Rules 18a–e apply supDrop/subDrop clamps only to non-character bases such as
 # fractions, delimited expressions, and multi-child groups.
 function _is_char_box(node::Node)::Bool
-    n = node.kind === NKLimitsOverride ? node.children[1] : node
-    n.kind === NKChar && return true
-    n.kind === NKOperator && return false  # named operators (e.g. \sin) are not char boxes
-    n.kind === NKCommand && return !_is_large_op(n)  # large ops are not char boxes
-    # NKFontSwitch is constructed with exactly one body child by the parser, so the
+    n = node.kind === NodeKind.LimitsOverride ? node.children[1] : node
+    n.kind === NodeKind.Char && return true
+    n.kind === NodeKind.Operator && return false  # named operators (e.g. \sin) are not char boxes
+    n.kind === NodeKind.Command && return !_is_large_op(n)  # large ops are not char boxes
+    # NodeKind.FontSwitch is constructed with exactly one body child by the parser, so the
     # recursion is unconditional.
-    n.kind === NKFontSwitch && return _is_char_box(n.children[1])
+    n.kind === NodeKind.FontSwitch && return _is_char_box(n.children[1])
     return false
 end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
-# Returns the total advance width.  Used by NKSequence, NKGroup, and the inner
-# content loop of NKDelimited so spacing is consistent in all three contexts.
+# Returns the total advance width.  Used by NodeKind.Sequence, NodeKind.Group, and the inner
+# content loop of NodeKind.Delimited so spacing is consistent in all three contexts.
 #
 # Applies TeX Rules 5 & 6 (binary atom reclassification) before computing spacing:
 # a mbin atom is demoted to mord when the surrounding context would produce
@@ -694,7 +694,7 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     return total_w
 end
 
-# Layout for \bigl/\bigr/\big etc. (NKBigDelim): a single delimiter glyph
+# Layout for \bigl/\bigr/\big etc. (NodeKind.BigDelim): a single delimiter glyph
 # at a fixed size tier, centred on the math axis.  required_du is scale-independent:
 # the same glyph variant is selected at every style level; the glyph renders at the
 # current scale so it appears smaller in subscripts, matching KaTeX behaviour.
@@ -754,10 +754,10 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     return frac_w
 end
 
-# Layout for \binom / \dbinom / \tbinom (NKGenfrac): a no-rule fraction wrapped
+# Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction wrapped
 # in auto-sized delimiters.  Implements Rule 15c (no-rule gap clamping, i.e.
 # rule_thickness = 0) and sizes the delimiters symmetrically around the math
-# axis using the same algorithm as NKDelimited.
+# axis using the same algorithm as NodeKind.Delimited.
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
@@ -881,14 +881,14 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     left_name = payload.left
     right_name = payload.right
 
-    # Partition inner children into content segments separated by NKMiddle nodes.
+    # Partition inner children into content segments separated by NodeKind.Middle nodes.
     # segments[i] holds the children between the (i-1)-th and i-th \middle delimiter.
-    # middles[i]  is the NKMiddle node separating segments[i] from segments[i+1].
+    # middles[i]  is the NodeKind.Middle node separating segments[i] from segments[i+1].
     segments = Vector{Node}[]
     middles = Node[]
     current_seg = Node[]
     for child in node.children
-        if child.kind === NKMiddle
+        if child.kind === NodeKind.Middle
             push!(segments, current_seg)
             push!(middles, child)
             current_seg = Node[]
@@ -1061,32 +1061,32 @@ function _layout_node!(
         boxes::Vector{LayoutBox},
     )::Float64
     k = node.kind
-    k === NKChar           && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKCommand        && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKOperator       && return _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKSpace          && return _layout_space!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKSequence       && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
-    k === NKGroup          && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
-    k === NKSuperscript    && return _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKSubscript      && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKDecorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKFrac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKGenfrac        && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKBigDelim       && return _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKSqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKDelimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKFontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKAccent         && return _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKOverUnder      && return _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKHorizBrace     &&
+    k === NodeKind.Char           && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Command        && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Operator       && return _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Space          && return _layout_space!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sequence       && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Group          && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Superscript    && return _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Subscript      && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Decorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Frac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Genfrac        && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.BigDelim       && return _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Delimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.FontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Accent         && return _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.OverUnder      && return _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.HorizBrace     &&
         return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
-    k === NKMatrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKLimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
-    k === NKText           && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKStyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKSizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
-    k === NKXArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
-    # NKMiddle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
+    k === NodeKind.Matrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.LimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Text           && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.StyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.XArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
+    # NodeKind.Middle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end
 

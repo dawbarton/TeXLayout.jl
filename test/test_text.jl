@@ -87,9 +87,9 @@
 
         @testset "Brace-word leniency: space before { in \\end {align}" begin
             tree = parse_latex("\\begin{align}x\\end {align}")
-            @test tree.kind === NKSequence
+            @test tree.kind === NodeKind.Sequence
             @test length(tree.children) == 1
-            @test tree.children[1].kind === NKMatrix
+            @test tree.children[1].kind === NodeKind.Matrix
         end
 
         @testset "align, aligned, gather registered in _MATRIX_ENVS" begin
@@ -101,37 +101,37 @@
         @testset "Align colspec: 2 columns → rl" begin
             tree = parse_latex("\\begin{align}x&=y\\\\a&=b\\end{align}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "rl"
         end
 
         @testset "Align colspec: 4 columns → rlrl" begin
             tree = parse_latex("\\begin{align}a&b&c&d\\end{align}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "rlrl"
         end
 
         @testset "Gather colspec: 1 column → c" begin
             tree = parse_latex("\\begin{gather}x\\\\y\\end{gather}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "c"
         end
 
-        @testset "parse_environment! returns NKMatrix for align" begin
+        @testset "parse_environment! returns NodeKind.Matrix for align" begin
             # Parser positioned just after {align} — body starts here.
             toks = tokenize("x&=y\\end{align}")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout.parse_environment!(p, "align")
-            @test node.kind === NKMatrix
+            @test node.kind === NodeKind.Matrix
         end
 
         @testset "_parse_math_until_shift! stops before TKMathShift" begin
             toks = tokenize("x^2\$rest")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout._parse_math_until_shift!(p)
-            @test node.kind === NKSequence
+            @test node.kind === NodeKind.Sequence
             @test length(node.children) >= 1
             # Dollar sign not consumed — still current.
             @test TeXLayout._current(p).kind === TKMathShift
@@ -141,7 +141,7 @@
             toks = tokenize("x+1")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout._parse_math_until_shift!(p)
-            @test node.kind === NKSequence
+            @test node.kind === NodeKind.Sequence
             @test !isempty(node.children)
             @test TeXLayout._current(p).kind === TKEOF
         end
@@ -231,7 +231,7 @@
             math_runs = filter(r -> r isa TeXLayout.MathRun, runs)
             @test length(math_runs) == 1
             @test math_runs[1].style === Text   # TeXLayout.Text alias from runtests.jl
-            @test math_runs[1].node.kind === NKSequence
+            @test math_runs[1].node.kind === NodeKind.Sequence
         end
 
         @testset "Display align block parsed as DisplayBlock" begin
@@ -239,7 +239,7 @@
             @test length(doc) == 1
             @test doc[1] isa TeXLayout.DisplayBlock
             @test doc[1].kind === :align
-            @test doc[1].node.kind === NKMatrix
+            @test doc[1].node.kind === NodeKind.Matrix
         end
 
         @testset "The worked example: document structure (spec §3 worked example)" begin
@@ -262,7 +262,7 @@
             @test doc[2] isa TeXLayout.DisplayBlock
             @test doc[2].kind === :align
             mat = doc[2].node
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             parts = split(mat.value, "\x00")
             @test parse(Int, parts[2]) == 2
             @test parts[3] == "rl"

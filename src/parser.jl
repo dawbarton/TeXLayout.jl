@@ -5,68 +5,39 @@
 # Atom classification (mord/mbin/mrel/…) is deferred to the layout engine
 # so that the parser remains context-free.
 
-"""Kinds of AST node produced by the parser."""
-@enum NodeKind begin
-    NKChar          # single character (letter, digit, punctuation)
-    NKSequence      # implicit group: ordered list of children
-    NKGroup         # explicit braced group: {…}
-    NKSuperscript   # base^{exponent} when subscript is absent
-    NKSubscript     # base_{subscript} when superscript is absent
-    NKDecorated     # base with both sub and sup: x_i^2
-    NKFrac          # \frac{num}{den}
-    NKGenfrac       # \binom etc.: no-rule fraction + delimiters; value encoded by _DelimiterPairPayload
-    NKSqrt          # \sqrt[degree]{body}
-    NKDelimited     # \left…\right pair; value encoded by _DelimiterPairPayload
-    NKBigDelim      # \bigl/\bigr/\big etc.; value encoded by _BigDelimiterPayload
-    NKAccent        # \hat, \bar, \vec, etc.
-    NKOverUnder     # \overline / \underline; value is "overline" or "underline"
-    NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
-    NKSpace          # explicit space token (\, \; \quad etc.)
-    NKText           # \text{…} / \mbox{…}: text-mode fragment; children[1] = body
-    NKOperator       # named math operator rendered upright: \sin, \cos, \operatorname{…}
-    NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
-    NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
-    NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
-    NKMatrix         # \begin{env}…\end{env}: value encoded by _MatrixPayload; children = flat row-major cells
-    NKMiddle         # \middle<delim>: auto-sized inner delimiter; value = PS glyph name
-    NKStyleOverride  # \dfrac / \displaystyle etc.; value = style name; children[1] = body
-    NKSizing         # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body
-    NKXArrow         # \xrightarrow etc.; value = command name; children = [above] or [above, below]
-end
-
 """
 An AST node.  Leaf nodes (chars, spaces, standalone commands) have an empty
 `children` vector and carry their source text in `value`.  Interior nodes
 carry children and may carry auxiliary text in `value` (e.g. the command name
-for `NKAccent`).
+for `NodeKind.Accent`).
 
-The `width` field is meaningful only for `NKSpace` nodes; it carries the
+The `width` field is meaningful only for `NodeKind.Space` nodes; it carries the
 explicit horizontal space in em units (may be negative for `\\!`, etc.).
 All other node kinds leave it at the default of `0.0`.
 """
 struct Node
-    kind::NodeKind
+    kind::NodeKind.T
     value::String           # source text for leaf nodes; command name for interior
     children::Vector{Node}
-    width::Float64          # em units; NKSpace only, 0.0 otherwise
+    width::Float64          # em units; NodeKind.Space only, 0.0 otherwise
 end
 
 # Convenience constructors
-Node(kind::NodeKind, value::String) = Node(kind, value, Node[], 0.0)
-Node(kind::NodeKind, children::Vector{Node}) = Node(kind, "", children, 0.0)
-Node(kind::NodeKind, value::String, children::Vector{Node}) = Node(kind, value, children, 0.0)
+Node(kind::NodeKind.T, value::String) = Node(kind, value, Node[], 0.0)
+Node(kind::NodeKind.T, children::Vector{Node}) = Node(kind, "", children, 0.0)
+Node(kind::NodeKind.T, value::String, children::Vector{Node}) = Node(kind, value, children, 0.0)
 
-"""Construct an `NKSpace` node carrying an explicit horizontal width in em."""
-space_node(w::Real) = Node(NKSpace, "", Node[], Float64(w))
+"""Construct a `NodeKind.Space` node carrying an explicit horizontal width in em."""
+space_node(w::Real) = Node(NodeKind.Space, "", Node[], Float64(w))
 
 # ── Recursive-descent implementation ─────────────────────────────────────────
 
 # Extract the plain-text content of a node as a string.  Used to recover the
 # operator name from the braced argument of \operatorname{…}.
 function _node_text(node::Node)::String
-    node.kind === NKChar    && return node.value
-    node.kind === NKCommand && return startswith(node.value, "\\") ? node.value[2:end] : node.value
-    (node.kind === NKSequence || node.kind === NKGroup) &&
+    node.kind === NodeKind.Char    && return node.value
+    node.kind === NodeKind.Command && return startswith(node.value, "\\") ? node.value[2:end] : node.value
+    (node.kind === NodeKind.Sequence || node.kind === NodeKind.Group) &&
         return join(_node_text(c) for c in node.children)
     return ""
 end
@@ -128,7 +99,7 @@ end
 
 # Parse atoms until \right, '}' or EOF.  The \right token is left unconsumed so
 # that the caller can record the right-delimiter glyph name.  \middle<delim> inside
-# the body is consumed here and emitted as an NKMiddle node; the layout engine uses
+# the body is consumed here and emitted as a NodeKind.Middle node; the layout engine uses
 # it to place an auto-sized inner delimiter at the correct position.
 function _parse_delimited_children!(p::_Parser)::Vector{Node}
     children = Node[]
@@ -140,7 +111,7 @@ function _parse_delimited_children!(p::_Parser)::Vector{Node}
         if k === TKCommand && _current(p).value == "\\middle"
             _advance!(p)   # consume \middle
             ps = _parse_delim_name!(p)
-            push!(children, Node(NKMiddle, ps))
+            push!(children, Node(NodeKind.Middle, ps))
         else
             push!(children, _parse_atom!(p))
         end
@@ -150,7 +121,7 @@ end
 
 # Consume one argument for a command (e.g. \frac numerator).
 # A braced group is parsed as its interior sequence; single elements are
-# unwrapped.  This differs from _parse_group! which preserves the NKGroup
+# unwrapped.  This differs from _parse_group! which preserves the NodeKind.Group
 # wrapper for explicit braces that appear in a sequence.
 function _parse_argument!(p::_Parser)::Node
     if _current(p).kind === TKLBrace
@@ -158,18 +129,18 @@ function _parse_argument!(p::_Parser)::Node
         children = _parse_sequence_children!(p)
         _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
         length(children) == 1 && return children[1]
-        return Node(NKSequence, children)
+        return Node(NodeKind.Sequence, children)
     else
         return _parse_primary!(p)
     end
 end
 
-# Parse a braced group {…} and return NKGroup with the interior children.
+# Parse a braced group {…} and return NodeKind.Group with the interior children.
 function _parse_group!(p::_Parser)::Node
     _advance!(p)   # consume '{'
     children = _parse_sequence_children!(p)
     _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
-    return Node(NKGroup, children)
+    return Node(NodeKind.Group, children)
 end
 
 # Parse atoms until '}' or EOF, returning the list of child nodes.
@@ -185,7 +156,7 @@ function _parse_sequence_children!(p::_Parser)::Vector{Node}
     return children
 end
 
-# Like _parse_sequence_children! but preserves whitespace as NKChar(' ') nodes.
+# Like _parse_sequence_children! but preserves whitespace as NodeKind.Char(' ') nodes.
 # Used for the argument of \text{} and \mbox{}, where spaces are significant.
 function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
@@ -193,7 +164,7 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
         k = _current(p).kind
         (k === TKEOF || k === TKRBrace) && break
         if k === TKSpace
-            push!(children, Node(NKChar, " "))
+            push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
         else
             push!(children, _parse_atom!(p))
@@ -209,7 +180,7 @@ function _parse_text_argument!(p::_Parser)::Node
         children = _parse_text_sequence_children!(p)
         _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
         length(children) == 1 && return children[1]
-        return Node(NKSequence, children)
+        return Node(NodeKind.Sequence, children)
     else
         return _parse_primary!(p)
     end
@@ -229,7 +200,7 @@ function _parse_atom!(p::_Parser)::Node
     if _current(p).kind === TKCommand &&
             (_current(p).value == "\\limits" || _current(p).value == "\\nolimits")
         flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
-        base = Node(NKLimitsOverride, flag, [base])
+        base = Node(NodeKind.LimitsOverride, flag, [base])
     end
 
     has_sup = false; has_sub = false
@@ -252,11 +223,11 @@ function _parse_atom!(p::_Parser)::Node
     end
 
     if has_sup && has_sub
-        return Node(NKDecorated, [base, sub_node, sup_node])
+        return Node(NodeKind.Decorated, [base, sub_node, sup_node])
     elseif has_sup
-        return Node(NKSuperscript, [base, sup_node])
+        return Node(NodeKind.Superscript, [base, sup_node])
     elseif has_sub
-        return Node(NKSubscript, [base, sub_node])
+        return Node(NodeKind.Subscript, [base, sub_node])
     else
         return base
     end
@@ -268,7 +239,7 @@ function _parse_primary!(p::_Parser)::Node
 
     if tok.kind === TKChar
         _advance!(p)
-        return Node(NKChar, tok.value)
+        return Node(NodeKind.Char, tok.value)
 
     elseif tok.kind === TKLBrace
         return _parse_group!(p)
@@ -288,7 +259,7 @@ function _parse_primary!(p::_Parser)::Node
     else
         # Anything else (unlikely in well-formed input): emit as TKChar.
         _advance!(p)
-        return Node(NKChar, tok.value)
+        return Node(NodeKind.Char, tok.value)
     end
 end
 
@@ -310,8 +281,8 @@ function _read_brace_word!(p::_Parser)::String
 end
 
 # Parse the body of a matrix environment up to the matching \end{env_name}.
-# Returns an NKMatrix node with encoded _MatrixPayload and a flat
-# row-major list of NKGroup children (one per cell).
+# Returns a NodeKind.Matrix node with encoded _MatrixPayload and a flat
+# row-major list of NodeKind.Group children (one per cell).
 # colspec: explicit column-spec string (e.g. "|l|c|r|") for \begin{array};
 #          empty for shorthand environments (pmatrix, cases, etc.) — derived
 #          automatically from info.align and the observed column count.
@@ -322,7 +293,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
     ncol_current = 0   # cells completed in the current row (0-based)
 
     function finish_cell!()
-        push!(cells, Node(NKGroup, copy(current_cell)))
+        push!(cells, Node(NodeKind.Group, copy(current_cell)))
         empty!(current_cell)
         return ncol_current += 1
     end
@@ -381,7 +352,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
     for (r, rlen) in enumerate(row_lengths)
         insert_idx += rlen
         for _ in 1:(ncol - rlen)
-            insert!(cells, insert_idx + 1, Node(NKGroup, Node[]))
+            insert!(cells, insert_idx + 1, Node(NodeKind.Group, Node[]))
             insert_idx += 1
         end
     end
@@ -400,7 +371,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
         end
     end
 
-    return Node(NKMatrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec)), cells)
+    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec)), cells)
 end
 
 # Parse a command token and return the appropriate node.
@@ -420,54 +391,54 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\frac"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKFrac, [num, den])
+        return Node(NodeKind.Frac, [num, den])
 
     elseif cmd == "\\dfrac"
         # \dfrac forces Display style regardless of nesting context (KaTeX behaviour).
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKStyleOverride, "Display", [Node(NKFrac, [num, den])])
+        return Node(NodeKind.StyleOverride, "Display", [Node(NodeKind.Frac, [num, den])])
 
     elseif cmd == "\\tfrac"
         # \tfrac forces Text style (inline fraction) regardless of nesting context.
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKStyleOverride, "Text", [Node(NKFrac, [num, den])])
+        return Node(NodeKind.StyleOverride, "Text", [Node(NodeKind.Frac, [num, den])])
 
     elseif cmd == "\\binom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKGenfrac, _encode_payload(_DelimiterPairPayload("parenleft", "parenright")), [num, den])
+        return Node(NodeKind.Genfrac, _encode_payload(_DelimiterPairPayload("parenleft", "parenright")), [num, den])
 
     elseif cmd == "\\dbinom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
-        return Node(NKStyleOverride, "Display", [Node(NKGenfrac, payload, [num, den])])
+        return Node(NodeKind.StyleOverride, "Display", [Node(NodeKind.Genfrac, payload, [num, den])])
 
     elseif cmd == "\\tbinom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
         payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
-        return Node(NKStyleOverride, "Text", [Node(NKGenfrac, payload, [num, den])])
+        return Node(NodeKind.StyleOverride, "Text", [Node(NodeKind.Genfrac, payload, [num, den])])
 
     elseif haskey(_BIG_DELIM_COMMANDS, cmd)
         # \bigl( \bigr) \Bigl[ \bigm| etc.: consume the following delimiter token.
         size_ch, cls_ch = _BIG_DELIM_COMMANDS[cmd]
         ps = _parse_delim_name!(p)
         payload = _encode_payload(_BigDelimiterPayload(ps, parse(Int, string(size_ch)), cls_ch))
-        return Node(NKBigDelim, payload, Node[])
+        return Node(NodeKind.BigDelim, payload, Node[])
 
     elseif haskey(_STYLE_COMMANDS, cmd)
         # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the
         # rest of the current group and render all of it at the overridden style.
         children = _parse_sequence_children!(p)
-        return Node(NKStyleOverride, _STYLE_COMMANDS[cmd], [Node(NKSequence, children)])
+        return Node(NodeKind.StyleOverride, _STYLE_COMMANDS[cmd], [Node(NodeKind.Sequence, children)])
 
     elseif haskey(_SIZING_MULTIPLIERS, cmd)
         # \large / \tiny etc.: consume the rest of the current group and scale it.
         children = _parse_sequence_children!(p)
-        return Node(NKSizing, string(_SIZING_MULTIPLIERS[cmd]), [Node(NKSequence, children)])
+        return Node(NodeKind.Sizing, string(_SIZING_MULTIPLIERS[cmd]), [Node(NodeKind.Sequence, children)])
 
     elseif cmd ∈ _XARROW_COMMANDS
         # \xrightarrow[below]{above}: optional below label, mandatory above label.
@@ -479,11 +450,11 @@ function _parse_command!(p::_Parser)::Node
                 push!(below_children, _parse_atom!(p))
             end
             _current(p).value == "]" && _advance!(p)   # consume ']'
-            below_node = Node(NKGroup, below_children)
+            below_node = Node(NodeKind.Group, below_children)
         end
         above_node = _parse_argument!(p)
         children = below_node === nothing ? [above_node] : [above_node, below_node]
-        return Node(NKXArrow, cmd, children)
+        return Node(NodeKind.XArrow, cmd, children)
 
     elseif cmd == "\\sqrt"
         # Optional degree: \sqrt[3]{x}
@@ -495,12 +466,12 @@ function _parse_command!(p::_Parser)::Node
                 push!(deg_children, _parse_atom!(p))
             end
             _current(p).value == "]" && _advance!(p)  # consume ']'
-            degree = Node(NKGroup, deg_children)
+            degree = Node(NodeKind.Group, deg_children)
             body = _parse_argument!(p)
-            return Node(NKSqrt, [degree, body])
+            return Node(NodeKind.Sqrt, [degree, body])
         else
             body = _parse_argument!(p)
-            return Node(NKSqrt, [body])
+            return Node(NodeKind.Sqrt, [body])
         end
 
     elseif cmd == "\\left"
@@ -514,28 +485,28 @@ function _parse_command!(p::_Parser)::Node
             _advance!(p)
             right_name = _parse_delim_name!(p)
         end
-        return Node(NKDelimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
+        return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
     elseif cmd == "\\operatorname"
         arg = _parse_argument!(p)
-        return Node(NKOperator, _node_text(arg))
+        return Node(NodeKind.Operator, _node_text(arg))
 
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
         body = _parse_argument!(p)
-        return Node(NKAccent, cmd, [body])
+        return Node(NodeKind.Accent, cmd, [body])
 
     elseif cmd == "\\overline" || cmd == "\\underline"
         body = _parse_argument!(p)
-        return Node(NKOverUnder, cmd[2:end], [body])   # value = "overline" or "underline"
+        return Node(NodeKind.OverUnder, cmd[2:end], [body])   # value = "overline" or "underline"
 
     elseif haskey(_FONT_SWITCH_COMMANDS, cmd)
         variant = _FONT_SWITCH_COMMANDS[cmd]
         body = _parse_argument!(p)
-        return Node(NKFontSwitch, variant, [body])
+        return Node(NodeKind.FontSwitch, variant, [body])
 
     elseif cmd ∈ _HORIZ_BRACE_COMMANDS
         body = _parse_argument!(p)
-        return Node(NKHorizBrace, cmd, [body])
+        return Node(NodeKind.HorizBrace, cmd, [body])
 
     elseif cmd == "\\begin"
         env_name = _read_brace_word!(p)
@@ -545,7 +516,7 @@ function _parse_command!(p::_Parser)::Node
             return _parse_matrix_body!(p, env_name, colspec)
         else
             # Unknown environment: emit a sentinel so the layout engine can skip it gracefully.
-            return Node(NKCommand, "\\begin{$(env_name)}")
+            return Node(NodeKind.Command, "\\begin{$(env_name)}")
         end
 
     elseif cmd == "\\end"
@@ -555,11 +526,11 @@ function _parse_command!(p::_Parser)::Node
 
     elseif cmd == "\\text" || cmd == "\\mbox"
         body = _parse_text_argument!(p)
-        return Node(NKText, [body])
+        return Node(NodeKind.Text, [body])
 
     else
         bare = cmd[2:end]   # strip leading '\'
-        return bare ∈ _OPERATOR_NAMES ? Node(NKOperator, bare) : Node(NKCommand, cmd)
+        return bare ∈ _OPERATOR_NAMES ? Node(NodeKind.Operator, bare) : Node(NodeKind.Command, cmd)
     end
 end
 
@@ -573,7 +544,7 @@ function _parse_math_until_shift!(p::_Parser)::Node
         k === TKSpace && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
-    return Node(NKSequence, children)
+    return Node(NodeKind.Sequence, children)
 end
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -582,12 +553,12 @@ end
     parse_latex(tokens) -> Node
 
 Parse a flat token stream (from `tokenize`) into an AST.
-Returns an `NKSequence` node at the top level.
+Returns an `NodeKind.Sequence` node at the top level.
 """
 function parse_latex(tokens::Vector{Token})::Node
     p = _Parser(tokens, 1)
     children = _parse_sequence_children!(p)
-    return Node(NKSequence, children)
+    return Node(NodeKind.Sequence, children)
 end
 
 """
@@ -626,6 +597,6 @@ function parse_environment!(p::_Parser, env_name::String)::Node
         return _parse_matrix_body!(p, env_name, colspec)
     else
         _skip_to_end_env!(p, env_name)
-        return Node(NKSequence, Node[])
+        return Node(NodeKind.Sequence, Node[])
     end
 end

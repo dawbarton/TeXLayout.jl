@@ -49,12 +49,7 @@ using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
     TKLBrace, TKRBrace, TKMathShift, TKEOF
 
 # Parser / AST node kinds
-using TeXLayout: NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
-    NKDecorated, NKFrac, NKGenfrac, NKSqrt, NKDelimited, NKBigDelim, NKAccent,
-    NKCommand, NKSpace, NKOperator, NKFontSwitch,
-    NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
-    NKOverUnder, NKText,
-    NKStyleOverride, NKSizing, NKXArrow
+using TeXLayout: NodeKind
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and

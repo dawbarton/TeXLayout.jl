@@ -95,7 +95,7 @@ const _ACCENT_CODEPOINTS = Dict{String, UInt32}(
 )
 
 # Font-switching commands mapped to their variant name.
-# The variant name is passed as `value` in the NKFontSwitch node and is used by
+# The variant name is passed as `value` in the NodeKind.FontSwitch node and is used by
 # the layout engine to select the correct Unicode math-variant codepoints.
 const _FONT_SWITCH_COMMANDS = Dict{String, String}(
     "\\mathbf" => "mathbf",
