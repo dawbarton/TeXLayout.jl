@@ -93,15 +93,17 @@ function main()
     # Font faces keyed by path — one FTFont per unique font file.
     face_cache = Dict{String, FTFont}()
     slot_path = Dict(
-        :math       => family.math,
-        :regular    => something(family.regular, family.math),
-        :italic     => something(family.italic, family.regular, family.math),
-        :bold       => something(family.bold, family.regular, family.math),
-        :bolditalic => something(family.bolditalic, family.bold, family.italic,
-            family.regular, family.math),
+        :math => family.math,
+        :regular => something(family.regular, family.math),
+        :italic => something(family.italic, family.regular, family.math),
+        :bold => something(family.bold, family.regular, family.math),
+        :bolditalic => something(
+            family.bolditalic, family.bold, family.italic,
+            family.regular, family.math
+        ),
     )
     function face_for(slot)
-        key = get(slot_path, slot, family.math)
+        key = get(slot_path, TeXLayout._font_slot_symbol(slot), family.math)
         return get!(face_cache, key) do
             FTFont(key)
         end

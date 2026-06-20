@@ -60,6 +60,21 @@
             @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in box.boxes)
         end
 
+        @testset "Styled spans emit glyphs with the requested text font slot" begin
+            full_family = font_family(:new_cm)
+            cases = (
+                TeXLayout.FontSlot.Bold,
+                TeXLayout.FontSlot.Italic,
+                TeXLayout.FontSlot.BoldItalic,
+            )
+            for slot in cases
+                span = TeXLayout.TextSpan("A", TeXLayout.TextAttrs(slot, 1.0))
+                box = TeXLayout.shape_span(shaper, span, full_family, 1.0)
+                @test length(box.boxes) == 1
+                @test box.boxes[1].element.font_slot === slot
+            end
+        end
+
         @testset "Ascent > 0 and descent >= 0 for uppercase letter" begin
             span = TeXLayout.TextSpan("A", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             box = TeXLayout.shape_span(shaper, span, family, 1.0)
@@ -225,6 +240,18 @@
             @test any(s -> s.text == "b" && s.attrs.slot === TeXLayout.FontSlot.BoldItalic, all_spans)
         end
 
+        @testset "Inline math inside text style preserves surrounding attributes" begin
+            doc = TeXLayout.parse_document("\\textbf{a \$x\$ b}")
+            runs = doc[1].lines[1].runs
+            @test length(runs) == 3
+            @test runs[1] isa TeXLayout.TextRun
+            @test runs[2] isa TeXLayout.MathRun
+            @test runs[3] isa TeXLayout.TextRun
+            @test all(s.attrs.slot === TeXLayout.FontSlot.Bold for s in runs[1].spans)
+            @test all(s.attrs.slot === TeXLayout.FontSlot.Bold for s in runs[3].spans)
+            @test runs[2].style === Text
+        end
+
         @testset "Inline math produces MathRun with Text style" begin
             doc = TeXLayout.parse_document("x is \$x^2\$ here")
             runs = doc[1].lines[1].runs
@@ -313,6 +340,17 @@
             b2 = TeXLayout.TeXBox([lb], 0.5, 0.5, 0.1)
             result = TeXLayout.hconcat([b1, b2])
             @test result.boxes[1].x ≈ 1.0
+        end
+
+        @testset "Internal HBox shapes children with horizontal advances" begin
+            lb = LayoutBox(Space(0.5), 0.0, 0.0, 1.0)
+            empty = TeXLayout.ShapedBox(LayoutBox[], 1.0, 0.5, 0.1)
+            visible = TeXLayout.ShapedBox([lb], 0.5, 0.5, 0.1)
+            tree = TeXLayout.HBox([empty, visible])
+            boxes = TeXLayout.shape(tree)
+            @test tree.width ≈ 1.5
+            @test length(boxes) == 1
+            @test boxes[1].x ≈ 1.0
         end
 
         @testset "vstack: empty input → zero TeXBox" begin
@@ -492,6 +530,58 @@
             result = TeXLayout.layout_document(src; family = family)
             @test !isempty(result.boxes)
             @test minimum(b.y for b in result.boxes) < 0.0
+        end
+
+        @testset "Display-only document does not start with an empty baseline" begin
+            full_family = font_family(:new_cm)
+            result = TeXLayout.layout_document("\\begin{equation}x\\end{equation}"; family = full_family)
+            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            @test length(glyphs) == 1
+            @test abs(glyphs[1].y) < 0.2
+            @test result.descent < 1.0
+        end
+
+        @testset "Display skips are explicit extra space, not synthetic lines" begin
+            full_family = font_family(:new_cm)
+            src = "\\begin{equation}x\\end{equation}b"
+            no_skip = TeXLayout.layout_document(
+                src; family = full_family, abovedisplayskip = 0.0, belowdisplayskip = 0.0,
+            )
+            below_skip = TeXLayout.layout_document(
+                src; family = full_family, abovedisplayskip = 0.0, belowdisplayskip = 0.5,
+            )
+
+            function first_regular_y(box)
+                glyphs = filter(
+                    b -> b.element isa Glyph &&
+                        b.element.font_slot === TeXLayout.FontSlot.Regular,
+                    box.boxes,
+                )
+                @test length(glyphs) == 1
+                return glyphs[1].y
+            end
+
+            @test first_regular_y(below_skip) ≈ first_regular_y(no_skip) - 0.5
+
+            src2 = "a\\begin{equation}x\\end{equation}"
+            no_above = TeXLayout.layout_document(
+                src2; family = full_family, abovedisplayskip = 0.0, belowdisplayskip = 0.0,
+            )
+            with_above = TeXLayout.layout_document(
+                src2; family = full_family, abovedisplayskip = 0.5, belowdisplayskip = 0.0,
+            )
+
+            function first_math_y(box)
+                glyphs = filter(
+                    b -> b.element isa Glyph &&
+                        b.element.font_slot === TeXLayout.FontSlot.Math,
+                    box.boxes,
+                )
+                @test length(glyphs) == 1
+                return glyphs[1].y
+            end
+
+            @test first_math_y(with_above) ≈ first_math_y(no_above) - 0.5
         end
 
         @testset "Case 9: first line glyphs have y ≈ 0 (y-origin invariant)" begin

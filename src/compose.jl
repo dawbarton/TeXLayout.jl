@@ -84,6 +84,9 @@ function measure(boxes::Vector{LayoutBox}, upm::Float64)::TeXBox
     return TeXBox(boxes, width, max(asc, 0.0), max(desc, 0.0))
 end
 
+_as_box(box::TeXBox) = ShapedBox(box.boxes, box.width, box.ascent, box.descent)
+_as_texbox(box::Box) = TeXBox(shape(box), _box_width(box), _box_ascent(box), _box_descent(box))
+
 # ── hconcat ───────────────────────────────────────────────────────────────────
 
 """
@@ -93,18 +96,7 @@ Concatenate `TeXBox` fragments horizontally, placing each part's origin at the
 cursor after the previous part. Width = sum of part widths; ascent/descent = max.
 """
 function hconcat(parts::Vector{TeXBox})::TeXBox
-    isempty(parts) && return TeXBox(LayoutBox[], 0.0, 0.0, 0.0)
-    out = LayoutBox[]
-    cursor = 0.0
-    asc = 0.0
-    desc = 0.0
-    for p in parts
-        _emit_shifted!(out, p.boxes, cursor, 0.0)
-        cursor += p.width
-        asc = max(asc, p.ascent)
-        desc = max(desc, p.descent)
-    end
-    return TeXBox(out, cursor, asc, desc)
+    return _as_texbox(HBox([_as_box(part) for part in parts]))
 end
 
 # ── vstack helpers ────────────────────────────────────────────────────────────
@@ -116,13 +108,6 @@ _dx_for(a, W::Float64, w::Float64) =
     _normalise_alignment(a) === Alignment.Right ? W - w :
     _normalise_alignment(a) === Alignment.Center ? (W - w) / 2.0 :
     0.0
-
-_place!(out::Vector{LayoutBox}, box::TeXBox, dx::Float64, dy::Float64) =
-    _emit_shifted!(out, box.boxes, dx, dy)
-
-# Empty strut with height `h`: consumes vertical space via the ascent term of
-# the next baseline-skip computation without emitting any visible boxes.
-_vskip(h::Float64) = TeXBox(LayoutBox[], 0.0, h, 0.0)
 
 # ── vstack ────────────────────────────────────────────────────────────────────
 
@@ -145,24 +130,73 @@ function vstack(
         width::Union{Nothing, Float64},
         align_of,
     )::TeXBox
-    isempty(items) && return TeXBox(LayoutBox[], 0.0, 0.0, 0.0)
+    return _as_texbox(
+        _vstack_tree(
+            items;
+            line_height,
+            lineskip,
+            width,
+            align_of,
+            extra_before = zeros(length(items)),
+        ),
+    )
+end
+
+function _vstack_tree(
+        items::Vector{TeXBox};
+        line_height::Float64,
+        lineskip::Float64,
+        width::Union{Nothing, Float64},
+        align_of,
+        extra_before::Vector{Float64},
+        extra_after_last::Float64 = 0.0,
+    )::VBox
+    isempty(items) && return VBox(Box[], Float64[], Float64[], 0.0, 0.0, 0.0)
+    length(extra_before) == length(items) || error("extra_before length must match items")
+
     W = width === nothing ? maximum(it.width for it in items) : width
-    out = LayoutBox[]
-    _place!(out, items[1], _dx_for(align_of(1), W, items[1].width), 0.0)
+    children = Box[_as_box(item) for item in items]
+    offsets = Float64[0.0]
+    dxs = Float64[_dx_for(align_of(1), W, items[1].width)]
+
     prevdepth = items[1].descent
     last_y = 0.0
     y = 0.0
     for i in 2:length(items)
         it = items[i]
-        adv = max(line_height, prevdepth + it.ascent + lineskip)
+        adv = max(line_height, prevdepth + it.ascent + lineskip) + extra_before[i]
         y -= adv
-        _place!(out, it, _dx_for(align_of(i), W, it.width), y)
+        push!(offsets, y)
+        push!(dxs, _dx_for(align_of(i), W, it.width))
         prevdepth = it.descent
         last_y = y
     end
+
     ascent = items[1].ascent
-    descent = -last_y + items[end].descent
-    return TeXBox(out, W, ascent, descent)
+    descent = -last_y + items[end].descent + extra_after_last
+    return VBox(children, offsets, dxs, W, ascent, descent)
+end
+
+function _vstack_with_skips(
+        items::Vector{TeXBox};
+        line_height::Float64,
+        lineskip::Float64,
+        width::Union{Nothing, Float64},
+        align_of,
+        extra_before::Vector{Float64},
+        extra_after_last::Float64 = 0.0,
+    )::TeXBox
+    return _as_texbox(
+        _vstack_tree(
+            items;
+            line_height,
+            lineskip,
+            width,
+            align_of,
+            extra_before,
+            extra_after_last,
+        ),
+    )
 end
 
 # ── Per-run and per-line layout ───────────────────────────────────────────────
@@ -210,32 +244,38 @@ function layout_document(
 
     items = TeXBox[]
     aligns = Alignment.T[]
+    extra_before = Float64[]
+    pending_skip = 0.0
+
+    function push_item!(item::TeXBox, align::Alignment.T, skip_before::Float64 = 0.0)
+        push!(items, item)
+        push!(aligns, align)
+        push!(extra_before, length(items) == 1 ? 0.0 : skip_before)
+        return nothing
+    end
 
     for blk in doc
         if blk isa ParagraphBlock
             for line in blk.lines
-                push!(items, _layout_line(line, family, opts, base_scale))
-                push!(aligns, opts.align)
+                push_item!(_layout_line(line, family, opts, base_scale), opts.align, pending_skip)
+                pending_skip = 0.0
             end
         else   # DisplayBlock
-            opts.abovedisplayskip > 0 && (
-                push!(items, _vskip(opts.abovedisplayskip)); push!(aligns, Alignment.Left)
-            )
-            push!(items, hlayout_math(blk.node, family, Display))
-            push!(aligns, opts.display_align)
-            opts.belowdisplayskip > 0 && (
-                push!(items, _vskip(opts.belowdisplayskip)); push!(aligns, Alignment.Left)
-            )
+            skip = (isempty(items) ? 0.0 : pending_skip + opts.abovedisplayskip)
+            push_item!(hlayout_math(blk.node, family, Display), opts.display_align, skip)
+            pending_skip = opts.belowdisplayskip
         end
     end
 
     isempty(items) && return TeXBox(LayoutBox[], 0.0, 0.0, 0.0)
 
-    return vstack(
+    return _vstack_with_skips(
         items;
         line_height = opts.line_height,
         lineskip = opts.lineskip,
         width = opts.width,
         align_of = i -> aligns[i],
+        extra_before,
+        extra_after_last = pending_skip,
     )
 end

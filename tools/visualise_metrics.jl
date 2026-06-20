@@ -261,7 +261,7 @@ function main()
             )
 
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
-            face = el.font_slot === :regular ? face_reg : face_math
+            face = el.font_slot === TeXLayout.FontSlot.Regular ? face_reg : face_math
 
             local bmp, ext
             try

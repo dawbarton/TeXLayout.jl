@@ -110,7 +110,7 @@ function render_expr(
         if el isa Glyph
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_x(box.x); pen_cy = em_y(box.y)
-            face = (el.font_slot === :regular && face_regular !== nothing) ?
+            face = (el.font_slot === TeXLayout.FontSlot.Regular && face_regular !== nothing) ?
                 face_regular : face_math
             local bmp, ext
             try

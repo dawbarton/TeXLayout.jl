@@ -14,10 +14,10 @@ A single glyph to be rendered.
 
 `glyph_name` is the PostScript glyph name; the renderer resolves it to a glyph
 index via its font handle.  `font_slot` tells the renderer which font to use:
-`FontSlot.Math` for the OpenType math font (all math-mode glyphs), or `FontSlot.Regular` for
-the companion text font (glyphs inside `\\text{}`/`\\mbox{}`).  The metric
-fields are cached from the chosen font in design units so the renderer need not
-re-query them.
+`FontSlot.Math` for the OpenType math font (math-mode glyphs), or one of the text
+font slots (`FontSlot.Regular`, `FontSlot.Bold`, `FontSlot.Italic`,
+`FontSlot.BoldItalic`) for document text glyphs.  The metric fields are cached
+from the chosen font in design units so the renderer need not re-query them.
 """
 struct Glyph <: TeXElement
     glyph_name::String

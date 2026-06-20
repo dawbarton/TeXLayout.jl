@@ -326,7 +326,7 @@ abstract type TeXElement end
 
 struct Glyph <: TeXElement
     glyph_name::String
-    font_slot::Symbol       # :math | :regular
+    font_slot::FontSlot.T
     advance_width::Int
     left_side_bearing::Int
     x_min::Int; y_min::Int; x_max::Int; y_max::Int
@@ -362,9 +362,10 @@ baseline; x right, y up).
 
 `font_slot` tells the renderer which physical font file to open for glyph-index
 resolution:
-- `:math` → `family.math` (used for all math-mode glyphs).
-- `:regular` → `family.regular`, falling back to `family.math` if `regular` is
-  `nothing` (used for glyphs inside `\text{}`/`\mbox{}`).
+- `FontSlot.Math` → `family.math` (used for math-mode glyphs).
+- `FontSlot.Regular`, `FontSlot.Bold`, `FontSlot.Italic`, and
+  `FontSlot.BoldItalic` → the corresponding text companion font, falling back
+  through regular/math when a companion slot is absent.
 
 ### Coordinate system
 
@@ -592,8 +593,10 @@ handles:
 - BMP exception codepoints for specific characters (e.g. ℂ U+2102 for `\mathbb{C}`,
   ℌ U+210C for `\mathfrak{H}`, ∂ U+2202 for bold `\partial`).
 
-The `bold`, `italic`, and `bolditalic` `FontFamily` slots are **not** yet used by font
-switching; all switching operates within the Unicode math block.
+Math-mode font switching operates within the Unicode math block.  The `bold`,
+`italic`, and `bolditalic` `FontFamily` slots are used by the document text layer
+for `\textbf`, `\textit`, and nested bold-italic text, but not yet by math-mode
+font switching.
 
 ---
 
@@ -1014,9 +1017,9 @@ increases are usually more actionable than nanosecond-scale timing movement.
 - **Font-switching outside the Unicode math block** — `\mathbf`, `\boldsymbol`, and
   related commands cover the Mathematical Alphanumeric Symbols block (U+1D400–U+1D7FF)
   and a set of BMP exceptions.  Characters outside both ranges (e.g. accented Latin
-  letters in a `\mathbf` argument) fall back to the default glyph.  The `bold`,
-  `italic`, and `bolditalic` `FontFamily` slots are reserved for future use to cover
-  these cases.
+  letters in a `\mathbf` argument) fall back to the default glyph.  The document
+  text layer uses the `bold`, `italic`, and `bolditalic` `FontFamily` slots, but
+  math-mode font switching does not yet use those slots to cover these cases.
 
 - **Makie type piracy** — the `MathTeXEngineExt` extension adds a method to a function
   and argument type that TeXLayout does not own.  Alternative integration strategies

@@ -35,6 +35,7 @@ TeXLayout.jl/
 │   │   ├── extensible.jl
 │   │   ├── matrix.jl
 │   │   └── scripts.jl
+│   ├── boxes.jl            # Internal measured box tree + shape pass for composition
 │   ├── shaping.jl          # TextShaper interface, MetricShaper, per-span glyph shaping
 │   ├── document.jl         # Document AST (Block/Line/Run/TextSpan/TextAttrs) + parse_document
 │   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
@@ -64,6 +65,7 @@ TeXLayout.jl/
 │   ├── stress_test_content.jl     # Shared test expression definitions (library, not executable)
 │   ├── stress_test_freetype.jl    # Render stress-test sheet via FreeType (no Makie required)
 │   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
+│   ├── stress_test_text.jl        # Render mixed text/math document stress-test sheet
 │   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
 │   ├── stress_test_all.jl         # Batch-render all font families and compare with reference images
 │   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
@@ -98,6 +100,7 @@ All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activa
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
 | `stress_test_freetype.jl` | Full stress-test sheet rendered via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [out.png] [:font_symbol]` |
 | `stress_test_makie.jl` | Full stress-test sheet rendered via CairoMakie. | `julia tools/stress_test_makie.jl [out.png\|out.pdf] [:font_symbol]` |
+| `stress_test_text.jl` | Mixed text/math document stress-test sheet rendered via `layout_document`; source text appears beside the rendered output. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
 | `stress_test_all.jl` | Batch-render all 8 bundled families and diff against reference images from the `v0.1.0-stress` release. | `julia tools/stress_test_all.jl` |
 | `prepare_font_artifacts.jl` | Download fonts from CTAN/GitHub, build artifact tarballs, and draft `Artifacts.toml` stanzas.  Run when adding fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
 
@@ -183,11 +186,11 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
   formula baseline.
 - Element subtypes: `Glyph` (PS name + metrics), `HRule` (width + thickness in em),
   `VRule` (height + thickness in em), `Space` (width in em).
-- `Glyph.font_slot` — `FontSlot.Math` or `FontSlot.Regular`.  Tells the renderer
-  which font file to use for glyph-index resolution (`FontSlot.Regular` falls
-  back to `FontSlot.Math` when no companion regular font is configured).  All
-  math-mode glyphs carry `FontSlot.Math`; glyphs from `\text{}`/`\mbox{}`
-  carry `FontSlot.Regular`.
+- `Glyph.font_slot` — tells the renderer which font file to use for glyph-index
+  resolution.  Math-mode glyphs carry `FontSlot.Math`; document text glyphs may
+  carry `FontSlot.Regular`, `FontSlot.Bold`, `FontSlot.Italic`, or
+  `FontSlot.BoldItalic`, each falling back through the configured `FontFamily`
+  slots when the requested companion font is absent.
 - `_LayoutCtx` carries: `family`, `mc` (all MATH constants), `upm`,
   `vert_constructions` / `horiz_constructions` (extensible glyph tables),
   `top_accent_attachments`, `italic_corrections`, `min_connector_overlap`,

@@ -222,9 +222,8 @@ abstract type TextShaper end
 
 Contract (MUST be honoured by every shaper, including the HarfBuzz extension):
   • returned boxes are in em units, baseline at y = 0, first glyph origin at x = 0;
-  • each emitted Glyph carries the font's PostScript glyph_name and a font_slot of
-    :regular (the renderer resolves name→GID; HarfBuzz extension maps GID→name via
-    FreeType FT_Get_Glyph_Name);
+  • each emitted Glyph carries the font's PostScript glyph_name and the resolved
+    text font slot (`:regular`, `:bold`, `:italic`, or `:bolditalic`);
   • width = total advance, ascent/descent = max ink extents (≥ 0);
   • missing glyphs are skipped (advance still applied if known, else 0)."""
 function shape_span end

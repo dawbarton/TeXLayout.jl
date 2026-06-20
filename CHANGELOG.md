@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DisplayBlock` from mixed text/math input
 - `hconcat` / `vstack` composition primitives (internal)
 - `tools/visualise_text.jl` — render a mixed text/math string to PNG via FreeType
+- `tools/stress_test_text.jl` — render a mixed text/math document stress sheet
+  with literal source inputs beside `layout_document` output.
 - Layout-equivalence snapshot tests for representative math and document cases.
 - BenchmarkTools harness with configurable runtime/allocation regression thresholds.
 
@@ -31,8 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored internal parser and layout organization: AST/token kinds now use
   namespaced `EnumX.@enumx` enums, parser/layout lookup tables live under
   `src/tables/`, and feature-specific layout helpers live under `src/layout/`.
+- Document composition now uses an internal measured box-tree layer behind the
+  existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
 - Renamed the agent/developer guide to `AGENTS.md`; `CLAUDE.md` is retained as a
   compatibility symlink.
+
+### Fixed
+- `layout_document` now applies display skips as explicit extra vertical space
+  instead of synthetic empty baselines, so a display-only document starts at the
+  first real display baseline.
+- FreeType visualisation tools now compare `Glyph.font_slot` against `FontSlot`
+  enum values instead of stale symbol values when choosing text fonts.
 
 ## [v0.1.1] - 2026-06-19
 

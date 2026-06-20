@@ -158,8 +158,14 @@ for box in boxes
 
     if el isa Glyph
         # Resolve the physical font file.
-        font_path = if el.font_slot === :math
+        font_path = if el.font_slot === TeXLayout.FontSlot.Math
             family.math
+        elseif el.font_slot === TeXLayout.FontSlot.Bold
+            something(family.bold, family.regular, family.math)
+        elseif el.font_slot === TeXLayout.FontSlot.Italic
+            something(family.italic, family.regular, family.math)
+        elseif el.font_slot === TeXLayout.FontSlot.BoldItalic
+            something(family.bolditalic, family.bold, family.italic, family.regular, family.math)
         else
             something(family.regular, family.math)
         end

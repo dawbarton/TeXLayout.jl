@@ -663,3 +663,70 @@
     style (`\dfrac`) denominator (0.686 em) > threshold, correctly triggers lineskip path.
   - Exports: layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper.
   - Added tools/visualise_text.jl for FreeType rendering of layout_document output.
+
+## 2026-06-20T14:42+00:00 Text layout architecture review
+
+- Reviewed `future.md`, `text-spec.md`, and the recent refactor notes after the
+  `latex-text` merge.
+- Current state: Option 1 text/document layer is implemented as eager measured
+  `TeXBox` composition (`shape_span`, `hconcat`, `vstack`, `layout_document`) while
+  the math engine still lays out by mutating flat `Vector{LayoutBox}` scratch buffers.
+- Structural direction: preserve the public `layout_document`/`TeXBox` contract,
+  then introduce an internal box-tree module that first powers text composition and
+  only later absorbs math constructs construct-by-construct.
+- Codebase guardrail: build on the recent refactor boundaries (`enums.jl`,
+  `payloads.jl`, `src/tables/`, `src/layout/*.jl`) instead of adding another parallel
+  layout path.
+- Near-term plan: harden the existing text wrapper, add richer document/layout
+  regression tests, factor composition semantics into internal HBox/VBox primitives,
+  then migrate selected math constructs where the box abstraction clearly removes
+  scratch-vector measurement logic.
+
+## 2026-06-20T14:59+00:00 Text wrapper hardening step
+
+- Left HarfBuzz implementation out of scope and focused on validating the current
+  `MetricShaper`/`TeXBox` wrapper layer.
+- Fixed `layout_document` display spacing: `abovedisplayskip` and
+  `belowdisplayskip` are now explicit extra gaps instead of synthetic empty
+  baselines.  A display-only document therefore starts near the first real display
+  baseline instead of being pushed down by an empty vskip item.
+- Added text regression tests for styled span font slots, inline math inside a
+  styled text group, display-only y-origin behavior, and display skip deltas.
+- Updated the document layout snapshot for the intentional display-spacing change.
+- Fixed FreeType debug renderers (`visualise_text.jl`, `visualise_metrics.jl`,
+  `stress_test_freetype.jl`) to compare `Glyph.font_slot` as `FontSlot` enum values
+  instead of stale symbols.
+- Validation: full package test suite passes (1121/1121).  `visualise_text.jl` and
+  `visualise_metrics.jl` smoke renders succeeded after refreshing the tools
+  environment metadata for the local TeXLayout checkout.
+
+## 2026-06-20T15:02+00:00 Internal box tree introduced for document composition
+
+- Added `src/boxes.jl` with internal measured `Box` primitives:
+  `ShapedBox`, `HBox`, `VBox`, and a recursive `shape` pass back to
+  `Vector{LayoutBox}`.
+- Rebased `hconcat`, `vstack`, and `layout_document` stacking through the internal
+  box layer while preserving the public `TeXBox` result type and renderer contract.
+- Kept math layout unchanged; existing math `_layout_*!` helpers still emit flat
+  `LayoutBox` vectors directly.
+- Added a direct composition test for `HBox` shaping, in addition to the existing
+  `hconcat`/`vstack` behavior tests.
+- Validation after the internal refactor: full package test suite passes
+  (1124/1124), and `visualise_text.jl` / `visualise_metrics.jl` smoke renders still
+  succeed.
+
+## 2026-06-20T15:16+00:00 Text stress-test sheet tool
+
+- Added `tools/stress_test_text.jl`, a PNG stress-test renderer for
+  `layout_document` output.
+- The sheet places literal LaTeX/document source in a left column and the rendered
+  mixed text/math output in a right column.
+- Coverage includes plain text, significant spaces, explicit line breaks, fixed
+  width alignment, text styles/nesting, inline math, display `equation`/`align`/
+  `gather`, tall inline math, line-height options, malformed inline math, unknown
+  commands, empty styled groups, and display-only input.
+- Implementation uses FreeType rendering directly so it exercises TeXLayout's
+  document layout path rather than Makie's LaTeXString math-only path.
+- Validation: `julia --project=tools tools/stress_test_text.jl :new_cm
+  /tmp/texlayout-text-stress.png` succeeded and the generated sheet was visually
+  inspected.
