@@ -54,26 +54,26 @@ responsibility.
 
 ### Token kinds
 
-`TokenKind` is a Julia `@enum` with the following values:
+`TokenKind` is an internal `EnumX.@enumx` namespace with the following values:
 
 | Value | Description |
 |:------|:------------|
-| `TKChar` | Ordinary character: letter, digit, punctuation, or any other non-special Unicode scalar |
-| `TKCommand` | A backslash command: `\alpha`, `\\`, `\{`, `\,`, etc. |
-| `TKSup` | Superscript operator `^` |
-| `TKSub` | Subscript operator `_` |
-| `TKLBrace` | Opening brace `{` |
-| `TKRBrace` | Closing brace `}` |
-| `TKMathShift` | Dollar sign `$` |
-| `TKAmpersand` | Column separator `&` (used in array/matrix environments) |
-| `TKSpace` | A whitespace run or an explicit space character (`~`) |
-| `TKEOF` | End-of-input sentinel, always present as the last token |
+| `TokenKind.Char` | Ordinary character: letter, digit, punctuation, or any other non-special Unicode scalar |
+| `TokenKind.Command` | A backslash command: `\alpha`, `\\`, `\{`, `\,`, etc. |
+| `TokenKind.Sup` | Superscript operator `^` |
+| `TokenKind.Sub` | Subscript operator `_` |
+| `TokenKind.LBrace` | Opening brace `{` |
+| `TokenKind.RBrace` | Closing brace `}` |
+| `TokenKind.MathShift` | Dollar sign `$` |
+| `TokenKind.Ampersand` | Column separator `&` (used in array/matrix environments) |
+| `TokenKind.Space` | A whitespace run or an explicit space character (`~`) |
+| `TokenKind.EOF` | End-of-input sentinel, always present as the last token |
 
 ### Token struct
 
 ```julia
 struct Token
-    kind::TokenKind
+    kind::TokenKind.T
     value::String   # raw source text of the token
     pos::Int        # 1-based byte offset in the source string
 end
@@ -89,30 +89,30 @@ The lexer scans the input string from left to right using UTF-8 codepoint iterat
 (`nextind`/`prevind`):
 
 - **Multi-letter commands** — when a `\` is followed by a letter (`isletter`), the
-  lexer greedily consumes subsequent letters.  Example: `\alpha` → one `TKCommand`
+  lexer greedily consumes subsequent letters.  Example: `\alpha` → one `TokenKind.Command`
   token with value `"\\alpha"`.
 - **Single non-letter commands** — when a `\` is followed by any non-letter character,
-  exactly that one character is consumed.  Example: `\{` → `TKCommand("\\{")`;
-  `\\` → `TKCommand("\\\\")`.
-- **Bare backslash at end of input** — treated as `TKChar("\\")` rather than the start
+  exactly that one character is consumed.  Example: `\{` → `TokenKind.Command("\\{")`;
+  `\\` → `TokenKind.Command("\\\\")`.
+- **Bare backslash at end of input** — treated as `TokenKind.Char("\\")` rather than the start
   of a command.
 - **Whitespace runs** — any sequence of characters satisfying `isspace` is collapsed
-  into a single `TKSpace(" ")` token regardless of length or composition.  The parser
-  ignores `TKSpace` tokens in math mode and preserves them as explicit spaces in text
+  into a single `TokenKind.Space(" ")` token regardless of length or composition.  The parser
+  ignores `TokenKind.Space` tokens in math mode and preserves them as explicit spaces in text
   mode.
-- **Tilde** — `~` is immediately emitted as `TKSpace("~")`.  In LaTeX, `~` is a
+- **Tilde** — `~` is immediately emitted as `TokenKind.Space("~")`.  In LaTeX, `~` is a
   non-breaking inter-word space; in math mode it is effectively ignored like any other
   space.
 - **Other characters** — every other codepoint (including multi-byte UTF-8) is emitted
-  as a single `TKChar` carrying the one-character string.
+  as a single `TokenKind.Char` carrying the one-character string.
 
-### TKEOF sentinel invariant
+### TokenKind.EOF sentinel invariant
 
-The lexer **always** appends a single `TKEOF` sentinel at byte position
+The lexer **always** appends a single `TokenKind.EOF` sentinel at byte position
 `ncodeunits(input) + 1`, even for the empty string.  The parser is designed to never
-advance past this sentinel: `_parse_primary!` returns a zero-advance `NKSpace` node
-when it sees `TKEOF` without consuming it, and every loop in the parser checks for
-`TKEOF` before calling sub-parsers.  Violating this invariant would cause out-of-bounds
+advance past this sentinel: `_parse_primary!` returns a zero-advance `NodeKind.Space` node
+when it sees `TokenKind.EOF` without consuming it, and every loop in the parser checks for
+`TokenKind.EOF` before calling sub-parsers.  Violating this invariant would cause out-of-bounds
 access into the token vector.
 
 ---
@@ -126,10 +126,10 @@ a hand-written recursive-descent parser with one-token lookahead.
 
 ```julia
 struct Node
-    kind::NodeKind
+    kind::NodeKind.T
     value::String           # source text for leaf nodes; command name for interior nodes
     children::Vector{Node}
-    width::Float64          # em units; meaningful only for NKSpace; 0.0 otherwise
+    width::Float64          # em units; meaningful only for NodeKind.Space; 0.0 otherwise
 end
 ```
 
@@ -140,56 +140,56 @@ all fields:
 Node(kind, value)                 # leaf: no children, width = 0.0
 Node(kind, children)              # interior: empty value, width = 0.0
 Node(kind, value, children)       # interior with value: width = 0.0
-space_node(w)                     # NKSpace with given width in em
+space_node(w)                     # NodeKind.Space with given width in em
 ```
 
 ### Node kinds
 
-`NodeKind` is an `@enum` with the following values:
+`NodeKind` is an internal `EnumX.@enumx` namespace with the following values:
 
 | Kind | Children | `value` | Notes |
 |:-----|:---------|:--------|:------|
-| `NKChar` | — | single character string | letter, digit, punctuation |
-| `NKSequence` | ordered sequence | — | implicit group; top-level wrapper; also used by style-switch body |
-| `NKGroup` | ordered sequence | — | explicit `{…}` braced group; also used for matrix cells |
-| `NKSuperscript` | `[base, sup]` | — | `^` when `_` is absent on the same base |
-| `NKSubscript` | `[base, sub]` | — | `_` when `^` is absent on the same base |
-| `NKDecorated` | `[base, sub, sup]` | — | both `_` and `^` on the same base, in that fixed child order |
-| `NKFrac` | `[num, den]` | — | `\frac{num}{den}` |
-| `NKSqrt` | `[body]` or `[degree, body]` | — | `\sqrt{body}` or `\sqrt[degree]{body}` |
-| `NKDelimited` | interior sequence | `"left_ps\x00right_ps"` | `\left…\right` pair; `\x00` separates PS glyph names |
-| `NKAccent` | `[base]` | command string e.g. `"\\hat"` | non-stretchy accent commands |
-| `NKOverUnder` | `[body]` | `"overline"` or `"underline"` | `\overline`/`\underline` |
-| `NKCommand` | — | full token including `\` | unrecognised command or atom-producing symbol |
-| `NKSpace` | — | `""` | explicit horizontal space; width carried in `.width` field (em) |
-| `NKText` | `[body NKSequence]` | — | `\text{…}` / `\mbox{…}`; text-mode fragment |
-| `NKOperator` | — | bare operator name e.g. `"sin"` | `\sin`, `\operatorname{…}` |
-| `NKLimitsOverride` | `[base]` | `"limits"` or `"nolimits"` | `\limits` / `\nolimits` override |
-| `NKFontSwitch` | `[body]` | variant name e.g. `"mathbf"` | `\mathbf{…}`, `\mathbb{…}`, … |
-| `NKHorizBrace` | `[body]` | bare command name e.g. `"overbrace"` | `\overbrace`, `\underbrace`, … |
-| `NKMatrix` | flat row-major list of `NKGroup` cells | `"env\x00nrow\x00colspec"` | `\begin{env}…\end{env}` |
-| `NKMiddle` | — | PS glyph name | `\middle<delim>`; auto-sized inner delimiter |
-| `NKStyleOverride` | `[body]` | style name e.g. `"Display"` | `\dfrac`, `\tfrac`, `\displaystyle`, … |
-| `NKSizing` | `[body NKSequence]` | Float64 multiplier as string | `\large`, `\tiny`, … |
-| `NKXArrow` | `[above]` or `[above, below]` | command string | `\xrightarrow`, `\xleftarrow`, … |
+| `NodeKind.Char` | — | single character string | letter, digit, punctuation |
+| `NodeKind.Sequence` | ordered sequence | — | implicit group; top-level wrapper; also used by style-switch body |
+| `NodeKind.Group` | ordered sequence | — | explicit `{…}` braced group; also used for matrix cells |
+| `NodeKind.Superscript` | `[base, sup]` | — | `^` when `_` is absent on the same base |
+| `NodeKind.Subscript` | `[base, sub]` | — | `_` when `^` is absent on the same base |
+| `NodeKind.Decorated` | `[base, sub, sup]` | — | both `_` and `^` on the same base, in that fixed child order |
+| `NodeKind.Frac` | `[num, den]` | — | `\frac{num}{den}` |
+| `NodeKind.Sqrt` | `[body]` or `[degree, body]` | — | `\sqrt{body}` or `\sqrt[degree]{body}` |
+| `NodeKind.Delimited` | interior sequence | `"left_ps\x00right_ps"` | `\left…\right` pair; `\x00` separates PS glyph names |
+| `NodeKind.Accent` | `[base]` | command string e.g. `"\\hat"` | non-stretchy accent commands |
+| `NodeKind.OverUnder` | `[body]` | `"overline"` or `"underline"` | `\overline`/`\underline` |
+| `NodeKind.Command` | — | full token including `\` | unrecognised command or atom-producing symbol |
+| `NodeKind.Space` | — | `""` | explicit horizontal space; width carried in `.width` field (em) |
+| `NodeKind.Text` | `[body NodeKind.Sequence]` | — | `\text{…}` / `\mbox{…}`; text-mode fragment |
+| `NodeKind.Operator` | — | bare operator name e.g. `"sin"` | `\sin`, `\operatorname{…}` |
+| `NodeKind.LimitsOverride` | `[base]` | `"limits"` or `"nolimits"` | `\limits` / `\nolimits` override |
+| `NodeKind.FontSwitch` | `[body]` | variant name e.g. `"mathbf"` | `\mathbf{…}`, `\mathbb{…}`, … |
+| `NodeKind.HorizBrace` | `[body]` | bare command name e.g. `"overbrace"` | `\overbrace`, `\underbrace`, … |
+| `NodeKind.Matrix` | flat row-major list of `NodeKind.Group` cells | `"env\x00nrow\x00colspec"` | `\begin{env}…\end{env}` |
+| `NodeKind.Middle` | — | PS glyph name | `\middle<delim>`; auto-sized inner delimiter |
+| `NodeKind.StyleOverride` | `[body]` | style name e.g. `"Display"` | `\dfrac`, `\tfrac`, `\displaystyle`, … |
+| `NodeKind.Sizing` | `[body NodeKind.Sequence]` | Float64 multiplier as string | `\large`, `\tiny`, … |
+| `NodeKind.XArrow` | `[above]` or `[above, below]` | command string | `\xrightarrow`, `\xleftarrow`, … |
 
 A few notes on specific kinds:
 
-**`NKDecorated` child ordering** — children are always `[base, sub, sup]` regardless of
+**`NodeKind.Decorated` child ordering** — children are always `[base, sub, sup]` regardless of
 the order in which `_` and `^` appeared in the source.  The layout engine always reads
 `children[1]` as the base, `children[2]` as the subscript, and `children[3]` as the
 superscript.
 
-**`NKSpace` width encoding** — the `.width` field carries the em value directly (may be
+**`NodeKind.Space` width encoding** — the `.width` field carries the em value directly (may be
 negative for `\!`, `\negmedspace`, etc.).  Explicit kern commands such as `\kern 5pt`,
-`\mkern 3mu`, and `\hskip 1em` are also parsed into `NKSpace` nodes with the computed em
+`\mkern 3mu`, and `\hskip 1em` are also parsed into `NodeKind.Space` nodes with the computed em
 value.  1 mu = 1/18 em.
 
-**`NKDelimited` value encoding** — the PostScript glyph names of the left and right
+**`NodeKind.Delimited` value encoding** — the PostScript glyph names of the left and right
 delimiters are joined by a `\x00` byte.  An empty substring means a null delimiter
 (nothing rendered), corresponding to `\left.` or `\right.` in the source.
 
-**`NKMatrix` value encoding** — the `value` field packs three fields separated by
+**`NodeKind.Matrix` value encoding** — the `value` field packs three fields separated by
 `\x00`: the environment name (e.g. `"pmatrix"`), the row count as a decimal string, and
 the column specification string.  For `\begin{array}{colspec}` the colspec is the
 verbatim content of the mandatory argument; for shorthand environments (e.g. `pmatrix`,
@@ -216,26 +216,26 @@ The top-level entry point is:
 node = parse_latex(input)   # accepts String or Vector{Token}
 ```
 
-which returns a single `Node(NKSequence, children)` wrapping the entire expression.
+which returns a single `Node(NodeKind.Sequence, children)` wrapping the entire expression.
 
 The key internal functions and their roles are:
 
 - **`_parse_sequence_children!`** — called at the top level and after `{`; parses
-  atoms until it sees `}` or `TKEOF`, returning a `Vector{Node}`.
+  atoms until it sees `}` or `TokenKind.EOF`, returning a `Vector{Node}`.
 - **`_parse_atom!`** — parses one primary expression, then optionally attaches `_` and
-  `^` tokens to produce `NKSubscript`, `NKSuperscript`, or `NKDecorated`.  Also handles
-  `\limits`/`\nolimits` by wrapping the preceding base in an `NKLimitsOverride` node.
+  `^` tokens to produce `NodeKind.Subscript`, `NodeKind.Superscript`, or `NodeKind.Decorated`.  Also handles
+  `\limits`/`\nolimits` by wrapping the preceding base in a `NodeKind.LimitsOverride` node.
 - **`_parse_primary!`** — dispatches on the current token kind:
-  - `TKChar` → `NKChar`
-  - `TKCommand` → `_parse_command!`
-  - `TKLBrace` → consumes `{`, calls `_parse_sequence_children!`, expects `}`
-  - `TKSup`, `TKSub`, `TKMathShift`, `TKAmpersand` → `NKChar` (treated literally when
+  - `TokenKind.Char` → `NodeKind.Char`
+  - `TokenKind.Command` → `_parse_command!`
+  - `TokenKind.LBrace` → consumes `{`, calls `_parse_sequence_children!`, expects `}`
+  - `TokenKind.Sup`, `TokenKind.Sub`, `TokenKind.MathShift`, `TokenKind.Ampersand` → `NodeKind.Char` (treated literally when
     not consumed by `_parse_atom!` in the scripting role)
-  - `TKEOF` → returns `NKSpace` with zero width without advancing
+  - `TokenKind.EOF` → returns `NodeKind.Space` with zero width without advancing
 - **`_parse_command!`** — a large dispatch table for all recognised commands, including
   `\frac`, `\sqrt`, `\left`/`\right`, `\begin`/`\end`, all math operators, all font
   switches, all spacing commands, all sizing commands, and all extensible-arrow commands.
-  Unknown commands fall through to an `NKCommand` leaf.
+  Unknown commands fall through to a `NodeKind.Command` leaf.
 - **`_parse_argument!`** — reads one argument: if the next token is `{`, reads a braced
   group; otherwise reads a single primary.
 - **`_parse_kern_dimension!`** — reads a dimension after `\kern`, `\mkern`, `\hskip`,
@@ -251,10 +251,10 @@ handled:
 |:----------------|:----------|
 | `x^2^3` | The second `^` is treated as a fresh atom (the superscript is already attached); produces `(x^2)^3` effectively |
 | `x_i_j` | Same: second `_` is a fresh atom |
-| `{unclosed` | Parsed to `TKEOF`; treated as if `}` were present |
-| `\left( x` (missing `\right`) | `\left` consumes to `TKEOF` |
+| `{unclosed` | Parsed to `TokenKind.EOF`; treated as if `}` were present |
+| `\left( x` (missing `\right`) | `\left` consumes to `TokenKind.EOF` |
 | `\frac{a}` (missing second arg) | Second argument parsed as the empty group `{}` |
-| `\unknown` | Produces `NKCommand("\\unknown")`; layout engine emits no glyph |
+| `\unknown` | Produces `NodeKind.Command("\\unknown")`; layout engine emits no glyph |
 
 This design means the layout engine always receives a structurally valid tree, even for
 partially typed or otherwise broken expressions.
@@ -393,7 +393,7 @@ Three lookup functions in `src/fonts.jl` cover all glyph access patterns:
 |:---------|:------------|
 | `glyph_metrics(family, ps_name)` | You have a PostScript glyph name (e.g. `"parenleft"`, `"alpha"`); used in delimiter and construction key lookup |
 | `glyph_metrics_by_codepoint(family, cp)` | **Preferred for symbols**: portable across all fonts; used for all entries in `_SYMBOL_CODEPOINTS`, large operators, and math-variant glyphs |
-| `glyph_metrics_upright(family, ch)` | Upright (roman) form of a character; uses `regular` font when present, else the math font's cmap; used for `NKOperator` and `\text{…}` content |
+| `glyph_metrics_upright(family, ch)` | Upright (roman) form of a character; uses `regular` font when present, else the math font's cmap; used for `NodeKind.Operator` and `\text{…}` content |
 
 **Why codepoints are preferred over PS names**: PostScript glyph naming conventions
 diverge across fonts.  NewCMMath and Pagella use standard AGL names (`"alpha"`,
@@ -417,9 +417,9 @@ TeX defines seven atom classes for math-mode elements: `:ord` (ordinary), `:bin`
 delimiter), `:close` (closing delimiter), `:punct` (punctuation), and `:inner`.
 
 The atom class of each `Node` is determined by `_atom_class`, which checks:
-1. `_CHAR_ATOM_CLASS` for `NKChar` nodes (single-character lookup).
-2. `_CMD_ATOM_CLASS` for `NKCommand` and `NKOperator` nodes (command-name lookup).
-3. Structural rules for other node kinds (e.g. `NKFrac` → `:inner`).
+1. `_CHAR_ATOM_CLASS` for `NodeKind.Char` nodes (single-character lookup).
+2. `_CMD_ATOM_CLASS` for `NodeKind.Command` and `NodeKind.Operator` nodes (command-name lookup).
+3. Structural rules for other node kinds (e.g. `NodeKind.Frac` → `:inner`).
 
 `_layout_children!` accumulates inter-atom gaps using two spacing tables:
 
@@ -443,9 +443,9 @@ in `_layout_children!`.
 Sub/superscript placement is the most detail-heavy part of the engine.  Three functions
 handle the three cases:
 
-- **`_layout_superscript!`** — base with `^` only (`NKSuperscript`).
-- **`_layout_subscript!`** — base with `_` only (`NKSubscript`).
-- **`_layout_decorated!`** — base with both `_` and `^` (`NKDecorated`).
+- **`_layout_superscript!`** — base with `^` only (`NodeKind.Superscript`).
+- **`_layout_subscript!`** — base with `_` only (`NodeKind.Subscript`).
+- **`_layout_decorated!`** — base with both `_` and `^` (`NodeKind.Decorated`).
 
 All three use the following MATH table constants (all in design units):
 
@@ -520,10 +520,10 @@ applied to the superscript (which is already displaced by the base's advance).
    to build an extensible glyph.
 4. The chosen glyph is centred vertically on the math axis.
 
-`_layout_delimited!` (for `NKDelimited`) lays out the inner content first, computes the
+`_layout_delimited!` (for `NodeKind.Delimited`) lays out the inner content first, computes the
 bounding height, then calls `_layout_delim!` for the left and right glyphs.
 
-`NKMiddle` is handled inside `_layout_delimited!` by passing the parent's
+`NodeKind.Middle` is handled inside `_layout_delimited!` by passing the parent's
 `delim_height` down through the recursion so that `\middle` delimiters match the
 enclosing `\left`/`\right` pair's height.  Multiple `\middle` delimiters per group are
 supported.
@@ -550,15 +550,15 @@ braces, extensible arrows) constructions:
 above/below the operator) should be used instead of the default beside-base placement.
 The three cases are:
 
-1. The base is a large operator (`NKCommand` with a key in `_DISPLAY_OP_CODEPOINTS` or
+1. The base is a large operator (`NodeKind.Command` with a key in `_DISPLAY_OP_CODEPOINTS` or
    in `_LIMITS_OP_COMMANDS`) and the current style is Display.
-2. The base is a named operator (`NKOperator`) whose name is in `_LIMITS_OPERATORS`
+2. The base is a named operator (`NodeKind.Operator`) whose name is in `_LIMITS_OPERATORS`
    (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
    current style is Display.
-3. An `NKLimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
+3. An `NodeKind.LimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
    of style.
 
-An `NKLimitsOverride("nolimits")` node forces beside-base placement regardless of style
+An `NodeKind.LimitsOverride("nolimits")` node forces beside-base placement regardless of style
 and operator type.
 
 In limits mode, the above-script and below-script are each horizontally centred over the
@@ -573,7 +573,7 @@ base, using these four MATH constants:
 
 ### Font switching and math variants
 
-`NKFontSwitch` is emitted by commands such as `\mathbf`, `\mathit`, `\mathrm`,
+`NodeKind.FontSwitch` is emitted by commands such as `\mathbf`, `\mathit`, `\mathrm`,
 `\mathbb`, `\mathcal`, `\mathfrak`, `\mathsf`, `\mathtt`, and `\boldsymbol`.
 `_layout_font_switch!` calls `_with_variant(ctx, variant)` and recursively lays out the
 body subtree with the new context.
@@ -768,7 +768,7 @@ table:
 
 No hard-coded scale values are used anywhere in the engine.
 
-When a `\large`, `\tiny`, or other `NKSizing` node is in effect, the scale is
+When a `\large`, `\tiny`, or other `NodeKind.Sizing` node is in effect, the scale is
 multiplied by the sizing factor at each child call via `_scale_for_child`:
 
 ```
@@ -839,23 +839,23 @@ the extension picks up the change on the next render call.
 A simple symbol (like `\hbar`, `\checkmark`, or any new Unicode math symbol) needs
 changes in two files:
 
-1. **`src/layout.jl`** — add an entry to `_SYMBOL_CODEPOINTS`:
+1. **`src/tables/layout_symbols.jl`** — add an entry to `_SYMBOL_CODEPOINTS`:
 
    ```julia
    # in _SYMBOL_CODEPOINTS
    "hbar" => 0x210F,    # ℏ  PLANCK CONSTANT OVER TWO PI
    ```
 
-   Also add an entry to `_CMD_ATOM_CLASS` with the appropriate atom class (`:ord`,
-   `:bin`, `:rel`, etc.):
+   Also add an entry to `_CMD_ATOM_CLASS` in `src/tables/layout_atoms.jl` with
+   the appropriate atom class (`:ord`, `:bin`, `:rel`, etc.):
 
    ```julia
    # in _CMD_ATOM_CLASS
-   "\\hbar" => :ord,
+   "hbar" => :ord,
    ```
 
 2. **`src/parser.jl`** — no change is needed for simple symbols.  The parser already
-   emits an `NKCommand` leaf for any unrecognised command, and the layout engine looks up
+   emits a `NodeKind.Command` leaf for any unrecognised command, and the layout engine looks up
    `_SYMBOL_CODEPOINTS` to find the glyph.  The only reason to touch the parser is if
    the command needs special argument handling (e.g. it takes a mandatory argument).
 
@@ -871,15 +871,16 @@ A new structural element (a new environment, a new kind of extensible, etc.) req
 changes in both files and potentially a new `NodeKind`:
 
 1. **`src/parser.jl`**:
-   - Add a new value to the `NodeKind` `@enum`.
+   - Add a new value to the `NodeKind` `EnumX.@enumx` in `src/enums.jl`.
    - Add a parsing branch in `_parse_command!` (or a dedicated sub-parser function) that
      consumes the necessary tokens and builds the new node.
 
-2. **`src/layout.jl`**:
-   - Add a new `_layout_xxx!` function that implements the layout algorithm for the new
-     construct.
+2. **Layout files**:
+   - Add a new `_layout_xxx!` function in the most relevant feature file under
+     `src/layout/`, or in `src/layout.jl` only when it is genuinely core layout
+     dispatch/shared behavior.
    - Add a dispatch branch in `_layout_node!` calling `_layout_xxx!` for the new kind.
-   - Add any necessary entries to `_CMD_ATOM_CLASS` for atom-class inference.
+   - Add any necessary entries to `src/tables/layout_atoms.jl` for atom-class inference.
 
 3. **Tests**:
    - Add unit tests for the parser output in `test/test_parser.jl`.
@@ -957,7 +958,7 @@ used by `test/test_math_table.jl` to validate the parser against known values.
 | `test/test_math_table.jl` | Binary MATH table parsing against all ground-truth constants from `newcm_math.jl` |
 | `test/test_metrics.jl` | Glyph metric lookups: PS-name, codepoint, and upright paths; cache behaviour |
 | `test/test_style.jl` | All eight style transitions and `size_scale` correctness |
-| `test/test_lexer.jl` | Tokeniser: multi-letter commands, single-char commands, whitespace collapsing, TKEOF sentinel |
+| `test/test_lexer.jl` | Tokeniser: multi-letter commands, single-char commands, whitespace collapsing, TokenKind.EOF sentinel |
 | `test/test_parser.jl` | AST structure for a representative set of expressions; resilience under ill-formed input |
 | `test/test_layout.jl` | Layout engine invariants: non-empty box lists, relative positions, fraction/radical geometry |
 | `test/test_katex.jl` | KaTeX-derived smoke tests (well-formed), malformed-input tests, and deeply nested expressions |

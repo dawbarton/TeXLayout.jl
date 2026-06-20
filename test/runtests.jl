@@ -45,16 +45,10 @@ using TeXLayout: is_cramped, is_display, is_script, is_script_script,
     cramp_style, size_scale
 
 # Lexer
-using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
-    TKLBrace, TKRBrace, TKMathShift, TKEOF
+using TeXLayout: tokenize, TokenKind
 
 # Parser / AST node kinds
-using TeXLayout: NKChar, NKSequence, NKGroup, NKSuperscript, NKSubscript,
-    NKDecorated, NKFrac, NKGenfrac, NKSqrt, NKDelimited, NKBigDelim, NKAccent,
-    NKCommand, NKSpace, NKOperator, NKFontSwitch,
-    NKHorizBrace, NKMatrix, NKMiddle, NKLimitsOverride,
-    NKOverUnder, NKText,
-    NKStyleOverride, NKSizing, NKXArrow
+using TeXLayout: NodeKind
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and
@@ -74,4 +68,5 @@ include("fixtures/newcm_math.jl")
     include("test_layout.jl")
     include("test_katex.jl")
     include("test_text.jl")
+    include("test_snapshots.jl")
 end

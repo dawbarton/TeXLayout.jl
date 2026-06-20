@@ -13,7 +13,7 @@ Shape one uniform-attribute text span into a measured layout fragment.
 
 Contract (must be honoured by every shaper, including future extensions):
   - returned boxes are in em units, baseline at y = 0, first glyph at x = 0;
-  - each emitted Glyph carries font_slot = :regular;
+  - each emitted Glyph carries font_slot = FontSlot.Regular;
   - width = total advance, ascent/descent = max ink extents (≥ 0);
   - missing glyphs are skipped (advance = 0).
 """

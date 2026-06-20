@@ -161,7 +161,7 @@ function _box_to_mte(
     el = box.element
 
     if el isa TeXLayout.Glyph
-        if el.font_slot !== :math
+        if el.font_slot !== TeXLayout.FontSlot.Math
             gid = _glyph_index(runtime.reg_glyph_indices, runtime.reg_font, el.glyph_name)
             gid == 0 && return nothing
             tc = MathTeXEngine.TeXChar(

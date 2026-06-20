@@ -14,15 +14,15 @@
     # ── Font additions ────────────────────────────────────────────────────────
 
     @testset "glyph_metrics_slot: fallback to math for math-only family" begin
-        # :regular → math font (no regular slot configured)
-        result = TeXLayout.glyph_metrics_slot(family, 'a', :regular)
+        # Regular → math font (no regular slot configured)
+        result = TeXLayout.glyph_metrics_slot(family, 'a', TeXLayout.FontSlot.Regular)
         @test result !== nothing
         m, path = result
         @test m isa GlyphMetrics
         @test path == FIXTURE_FONT_PATH
 
         # Bold, italic, bolditalic all fall through to the math font.
-        for slot in (:bold, :italic, :bolditalic)
+        for slot in (TeXLayout.FontSlot.Bold, TeXLayout.FontSlot.Italic, TeXLayout.FontSlot.BoldItalic)
             r = TeXLayout.glyph_metrics_slot(family, 'a', slot)
             @test r !== nothing
             _, p2 = r
@@ -30,7 +30,7 @@
         end
 
         # Unknown codepoint (\x01) is absent from all slots.
-        @test TeXLayout.glyph_metrics_slot(family, '\x01', :regular) === nothing
+        @test TeXLayout.glyph_metrics_slot(family, '\x01', TeXLayout.FontSlot.Regular) === nothing
     end
 
     @testset "_font_upm returns correct UPM for fixture font" begin
@@ -45,7 +45,7 @@
         shaper = TeXLayout.MetricShaper()
 
         @testset "Glyph x-positions advance left to right" begin
-            span = TeXLayout.TextSpan("abc", TeXLayout.TextAttrs(:regular, 1.0))
+            span = TeXLayout.TextSpan("abc", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             box = TeXLayout.shape_span(shaper, span, family, 1.0)
             @test box isa TeXLayout.TeXBox
             @test length(box.boxes) == 3
@@ -54,29 +54,29 @@
             @test box.boxes[3].x > box.boxes[2].x
         end
 
-        @testset "Emitted glyphs carry :regular font_slot" begin
-            span = TeXLayout.TextSpan("ab", TeXLayout.TextAttrs(:regular, 1.0))
+        @testset "Emitted glyphs carry FontSlot.Regular" begin
+            span = TeXLayout.TextSpan("ab", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             box = TeXLayout.shape_span(shaper, span, family, 1.0)
-            @test all(b.element.font_slot === :regular for b in box.boxes)
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in box.boxes)
         end
 
         @testset "Ascent > 0 and descent >= 0 for uppercase letter" begin
-            span = TeXLayout.TextSpan("A", TeXLayout.TextAttrs(:regular, 1.0))
+            span = TeXLayout.TextSpan("A", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             box = TeXLayout.shape_span(shaper, span, family, 1.0)
             @test box.ascent > 0.0
             @test box.descent >= 0.0
         end
 
         @testset "Size multiplier scales width linearly" begin
-            span1 = TeXLayout.TextSpan("a", TeXLayout.TextAttrs(:regular, 1.0))
-            span2 = TeXLayout.TextSpan("a", TeXLayout.TextAttrs(:regular, 2.0))
+            span1 = TeXLayout.TextSpan("a", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
+            span2 = TeXLayout.TextSpan("a", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 2.0))
             box1 = TeXLayout.shape_span(shaper, span1, family, 1.0)
             box2 = TeXLayout.shape_span(shaper, span2, family, 1.0)
             @test box2.width ≈ 2 * box1.width
         end
 
         @testset "Missing glyph (control char) does not throw" begin
-            span = TeXLayout.TextSpan("\x01\x02", TeXLayout.TextAttrs(:regular, 1.0))
+            span = TeXLayout.TextSpan("\x01\x02", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             @test_nowarn TeXLayout.shape_span(shaper, span, family, 1.0)
         end
     end
@@ -87,9 +87,9 @@
 
         @testset "Brace-word leniency: space before { in \\end {align}" begin
             tree = parse_latex("\\begin{align}x\\end {align}")
-            @test tree.kind === NKSequence
+            @test tree.kind === NodeKind.Sequence
             @test length(tree.children) == 1
-            @test tree.children[1].kind === NKMatrix
+            @test tree.children[1].kind === NodeKind.Matrix
         end
 
         @testset "align, aligned, gather registered in _MATRIX_ENVS" begin
@@ -101,49 +101,49 @@
         @testset "Align colspec: 2 columns → rl" begin
             tree = parse_latex("\\begin{align}x&=y\\\\a&=b\\end{align}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "rl"
         end
 
         @testset "Align colspec: 4 columns → rlrl" begin
             tree = parse_latex("\\begin{align}a&b&c&d\\end{align}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "rlrl"
         end
 
         @testset "Gather colspec: 1 column → c" begin
             tree = parse_latex("\\begin{gather}x\\\\y\\end{gather}")
             mat = tree.children[1]
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             @test split(mat.value, "\x00")[3] == "c"
         end
 
-        @testset "parse_environment! returns NKMatrix for align" begin
+        @testset "parse_environment! returns NodeKind.Matrix for align" begin
             # Parser positioned just after {align} — body starts here.
             toks = tokenize("x&=y\\end{align}")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout.parse_environment!(p, "align")
-            @test node.kind === NKMatrix
+            @test node.kind === NodeKind.Matrix
         end
 
-        @testset "_parse_math_until_shift! stops before TKMathShift" begin
+        @testset "_parse_math_until_shift! stops before TokenKind.MathShift" begin
             toks = tokenize("x^2\$rest")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout._parse_math_until_shift!(p)
-            @test node.kind === NKSequence
+            @test node.kind === NodeKind.Sequence
             @test length(node.children) >= 1
             # Dollar sign not consumed — still current.
-            @test TeXLayout._current(p).kind === TKMathShift
+            @test TeXLayout._current(p).kind === TokenKind.MathShift
         end
 
         @testset "_parse_math_until_shift! stops at EOF" begin
             toks = tokenize("x+1")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout._parse_math_until_shift!(p)
-            @test node.kind === NKSequence
+            @test node.kind === NodeKind.Sequence
             @test !isempty(node.children)
-            @test TeXLayout._current(p).kind === TKEOF
+            @test TeXLayout._current(p).kind === TokenKind.EOF
         end
     end
 
@@ -162,7 +162,7 @@
             spans = runs[1].spans
             @test length(spans) == 1
             @test spans[1].text == "abc"
-            @test spans[1].attrs.slot === :regular
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Regular
         end
 
         @testset "Line break splits into two lines" begin
@@ -179,26 +179,26 @@
             @test length(doc[1].lines) == 1
         end
 
-        @testset "\\textbf produces :bold span" begin
+        @testset "\\textbf produces Bold span" begin
             doc = TeXLayout.parse_document("\\textbf{hello}")
             spans = doc[1].lines[1].runs[1].spans
             @test spans[1].text == "hello"
-            @test spans[1].attrs.slot === :bold
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
         end
 
-        @testset "\\textit produces :italic span" begin
+        @testset "\\textit produces Italic span" begin
             doc = TeXLayout.parse_document("\\textit{hello}")
             spans = doc[1].lines[1].runs[1].spans
             @test spans[1].text == "hello"
-            @test spans[1].attrs.slot === :italic
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Italic
         end
 
-        @testset "\\textrm inside \\textbf resets slot to :regular" begin
+        @testset "\\textrm inside \\textbf resets slot to Regular" begin
             doc = TeXLayout.parse_document("\\textbf{\\textrm{x}}")
             all_spans = vcat(
                 [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
             )
-            @test any(s -> s.text == "x" && s.attrs.slot === :regular, all_spans)
+            @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
         end
 
         @testset "\\emph toggles italic" begin
@@ -206,23 +206,23 @@
             sp1 = vcat(
                 [r.spans for r in doc1[1].lines[1].runs if r isa TeXLayout.TextRun]...,
             )
-            @test any(s -> s.text == "x" && s.attrs.slot === :italic, sp1)
+            @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Italic, sp1)
 
-            # \\emph inside \\textit toggles back to :regular.
+            # \\emph inside \\textit toggles back to Regular.
             doc2 = TeXLayout.parse_document("\\textit{\\emph{x}}")
             sp2 = vcat(
                 [r.spans for r in doc2[1].lines[1].runs if r isa TeXLayout.TextRun]...,
             )
-            @test any(s -> s.text == "x" && s.attrs.slot === :regular, sp2)
+            @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, sp2)
         end
 
-        @testset "\\textbf{a\\textit{b}} → :bold + :bolditalic spans" begin
+        @testset "\\textbf{a\\textit{b}} -> Bold + BoldItalic spans" begin
             doc = TeXLayout.parse_document("\\textbf{a\\textit{b}}")
             all_spans = vcat(
                 [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
             )
-            @test any(s -> s.text == "a" && s.attrs.slot === :bold, all_spans)
-            @test any(s -> s.text == "b" && s.attrs.slot === :bolditalic, all_spans)
+            @test any(s -> s.text == "a" && s.attrs.slot === TeXLayout.FontSlot.Bold, all_spans)
+            @test any(s -> s.text == "b" && s.attrs.slot === TeXLayout.FontSlot.BoldItalic, all_spans)
         end
 
         @testset "Inline math produces MathRun with Text style" begin
@@ -231,7 +231,7 @@
             math_runs = filter(r -> r isa TeXLayout.MathRun, runs)
             @test length(math_runs) == 1
             @test math_runs[1].style === Text   # TeXLayout.Text alias from runtests.jl
-            @test math_runs[1].node.kind === NKSequence
+            @test math_runs[1].node.kind === NodeKind.Sequence
         end
 
         @testset "Display align block parsed as DisplayBlock" begin
@@ -239,7 +239,7 @@
             @test length(doc) == 1
             @test doc[1] isa TeXLayout.DisplayBlock
             @test doc[1].kind === :align
-            @test doc[1].node.kind === NKMatrix
+            @test doc[1].node.kind === NodeKind.Matrix
         end
 
         @testset "The worked example: document structure (spec §3 worked example)" begin
@@ -255,14 +255,14 @@
             all_spans = vcat(
                 [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
             )
-            @test any(s -> s.text == "Hello" && s.attrs.slot === :bold, all_spans)
-            @test any(s -> occursin("world", s.text) && s.attrs.slot === :regular, all_spans)
+            @test any(s -> s.text == "Hello" && s.attrs.slot === TeXLayout.FontSlot.Bold, all_spans)
+            @test any(s -> occursin("world", s.text) && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
 
             # Display block: 2-row align with "rl" colspec.
             @test doc[2] isa TeXLayout.DisplayBlock
             @test doc[2].kind === :align
             mat = doc[2].node
-            @test mat.kind === NKMatrix
+            @test mat.kind === NodeKind.Matrix
             parts = split(mat.value, "\x00")
             @test parse(Int, parts[2]) == 2
             @test parts[3] == "rl"
@@ -417,11 +417,11 @@
 
         @testset "LayoutOptions defaults" begin
             opts = TeXLayout.LayoutOptions()
-            @test opts.align === :left
+            @test opts.align === TeXLayout.Alignment.Left
             @test opts.line_height ≈ 1.2
             @test opts.lineskip ≈ 0.1
             @test opts.width === nothing
-            @test opts.display_align === :center
+            @test opts.display_align === TeXLayout.Alignment.Center
             @test opts.abovedisplayskip ≈ 0.5
             @test opts.belowdisplayskip ≈ 0.5
             @test opts.shaper isa TeXLayout.MetricShaper

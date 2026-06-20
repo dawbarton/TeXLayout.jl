@@ -8,10 +8,10 @@
 
 """Font attributes for a run of text. `size` is an em multiplier (1.0 = body)."""
 struct TextAttrs
-    slot::Symbol    # :regular | :bold | :italic | :bolditalic
+    slot::FontSlot.T
     size::Float64
 end
-TextAttrs() = TextAttrs(:regular, 1.0)
+TextAttrs() = TextAttrs(FontSlot.Regular, 1.0)
 
 """A maximal run of characters sharing one set of TextAttrs."""
 struct TextSpan
@@ -46,7 +46,7 @@ end
 
 """A display-math environment occupying its own vertical space."""
 struct DisplayBlock <: Block
-    node::Node     # NKMatrix (align/aligned/gather/equation) or NKSequence
+    node::Node     # NodeKind.Matrix (align/aligned/gather/equation) or NodeKind.Sequence
     kind::Symbol   # :align | :aligned | :gather | :equation
 end
 
@@ -111,8 +111,8 @@ const _DISPLAY_ENVS = Set{String}(["align", "aligned", "gather", "equation"])
 # Compute new TextAttrs by applying a font-switch command to the current attrs.
 function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
     slot = attrs.slot
-    bold = slot === :bold   || slot === :bolditalic
-    italic = slot === :italic || slot === :bolditalic
+    bold = slot === FontSlot.Bold || slot === FontSlot.BoldItalic
+    italic = slot === FontSlot.Italic || slot === FontSlot.BoldItalic
 
     if cmd == "\\textbf"
         bold = true
@@ -123,12 +123,12 @@ function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
     elseif cmd == "\\textrm" || cmd == "\\textnormal"
         bold = false
         italic = false
-        # \\textsf / \\texttt: v1 maps to :regular slot — no change to bold/italic
+        # \\textsf / \\texttt: v1 maps to regular slot — no change to bold/italic
     end
 
-    new_slot = bold && italic ? :bolditalic :
-        bold ? :bold :
-        italic ? :italic : :regular
+    new_slot = bold && italic ? FontSlot.BoldItalic :
+        bold ? FontSlot.Bold :
+        italic ? FontSlot.Italic : FontSlot.Regular
     return TextAttrs(new_slot, attrs.size)
 end
 
@@ -143,41 +143,41 @@ function _parse_text_group!(p::_Parser, builder::_DocBuilder, new_attrs::TextAtt
     _flush_span!(builder)
     old_attrs = builder.attrs
     builder.attrs = new_attrs
-    _current(p).kind === TKLBrace && _advance!(p)   # consume '{'
+    _current(p).kind === TokenKind.LBrace && _advance!(p)   # consume '{'
     _parse_text_body!(p, builder, true)             # stop at matching '}'
     _flush_span!(builder)
     builder.attrs = old_attrs
-    return _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    return _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
 end
 
 # Core text-mode dispatch loop.
-# `in_group`: when true, stop at the next TKRBrace (matching the group's '{').
+# `in_group`: when true, stop at the next TokenKind.RBrace (matching the group's '{').
 function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
     while true
         tok = _current(p)
-        tok.kind === TKEOF && break
-        in_group && tok.kind === TKRBrace && break
+        tok.kind === TokenKind.EOF && break
+        in_group && tok.kind === TokenKind.RBrace && break
 
-        if tok.kind === TKChar
+        if tok.kind === TokenKind.Char
             write(builder.buf, tok.value)
             _advance!(p)
 
-        elseif tok.kind === TKSpace
+        elseif tok.kind === TokenKind.Space
             write(builder.buf, " ")
             _advance!(p)
 
-        elseif tok.kind === TKMathShift
+        elseif tok.kind === TokenKind.MathShift
             _advance!(p)   # consume opening $
             _flush_text_run!(builder)
             node = _parse_math_until_shift!(p)
-            _current(p).kind === TKMathShift && _advance!(p)   # consume closing $
+            _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
             push!(builder.cur_runs, MathRun(node, Text))
 
-        elseif tok.kind === TKCommand && tok.value == "\\\\"
+        elseif tok.kind === TokenKind.Command && tok.value == "\\\\"
             _advance!(p)
             _end_line!(builder)
 
-        elseif tok.kind === TKCommand && tok.value == "\\begin"
+        elseif tok.kind === TokenKind.Command && tok.value == "\\begin"
             _advance!(p)
             env_name = _read_brace_word!(p)
             if env_name ∈ _DISPLAY_ENVS
@@ -190,15 +190,15 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
                 push!(builder.cur_runs, MathRun(node, Text))
             end
 
-        elseif tok.kind === TKCommand && tok.value ∈ _TEXT_FONT_SWITCH_CMDS
+        elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_FONT_SWITCH_CMDS
             cmd = _advance!(p).value
             _parse_text_group!(p, builder, _apply_font_switch(cmd, builder.attrs))
 
-        elseif tok.kind === TKCommand && (tok.value == "\\text" || tok.value == "\\mbox")
+        elseif tok.kind === TokenKind.Command && (tok.value == "\\text" || tok.value == "\\mbox")
             _advance!(p)
             _parse_text_group!(p, builder, builder.attrs)   # no attr change
 
-        elseif tok.kind === TKLBrace
+        elseif tok.kind === TokenKind.LBrace
             _parse_text_group!(p, builder, builder.attrs)   # bare grouping
 
         else

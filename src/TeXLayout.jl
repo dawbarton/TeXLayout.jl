@@ -12,18 +12,29 @@
 module TeXLayout
 
 include("math_table.jl")
+include("enums.jl")
 include("fonts.jl")
 include("style.jl")
 include("lexer.jl")
+include("payloads.jl")
+include("ast.jl")
+include("tables/parser_tables.jl")
 include("parser.jl")
+include("tables/layout_atoms.jl")
+include("tables/layout_spacing.jl")
+include("tables/layout_symbols.jl")
 include("layout.jl")
+include("layout/extensible.jl")
+include("layout/scripts.jl")
+include("layout/constructs.jl")
+include("layout/matrix.jl")
 include("shaping.jl")
 include("document.jl")
 include("compose.jl")
 
 # Public API — minimal surface for typical users.
 #
-# Internal types (NodeKind, NKxxx, TokenKind, TKxxx, MathTable, GlyphMetrics,
+# Internal types (NodeKind, TokenKind, MathTable, GlyphMetrics,
 # style helpers, glyph-metric functions) are accessible as TeXLayout.Xxx but
 # are not exported so they do not pollute the caller's namespace.
 #

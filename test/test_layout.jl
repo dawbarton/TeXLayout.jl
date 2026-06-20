@@ -49,7 +49,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test sub_y < 0.0   # below baseline
     end
 
-    @testset "NKDecorated: both sub and sup positioned correctly" begin
+    @testset "NodeKind.Decorated: both sub and sup positioned correctly" begin
         # x_i^2 should produce three glyphs: base at y=0, sup above baseline, sub below.
         boxes = layout(parse_latex("x_i^2"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -190,7 +190,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Operator: \\sin x produces four glyphs" begin
-        # \sin → NKOperator("sin"): three upright glyphs; x → one italic glyph.
+        # \sin → NodeKind.Operator("sin"): three upright glyphs; x → one italic glyph.
         boxes = layout(parse_latex("\\sin x"), family, Display)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 4
@@ -571,7 +571,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Limits: \\limsup and \\liminf are recognised operators" begin
-        # limsup and liminf should render as upright text (NKOperator).
+        # limsup and liminf should render as upright text (NodeKind.Operator).
         for cmd in ("\\limsup", "\\liminf")
             boxes = layout(parse_latex(cmd), family, Display)
             @test !isempty(find_glyphs(boxes))
@@ -633,34 +633,34 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test name_rm != name_it
     end
 
-    @testset "font_slot: math-mode glyphs carry :math" begin
-        # All math-mode glyphs must have font_slot = :math so the renderer queries
+    @testset "font_slot: math-mode glyphs carry FontSlot.Math" begin
+        # All math-mode glyphs must have font_slot = FontSlot.Math so the renderer queries
         # the math font.
         boxes = layout(parse_latex("x + \\alpha"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "font_slot: \\text glyphs carry :regular when family has regular font" begin
-        # When a regular font is configured, _upright_glyph should emit :regular.
+    @testset "font_slot: \\text glyphs carry FontSlot.Regular when family has regular font" begin
+        # When a regular font is configured, _upright_glyph should emit FontSlot.Regular.
         # Build a two-font family using the NewCM10-Regular companion for NewCMMath.
         reg_path = joinpath(dirname(FIXTURE_FONT_PATH), "NewCM10-Regular.otf")
         if isfile(reg_path)
             family_with_reg = FontFamily(FIXTURE_FONT_PATH, reg_path, nothing, nothing, nothing)
             boxes = layout(parse_latex(raw"\text{hi}"), family_with_reg, Text)
-            @test all(b.element.font_slot === :regular for b in find_glyphs(boxes))
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in find_glyphs(boxes))
         end
     end
 
-    @testset "font_slot: \\text glyphs fall back to :math when no regular font" begin
+    @testset "font_slot: \\text glyphs fall back to FontSlot.Math when no regular font" begin
         # Without a regular font, _upright_glyph falls back to the math font.
         boxes = layout(parse_latex(raw"\text{hi}"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "FontSwitch: \\mathrm uses math font (font_slot :math)" begin
+    @testset "FontSwitch: \\mathrm uses math font (FontSlot.Math)" begin
         boxes = layout(parse_latex("\\mathrm{x}"), family, Text)
         @test !isempty(find_glyphs(boxes))
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
     @testset "\\text{if } preserves trailing space" begin
