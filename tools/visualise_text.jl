@@ -90,20 +90,9 @@ function main()
 
     upm = Float64(TeXLayout.load_math_table(family.math).upm)
 
-    # Font faces keyed by path — one FTFont per unique font file.
     face_cache = Dict{String, FTFont}()
-    slot_path = Dict(
-        :math => family.math,
-        :regular => something(family.regular, family.math),
-        :italic => something(family.italic, family.regular, family.math),
-        :bold => something(family.bold, family.regular, family.math),
-        :bolditalic => something(
-            family.bolditalic, family.bold, family.italic,
-            family.regular, family.math
-        ),
-    )
     function face_for(slot)
-        key = get(slot_path, TeXLayout._font_slot_symbol(slot), family.math)
+        key = TeXLayout._font_path_for_slot(family, slot)
         return get!(face_cache, key) do
             FTFont(key)
         end

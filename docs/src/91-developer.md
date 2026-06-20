@@ -367,6 +367,10 @@ resolution:
   `FontSlot.BoldItalic` → the corresponding text companion font, falling back
   through regular/math when a companion slot is absent.
 
+Renderer/debug code should use internal helper `_font_path_for_slot(family, slot)`
+when resolving a `Glyph.font_slot` to a physical font path, so fallback behaviour
+stays consistent across tools.
+
 ### Coordinate system
 
 - **Origin**: the formula baseline, at `(x, y) = (0, 0)`.

@@ -174,6 +174,8 @@ end
 function _slot_fallback(family::FontFamily, slot::FontSlot.T)::Vector{String}
     raw = if slot === FontSlot.BoldItalic
         [family.bolditalic, family.bold, family.italic, family.regular, family.math]
+    elseif slot === FontSlot.Math
+        [family.math]
     elseif slot === FontSlot.Bold
         [family.bold, family.regular, family.math]
     elseif slot === FontSlot.Italic
@@ -190,6 +192,9 @@ function _slot_fallback(family::FontFamily, slot::FontSlot.T)::Vector{String}
     end
     return result
 end
+
+"""First configured font path for `slot`, following TeXLayout's slot fallback rules."""
+_font_path_for_slot(family::FontFamily, slot::FontSlot.T)::String = first(_slot_fallback(family, slot))
 
 """
     glyph_metrics_slot(family, ch, slot) -> Union{Tuple{GlyphMetrics,String}, Nothing}

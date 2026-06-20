@@ -217,8 +217,13 @@ function main()
     hline!(canvas, baseline_row, 1, W, BASELINE)
     hline!(canvas, axis_row, 1, W, AXIS)
 
-    face_math = FTFont(family.math)
-    face_reg = family.regular === nothing ? face_math : FTFont(family.regular)
+    face_cache = Dict{String, FTFont}()
+    function face_for(slot)
+        path = TeXLayout._font_path_for_slot(family, slot)
+        return get!(face_cache, path) do
+            FTFont(path)
+        end
+    end
 
     for box in boxes
         el = box.element
@@ -261,7 +266,7 @@ function main()
             )
 
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
-            face = el.font_slot === TeXLayout.FontSlot.Regular ? face_reg : face_math
+            face = face_for(el.font_slot)
 
             local bmp, ext
             try

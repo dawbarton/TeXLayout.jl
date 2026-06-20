@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `src/tables/`, and feature-specific layout helpers live under `src/layout/`.
 - Document composition now uses an internal measured box-tree layer behind the
   existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
+- Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a
+  shared `_font_path_for_slot` helper, keeping text-slot fallback behaviour
+  consistent across tools and documentation examples.
 - Renamed the agent/developer guide to `AGENTS.md`; `CLAUDE.md` is retained as a
   compatibility symlink.
 

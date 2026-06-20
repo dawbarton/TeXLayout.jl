@@ -209,13 +209,13 @@ write_png(path, canvas) = PNGFiles.save(path, reinterpret(Gray{N0f8}, canvas))
 
 function _slot_paths(family::FontFamily)
     return Dict(
-        TeXLayout.FontSlot.Math => family.math,
-        TeXLayout.FontSlot.Regular => something(family.regular, family.math),
-        TeXLayout.FontSlot.Italic => something(family.italic, family.regular, family.math),
-        TeXLayout.FontSlot.Bold => something(family.bold, family.regular, family.math),
-        TeXLayout.FontSlot.BoldItalic => something(
-            family.bolditalic, family.bold, family.italic, family.regular, family.math
-        ),
+        slot => TeXLayout._font_path_for_slot(family, slot) for slot in (
+                TeXLayout.FontSlot.Math,
+                TeXLayout.FontSlot.Regular,
+                TeXLayout.FontSlot.Italic,
+                TeXLayout.FontSlot.Bold,
+                TeXLayout.FontSlot.BoldItalic,
+            )
     )
 end
 

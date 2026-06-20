@@ -33,6 +33,20 @@
         @test TeXLayout.glyph_metrics_slot(family, '\x01', TeXLayout.FontSlot.Regular) === nothing
     end
 
+    @testset "_font_path_for_slot: text slots follow configured fallback order" begin
+        full_family = font_family(:new_cm)
+        @test TeXLayout._font_path_for_slot(full_family, TeXLayout.FontSlot.Math) == full_family.math
+        @test TeXLayout._font_path_for_slot(full_family, TeXLayout.FontSlot.Regular) == full_family.regular
+        @test TeXLayout._font_path_for_slot(full_family, TeXLayout.FontSlot.Bold) == full_family.bold
+        @test TeXLayout._font_path_for_slot(full_family, TeXLayout.FontSlot.Italic) == full_family.italic
+        @test TeXLayout._font_path_for_slot(full_family, TeXLayout.FontSlot.BoldItalic) == full_family.bolditalic
+
+        @test TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Regular) == family.math
+        @test TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Bold) == family.math
+        @test TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Italic) == family.math
+        @test TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.BoldItalic) == family.math
+    end
+
     @testset "_font_upm returns correct UPM for fixture font" begin
         upm = TeXLayout._font_upm(FIXTURE_FONT_PATH)
         @test upm isa Float64

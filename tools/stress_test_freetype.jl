@@ -105,13 +105,21 @@ function render_expr(
     hline!(canvas, em_y(0.0), 1, W, 0xd8)
     hline!(canvas, em_y(mt.constants.axis_height / upm), 1, W, 0xec)
 
+    face_cache = Dict{String, FTFont}(family.math => face_math)
+    face_regular !== nothing && (face_cache[TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Regular)] = face_regular)
+    function face_for(slot)
+        path = TeXLayout._font_path_for_slot(family, slot)
+        return get!(face_cache, path) do
+            FTFont(path)
+        end
+    end
+
     for box in boxes
         el = box.element
         if el isa Glyph
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_x(box.x); pen_cy = em_y(box.y)
-            face = (el.font_slot === TeXLayout.FontSlot.Regular && face_regular !== nothing) ?
-                face_regular : face_math
+            face = face_for(el.font_slot)
             local bmp, ext
             try
                 bmp, ext = renderface(face, el.glyph_name, pixel_size)

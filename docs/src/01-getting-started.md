@@ -158,17 +158,7 @@ for box in boxes
 
     if el isa Glyph
         # Resolve the physical font file.
-        font_path = if el.font_slot === TeXLayout.FontSlot.Math
-            family.math
-        elseif el.font_slot === TeXLayout.FontSlot.Bold
-            something(family.bold, family.regular, family.math)
-        elseif el.font_slot === TeXLayout.FontSlot.Italic
-            something(family.italic, family.regular, family.math)
-        elseif el.font_slot === TeXLayout.FontSlot.BoldItalic
-            something(family.bolditalic, family.bold, family.italic, family.regular, family.math)
-        else
-            something(family.regular, family.math)
-        end
+        font_path = TeXLayout._font_path_for_slot(family, el.font_slot)
         # Render the glyph named `el.glyph_name` from `font_path`
         # at pixel position (x, baseline_y - y) at size (box.scale * fontsize_px).
         render_glyph(el.glyph_name, font_path, x, y, box.scale * fontsize_px)
@@ -187,6 +177,6 @@ for box in boxes
 end
 ```
 
-`el.font_slot` is either `:math` (the math font, used for almost everything) or
-`:regular` (the companion text font, used for `\text{}`/`\mbox{}` content).  When
-`family.regular` is `nothing`, fall back to `family.math` for both slots.
+`el.font_slot` identifies the math or companion text slot used for glyph-index
+resolution.  Internal helper `TeXLayout._font_path_for_slot` applies the same
+fallback order as TeXLayout's own render/debug tools.

@@ -742,3 +742,13 @@
   commands, matching `\textrm`/`\textnormal`.
 - Validation: targeted text test run passed (1148/1148 through the package test
   harness), then the full package suite passed (1148/1148).
+
+## 2026-06-20T15:53+00:00 Font-slot path resolution centralization
+
+- Started step 4 of the text-layout cleanup by centralizing physical font-path
+  selection for `Glyph.font_slot` in `_font_path_for_slot(family, slot)`.
+- Updated FreeType render/debug tools and docs examples to use the shared helper
+  instead of reimplementing text-slot fallback order locally.
+- Added tests covering full bundled text-slot families and math-only fallback
+  behaviour, so future renderer changes should not silently diverge from the
+  layout font-slot contract.
