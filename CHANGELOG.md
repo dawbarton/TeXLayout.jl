@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a
   shared `_font_path_for_slot` helper, keeping text-slot fallback behaviour
   consistent across tools and documentation examples.
+- Internal box-tree constructors now validate finite non-negative dimensions,
+  copy caller-owned vectors, and reject malformed `VBox` child/offset arrays at
+  construction time.
 - Renamed the agent/developer guide to `AGENTS.md`; `CLAUDE.md` is retained as a
   compatibility symlink.
 

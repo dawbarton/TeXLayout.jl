@@ -5,11 +5,38 @@
 
 abstract type Box end
 
+_box_float(name::Symbol, value) = _box_float(name, Float64(value))
+
+function _box_float(name::Symbol, value::Float64)
+    isfinite(value) || throw(ArgumentError("box $name must be finite, got $value"))
+    return value
+end
+
+function _box_extent(name::Symbol, value)
+    x = _box_float(name, value)
+    x >= 0.0 || throw(ArgumentError("box $name must be non-negative, got $x"))
+    return x
+end
+
 struct ShapedBox <: Box
     boxes::Vector{LayoutBox}
     width::Float64
     ascent::Float64
     descent::Float64
+
+    function ShapedBox(
+            boxes::AbstractVector{LayoutBox},
+            width,
+            ascent,
+            descent,
+        )
+        return new(
+            LayoutBox[boxes...],
+            _box_extent(:width, width),
+            _box_extent(:ascent, ascent),
+            _box_extent(:descent, descent),
+        )
+    end
 end
 
 struct HBox <: Box
@@ -17,6 +44,20 @@ struct HBox <: Box
     width::Float64
     ascent::Float64
     descent::Float64
+
+    function HBox(
+            children::AbstractVector{<:Box},
+            width,
+            ascent,
+            descent,
+        )
+        return new(
+            Box[children...],
+            _box_extent(:width, width),
+            _box_extent(:ascent, ascent),
+            _box_extent(:descent, descent),
+        )
+    end
 end
 
 function HBox(children::AbstractVector{<:Box})
@@ -34,6 +75,26 @@ struct VBox <: Box
     width::Float64
     ascent::Float64
     descent::Float64
+
+    function VBox(
+            children::AbstractVector{<:Box},
+            offsets::AbstractVector,
+            dxs::AbstractVector,
+            width,
+            ascent,
+            descent,
+        )
+        length(children) == length(offsets) == length(dxs) ||
+            throw(ArgumentError("VBox children, offsets, and dxs must have matching lengths"))
+        return new(
+            Box[children...],
+            [_box_float(:offset, offset) for offset in offsets],
+            [_box_float(:dx, dx) for dx in dxs],
+            _box_extent(:width, width),
+            _box_extent(:ascent, ascent),
+            _box_extent(:descent, descent),
+        )
+    end
 end
 
 _box_width(box::ShapedBox) = box.width
@@ -69,8 +130,6 @@ function shape!(out::Vector{LayoutBox}, box::HBox, x::Float64, y::Float64)
 end
 
 function shape!(out::Vector{LayoutBox}, box::VBox, x::Float64, y::Float64)
-    length(box.children) == length(box.offsets) == length(box.dxs) ||
-        error("VBox children, offsets, and dxs must have matching lengths")
     for i in eachindex(box.children)
         shape!(out, box.children[i], x + box.dxs[i], y + box.offsets[i])
     end

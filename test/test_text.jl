@@ -406,6 +406,42 @@
             @test boxes[1].x ≈ 1.0
         end
 
+        @testset "Internal boxes validate measured extents" begin
+            leaf = TeXLayout.ShapedBox(LayoutBox[], 1.0, 0.5, 0.1)
+            @test_throws ArgumentError TeXLayout.ShapedBox(LayoutBox[], -1.0, 0.5, 0.1)
+            @test_throws ArgumentError TeXLayout.ShapedBox(LayoutBox[], 1.0, NaN, 0.1)
+            @test_throws ArgumentError TeXLayout.HBox([leaf], 1.0, 0.5, -0.1)
+            @test_throws ArgumentError TeXLayout.VBox([leaf], [0.0], Float64[], 1.0, 0.5, 0.1)
+            @test_throws ArgumentError TeXLayout.VBox([leaf], [Inf], [0.0], 1.0, 0.5, 0.1)
+        end
+
+        @testset "Internal boxes copy caller-owned vectors" begin
+            lb = LayoutBox(Space(0.5), 0.25, 0.0, 1.0)
+            shaped_source = [lb]
+            shaped = TeXLayout.ShapedBox(shaped_source, 0.5, 0.5, 0.1)
+            empty!(shaped_source)
+            @test length(TeXLayout.shape(shaped)) == 1
+
+            child_source = TeXLayout.Box[shaped]
+            tree = TeXLayout.HBox(child_source)
+            empty!(child_source)
+            boxes = TeXLayout.shape(tree)
+            @test length(boxes) == 1
+            @test boxes[1].x ≈ 0.25
+        end
+
+        @testset "Internal nested boxes compose offsets recursively" begin
+            lb = LayoutBox(Space(0.5), 0.25, 0.5, 1.0)
+            empty = TeXLayout.ShapedBox(LayoutBox[], 1.0, 0.5, 0.1)
+            visible = TeXLayout.ShapedBox([lb], 0.5, 0.5, 0.1)
+            row = TeXLayout.HBox([empty, visible])
+            column = TeXLayout.VBox([row], [-2.0], [3.0], row.width, row.ascent, 2.0)
+            boxes = TeXLayout.shape(column)
+            @test length(boxes) == 1
+            @test boxes[1].x ≈ 4.25
+            @test boxes[1].y ≈ -1.5
+        end
+
         @testset "vstack: empty input → zero TeXBox" begin
             result = TeXLayout.vstack(
                 TeXLayout.TeXBox[];

@@ -752,3 +752,14 @@
 - Added tests covering full bundled text-slot families and math-only fallback
   behaviour, so future renderer changes should not silently diverge from the
   layout font-slot contract.
+
+## 2026-06-20T15:58+00:00 Internal box-tree hardening
+
+- Strengthened `src/boxes.jl` constructors so `ShapedBox`, `HBox`, and `VBox`
+  validate finite non-negative measured extents when constructed.
+- Moved `VBox` child/offset/dx length validation from emission time to
+  construction time, making malformed trees fail closer to their source.
+- Box constructors now copy caller-owned vectors, preventing later mutation of
+  temporary arrays from changing already-built box trees.
+- Added composition tests for validation failures, defensive copies, and nested
+  recursive offset shaping.
