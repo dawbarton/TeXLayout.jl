@@ -4,6 +4,12 @@
 # A future ext/HarfBuzzExt.jl can define HarfBuzzShaper <: TextShaper and add
 # a shape_span method without touching any other file.
 
+"""
+Abstract interface for shaping text spans in document layout.
+
+Subtypes implement `shape_span(shaper, span, family, base_scale)` and return a
+measured `TeXBox` whose glyph positions are expressed in em units.
+"""
 abstract type TextShaper end
 
 """
@@ -19,6 +25,13 @@ Contract (must be honoured by every shaper, including future extensions):
 """
 function shape_span end
 
+"""
+Metrics-only `TextShaper` implementation.
+
+`MetricShaper` places one glyph per Unicode scalar using the configured font
+metrics. It does not perform HarfBuzz shaping, ligature substitution, kerning, or
+script-specific text layout.
+"""
 struct MetricShaper <: TextShaper end
 
 function shape_span(::MetricShaper, span, family::FontFamily, base_scale::Float64)

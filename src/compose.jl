@@ -11,8 +11,8 @@ A measured, already-positioned layout fragment.
 
 `boxes` are positioned relative to this box's own origin: baseline at y = 0,
 left edge at x = 0. `ascent` and `descent` are ≥ 0 extents above/below the
-baseline; `width` is the total advance. This is the eagerly-shaped form of the
-Option-2 Box described in future.md.
+baseline; `width` is the total advance. This is the measured output container
+returned by document layout and composition helpers.
 """
 struct TeXBox
     boxes::Vector{LayoutBox}

@@ -518,7 +518,7 @@ end
     parse_latex(tokens) -> Node
 
 Parse a flat token stream (from `tokenize`) into an AST.
-Returns an `NodeKind.Sequence` node at the top level.
+Returns a `NodeKind.Sequence` node at the top level.
 """
 function parse_latex(tokens::Vector{Token})::Node
     p = _Parser(tokens, 1)

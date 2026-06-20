@@ -261,11 +261,13 @@ partially typed or otherwise broken expressions.
 
 ---
 
-## Stage 3: Layout engine (`src/layout.jl`)
+## Stage 3: Layout engine (`src/layout.jl`, `src/layout/*.jl`)
 
 The layout engine converts the AST into a flat list of positioned renderable elements.
-It is a recursive tree walk: `_layout_node!` dispatches on `NodeKind` and pushes
-`LayoutBox` values into a shared accumulator vector.
+It is a recursive tree walk: `_layout_node!` in `src/layout.jl` performs the core
+dispatch and pushes `LayoutBox` values into a shared accumulator vector.  Feature
+helpers that used to live in the same file are split into `src/layout/extensible.jl`,
+`src/layout/scripts.jl`, `src/layout/constructs.jl`, and `src/layout/matrix.jl`.
 
 ### Font and MATH-table caching
 
@@ -417,15 +419,15 @@ TeX defines seven atom classes for math-mode elements: `:ord` (ordinary), `:bin`
 delimiter), `:close` (closing delimiter), `:punct` (punctuation), and `:inner`.
 
 The atom class of each `Node` is determined by `_atom_class`, which checks:
-1. `_CHAR_ATOM_CLASS` for `NodeKind.Char` nodes (single-character lookup).
-2. `_CMD_ATOM_CLASS` for `NodeKind.Command` and `NodeKind.Operator` nodes (command-name lookup).
+1. `_CHAR_ATOM_CLASS` in `src/tables/layout_atoms.jl` for `NodeKind.Char` nodes (single-character lookup).
+2. `_CMD_ATOM_CLASS` in `src/tables/layout_atoms.jl` for `NodeKind.Command` and `NodeKind.Operator` nodes (command-name lookup).
 3. Structural rules for other node kinds (e.g. `NodeKind.Frac` → `:inner`).
 
 `_layout_children!` accumulates inter-atom gaps using two spacing tables:
 
-- `_SPACINGS` — used in `Display` and `Text` styles; includes thin (3/18 em), medium
+- `_SPACINGS` in `src/tables/layout_spacing.jl` — used in `Display` and `Text` styles; includes thin (3/18 em), medium
   (4/18 em), and thick (5/18 em) gaps for all class pairs that require spacing.
-- `_TIGHT_SPACINGS` — used in `Script` and `ScriptScript` styles; only thin spaces
+- `_TIGHT_SPACINGS` in `src/tables/layout_spacing.jl` — used in `Script` and `ScriptScript` styles; only thin spaces
   survive (only a few `:op`-adjacent pairs).
 
 **Binary operator reclassification** (matching TeX Rule 14): a node with class `:bin`
@@ -550,15 +552,15 @@ braces, extensible arrows) constructions:
 above/below the operator) should be used instead of the default beside-base placement.
 The three cases are:
 
-1. The base is a large operator (`NodeKind.Command` with a key in `_DISPLAY_OP_CODEPOINTS` or
-   in `_LIMITS_OP_COMMANDS`) and the current style is Display.
+1. The base is a large operator (`NodeKind.Command` with a key in `_DISPLAY_OP_CODEPOINTS`
+   from `src/tables/layout_symbols.jl` or in `_LIMITS_OP_COMMANDS`) and the current style is Display.
 2. The base is a named operator (`NodeKind.Operator`) whose name is in `_LIMITS_OPERATORS`
    (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
    current style is Display.
-3. An `NodeKind.LimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
+3. A `NodeKind.LimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
    of style.
 
-An `NodeKind.LimitsOverride("nolimits")` node forces beside-base placement regardless of style
+A `NodeKind.LimitsOverride("nolimits")` node forces beside-base placement regardless of style
 and operator type.
 
 In limits mode, the above-script and below-script are each horizontally centred over the
@@ -962,6 +964,35 @@ used by `test/test_math_table.jl` to validate the parser against known values.
 | `test/test_parser.jl` | AST structure for a representative set of expressions; resilience under ill-formed input |
 | `test/test_layout.jl` | Layout engine invariants: non-empty box lists, relative positions, fraction/radical geometry |
 | `test/test_katex.jl` | KaTeX-derived smoke tests (well-formed), malformed-input tests, and deeply nested expressions |
+| `test/test_snapshots.jl` | Layout-equivalence hashes for representative math and document cases |
+
+`test/test_snapshots.jl` is the guard for unintended layout changes.  It hashes
+normalized layout output: glyph names, font slots, glyph metrics, rules, positions,
+scales, and document extents.  If a snapshot changes, inspect the serialized or rendered
+difference before updating the expected hash, and document whether the change is an
+intentional bug fix or feature change.
+
+## Benchmarks
+
+The benchmark harness lives in `benchmark/runbenchmarks.jl`.  Run a quick smoke check
+while refactoring with:
+
+```
+julia --project=benchmark -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+julia --project=benchmark benchmark/runbenchmarks.jl --seconds=0.05 --samples=2 --output=/tmp/texlayout-bench-smoke.toml
+```
+
+For performance-sensitive changes, compare against a baseline:
+
+```
+julia --project=benchmark benchmark/runbenchmarks.jl --update-baseline
+julia --project=benchmark benchmark/runbenchmarks.jl --baseline=benchmark/baseline.toml
+```
+
+The default regression thresholds are `--time-threshold=1.15` and
+`--allocation-threshold=1.20`; both are configurable.  Treat sub-microsecond timing
+deltas as noise unless a targeted longer run confirms them.  Allocation or memory
+increases are usually more actionable than nanosecond-scale timing movement.
 
 ---
 
@@ -973,11 +1004,12 @@ used by `test/test_math_table.jl` to validate the parser against known values.
   character plus U+0338 (COMBINING SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR-1),
   but OpenType math fonts do not consistently place them at any single codepoint.
   Correct support requires two-glyph overlay (analogous to `\not\leq`).  Do **not** add
-  combining-sequence codepoints to `_SYMBOL_CODEPOINTS`; they will not work with
-  `glyph_metrics_by_codepoint`.
+  combining-sequence codepoints to `_SYMBOL_CODEPOINTS` in
+  `src/tables/layout_symbols.jl`; they will not work with `glyph_metrics_by_codepoint`.
 
-- **`\bigplus`** — no standard Unicode codepoint; listed in `_CMD_ATOM_CLASS` (as `:op`)
-  but absent from `_SYMBOL_CODEPOINTS`, so it renders as blank space on all fonts.
+- **`\bigplus`** — no standard Unicode codepoint; listed in `_CMD_ATOM_CLASS` in
+  `src/tables/layout_atoms.jl` (as `:op`) but absent from `_SYMBOL_CODEPOINTS` in
+  `src/tables/layout_symbols.jl`, so it renders as blank space on all fonts.
 
 - **Font-switching outside the Unicode math block** — `\mathbf`, `\boldsymbol`, and
   related commands cover the Mathematical Alphanumeric Symbols block (U+1D400–U+1D7FF)

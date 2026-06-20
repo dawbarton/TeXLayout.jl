@@ -37,7 +37,7 @@ A `mbin` atom is demoted to `mord` if:
 **Status — matches KaTeX.**
 - Two-pass reclassification in `_layout_children!`: left-to-right (Rule 5) then
   right-to-left (Rule 6). ✓
-- Neutral atoms (`:neutral` — spaces, `NKSpace`) are transparent to both passes. ✓
+- Neutral atoms (`:neutral` — spaces, `NodeKind.Space`) are transparent to both passes. ✓
 - `_BIN_LEFT_CANCEL = (:bin, :open, :rel, :op, :punct)` and
   `_BIN_RIGHT_CANCEL = (:rel, :close, :punct)` defined as module-level constants. ✓
 
@@ -206,7 +206,7 @@ Rules 15b and 15d are implemented using the OpenType MATH table constants
 `FractionNumeratorGapMin` / `FractionDenominatorGapMin` and their Display-style
 variants, which encode the clearance directly.
 
-Rule 15c is implemented for `NKGenfrac` (`\binom`/`\dbinom`/`\tbinom`) via
+Rule 15c is implemented for `NodeKind.Genfrac` (`\binom`/`\dbinom`/`\tbinom`) via
 `_layout_genfrac!`.  KaTeX uses `num3` (no-rule non-display shift) which has no
 OpenType equivalent; TeXLayout uses `FractionNumeratorShiftUp` (`num2`) instead.
 The visual difference is negligible because the gap clamping still guarantees a
@@ -234,8 +234,8 @@ subShift = base.depth  + subDrop × script_size_multiplier
 `SuperscriptBaselineDropMax` and `SubscriptBaselineDropMin`.
 
 **Status — matches KaTeX.**  The `_is_char_box` helper mirrors KaTeX's
-`isCharacterBox`: true for `NKChar`, for `NKCommand` nodes that are not large
-operators (Greek letters, etc.), and recursively for `NKFontSwitch` wrapping a
+`isCharacterBox`: true for `NodeKind.Char`, for `NodeKind.Command` nodes that are not large
+operators (Greek letters, etc.), and recursively for `NodeKind.FontSwitch` wrapping a
 single character.  Large operators (`\int`, `\sum`, …), named operators (`\sin`,
 …), fractions, and groups all return false, triggering the supDrop/subDrop clamp.
 
@@ -317,22 +317,22 @@ constants are noted for quick lookup.
 
 | Feature | NodeKind | Key implementation detail |
 |---------|----------|--------------------------|
-| `\left`/`\right` auto-sized delimiters | `NKDelimited` | Smallest variant from `vert_constructions` that clears the inner content height; centred on math axis |
-| `\middle` delimiter | `NKMiddle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
-| `\bigl`/`\bigr`/`\big` families | `NKBigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
-| Named operators (`\sin`, `\lim`, …) | `NKOperator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
-| Large operators (`\sum`, `\int`, …) | `NKCommand` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
-| Limits placement | `NKDecorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
-| `\limits`/`\nolimits` override | `NKLimitsOverride` | Wraps the preceding base; checked before script dispatch |
-| Horizontal extensibles (`\widehat`, `\widetilde`) | `NKAccent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
-| Horizontal braces (`\overbrace`, `\underbrace`, …) | `NKHorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
-| Extensible arrows (`\xrightarrow`, …) | `NKXArrow` | 18 commands; arrow stretched to cover labels; labels at `_XARROW_KERN` (0.111 em) clearance |
-| Font switching (`\mathbf`, `\mathrm`, …) | `NKFontSwitch` | Maps Latin/Greek/symbols to Unicode math-variant codepoints; propagates through sub/superscripts via `ctx.font_variant` |
-| Style switches (`\displaystyle`, …) | `NKStyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see CLAUDE.md encoding note) |
-| Font sizing (`\large`, `\tiny`, …) | `NKSizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
-| `\dfrac`, `\tfrac` | `NKStyleOverride` wrapping `NKFrac` | Forces Display or Text style with absolute scale reset |
-| `\binom`, `\dbinom`, `\tbinom` | `NKGenfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
-| Array/matrix environments | `NKMatrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
-| `\text{}`, `\mbox{}` | `NKText` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
+| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` that clears the inner content height; centred on math axis |
+| `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
+| `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
+| Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
+| Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
+| Limits placement | `NodeKind.Decorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
+| `\limits`/`\nolimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch |
+| Horizontal extensibles (`\widehat`, `\widetilde`) | `NodeKind.Accent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
+| Horizontal braces (`\overbrace`, `\underbrace`, …) | `NodeKind.HorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
+| Extensible arrows (`\xrightarrow`, …) | `NodeKind.XArrow` | 18 commands; arrow stretched to cover labels; labels at `_XARROW_KERN` (0.111 em) clearance |
+| Font switching (`\mathbf`, `\mathrm`, …) | `NodeKind.FontSwitch` | Maps Latin/Greek/symbols to Unicode math-variant codepoints; propagates through sub/superscripts via `ctx.font_variant` |
+| Style switches (`\displaystyle`, …) | `NodeKind.StyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see AGENTS.md encoding note) |
+| Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
+| `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
+| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
+| Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
+| `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
 | `default_font_family()` / `set_default_font_family!()` | — | Session-wide default; lazy artifact download; Makie extension picks up changes automatically |
-| Explicit spacing (`\,` `\;` `\quad` `\kern` …) | `NKSpace` | Width in `node.width` (em); negative spaces supported; 1 mu = 1/18 em |
+| Explicit spacing (`\,` `\;` `\quad` `\kern` …) | `NodeKind.Space` | Width in `node.width` (em); negative spaces supported; 1 mu = 1/18 em |

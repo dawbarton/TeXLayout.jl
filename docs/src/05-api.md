@@ -31,6 +31,20 @@ parse_latex
 layout
 ```
 
+## Document layout
+
+`layout_document` handles mixed text/math input and returns a measured `TeXBox`.
+Use `LayoutOptions` or keyword arguments to control line spacing, display spacing,
+alignment, width, and text shaping.
+
+```@docs
+layout_document
+TeXBox
+LayoutOptions
+TextShaper
+MetricShaper
+```
+
 ## Font API
 
 These functions control which fonts are used for glyph lookup and metric resolution.
