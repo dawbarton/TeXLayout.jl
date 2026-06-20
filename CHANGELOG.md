@@ -7,17 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- Refactored internal parser and layout organization: AST/token kinds now use
-  namespaced `EnumX.@enumx` enums, parser/layout lookup tables live under
-  `src/tables/`, and feature-specific layout helpers live under `src/layout/`.
-- Added layout-equivalence snapshot tests and configurable benchmark regression
-  thresholds to guard refactors against unintended output or performance changes.
-- Renamed the agent/developer guide to `AGENTS.md`; `CLAUDE.md` is retained as a
-  compatibility symlink.
-
-## [v0.1.1] - 2026-06-19
-
 ### Added
 - `layout_document(input; family, align, line_height, lineskip, width, display_align,
   abovedisplayskip, belowdisplayskip, shaper)` — top-level text/paragraph layout entry
@@ -35,10 +24,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DisplayBlock` from mixed text/math input
 - `hconcat` / `vstack` composition primitives (internal)
 - `tools/visualise_text.jl` — render a mixed text/math string to PNG via FreeType
-- `\binom`, `\dbinom`, `\tbinom` via `NodeKind.Genfrac` with auto-sized parenthesis delimiters and
+- Layout-equivalence snapshot tests for representative math and document cases.
+- BenchmarkTools harness with configurable runtime/allocation regression thresholds.
+
+### Changed
+- Refactored internal parser and layout organization: AST/token kinds now use
+  namespaced `EnumX.@enumx` enums, parser/layout lookup tables live under
+  `src/tables/`, and feature-specific layout helpers live under `src/layout/`.
+- Renamed the agent/developer guide to `AGENTS.md`; `CLAUDE.md` is retained as a
+  compatibility symlink.
+
+## [v0.1.1] - 2026-06-19
+
+### Added
+- `\binom`, `\dbinom`, `\tbinom` via `NKGenfrac` with auto-sized parenthesis delimiters and
   TeX Rule 15c no-rule gap clamping
 - Manual delimiter sizing via `\bigl`/`\bigr`/`\Bigl`/`\Bigr`/`\biggl`/`\biggr`/`\Biggl`/`\Biggr`
-  and `\bigm`/`\big` families (`NodeKind.BigDelim`; 4 size tiers; 16 commands + null delimiter support)
+  and `\bigm`/`\big` families (`NKBigDelim`; 4 size tiers; 16 commands + null delimiter support)
 
 ### Changed
 - Tools overhaul: unified project environment, callable stress-test module, PPM image comparison
