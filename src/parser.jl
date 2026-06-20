@@ -52,12 +52,12 @@ end
 # (\kern1em).  Only "em" and "mu" units are recognised; anything else yields 0.
 # One math unit (mu) = 1/18 em by the standard TeX convention.
 function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
-    braced = _current(p).kind === TKLBrace
+    braced = _current(p).kind === TokenKind.LBrace
     braced && _advance!(p)   # consume '{'
 
     # Collect sign + digits + decimal point.
     num = Char[]
-    while _current(p).kind === TKChar
+    while _current(p).kind === TokenKind.Char
         c = only(_current(p).value)
         c ∈ "0123456789.+-" || break
         push!(num, c); _advance!(p)
@@ -66,13 +66,13 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
     # Collect exactly 2 letter chars for the unit (em, mu, ex, pt, …).
     unit = Char[]
     for _ in 1:2
-        _current(p).kind === TKChar || break
+        _current(p).kind === TokenKind.Char || break
         c = only(_current(p).value)
         isletter(c) || break
         push!(unit, c); _advance!(p)
     end
 
-    braced && _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    braced && _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
 
     val = tryparse(Float64, isempty(num) ? "0" : String(num))
     val === nothing && return 0.0
@@ -92,7 +92,7 @@ end
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
 function _parse_delim_name!(p::_Parser)::String
-    _current(p).kind === TKEOF && return ""
+    _current(p).kind === TokenKind.EOF && return ""
     tok = _advance!(p)
     return get(_DELIM_GLYPH_NAMES, tok.value, "")
 end
@@ -105,10 +105,10 @@ function _parse_delimited_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
-        k === TKSpace && (_advance!(p); continue)
-        (k === TKEOF || k === TKRBrace) && break
-        k === TKCommand && _current(p).value == "\\right" && break
-        if k === TKCommand && _current(p).value == "\\middle"
+        k === TokenKind.Space && (_advance!(p); continue)
+        (k === TokenKind.EOF || k === TokenKind.RBrace) && break
+        k === TokenKind.Command && _current(p).value == "\\right" && break
+        if k === TokenKind.Command && _current(p).value == "\\middle"
             _advance!(p)   # consume \middle
             ps = _parse_delim_name!(p)
             push!(children, Node(NodeKind.Middle, ps))
@@ -124,10 +124,10 @@ end
 # unwrapped.  This differs from _parse_group! which preserves the NodeKind.Group
 # wrapper for explicit braces that appear in a sequence.
 function _parse_argument!(p::_Parser)::Node
-    if _current(p).kind === TKLBrace
+    if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_sequence_children!(p)
-        _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+        _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
         length(children) == 1 && return children[1]
         return Node(NodeKind.Sequence, children)
     else
@@ -139,7 +139,7 @@ end
 function _parse_group!(p::_Parser)::Node
     _advance!(p)   # consume '{'
     children = _parse_sequence_children!(p)
-    _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
     return Node(NodeKind.Group, children)
 end
 
@@ -149,8 +149,8 @@ function _parse_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
-        (k === TKEOF || k === TKRBrace) && break
-        k === TKSpace && (_advance!(p); continue)
+        (k === TokenKind.EOF || k === TokenKind.RBrace) && break
+        k === TokenKind.Space && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return children
@@ -162,8 +162,8 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
-        (k === TKEOF || k === TKRBrace) && break
-        if k === TKSpace
+        (k === TokenKind.EOF || k === TokenKind.RBrace) && break
+        if k === TokenKind.Space
             push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
         else
@@ -175,10 +175,10 @@ end
 
 # Parse the braced argument of \text{} or \mbox{}, preserving spaces.
 function _parse_text_argument!(p::_Parser)::Node
-    if _current(p).kind === TKLBrace
+    if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_text_sequence_children!(p)
-        _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+        _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
         length(children) == 1 && return children[1]
         return Node(NodeKind.Sequence, children)
     else
@@ -189,7 +189,7 @@ end
 # Parse a single "atom": a primary optionally decorated with ^ and/or _.
 function _parse_atom!(p::_Parser)::Node
     # Space tokens in math mode are ignored at the atom level.
-    while _current(p).kind === TKSpace
+    while _current(p).kind === TokenKind.Space
         _advance!(p)
     end
 
@@ -197,7 +197,7 @@ function _parse_atom!(p::_Parser)::Node
 
     # Consume an explicit \limits or \nolimits modifier immediately after the primary,
     # wrapping the base so the script branches can dispatch on it.
-    if _current(p).kind === TKCommand &&
+    if _current(p).kind === TokenKind.Command &&
             (_current(p).value == "\\limits" || _current(p).value == "\\nolimits")
         flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
         base = Node(NodeKind.LimitsOverride, flag, [base])
@@ -209,11 +209,11 @@ function _parse_atom!(p::_Parser)::Node
     # Collect at most one ^ and one _, in either order.
     for _ in 1:2
         k = _current(p).kind
-        if k === TKSup && !has_sup
+        if k === TokenKind.Sup && !has_sup
             _advance!(p)
             sup_node = _parse_argument!(p)
             has_sup = true
-        elseif k === TKSub && !has_sub
+        elseif k === TokenKind.Sub && !has_sub
             _advance!(p)
             sub_node = _parse_argument!(p)
             has_sub = true
@@ -237,46 +237,46 @@ end
 function _parse_primary!(p::_Parser)::Node
     tok = _current(p)
 
-    if tok.kind === TKChar
+    if tok.kind === TokenKind.Char
         _advance!(p)
         return Node(NodeKind.Char, tok.value)
 
-    elseif tok.kind === TKLBrace
+    elseif tok.kind === TokenKind.LBrace
         return _parse_group!(p)
 
-    elseif tok.kind === TKCommand
+    elseif tok.kind === TokenKind.Command
         return _parse_command!(p)
 
-    elseif tok.kind === TKSpace
+    elseif tok.kind === TokenKind.Space
         _advance!(p)
         return space_node(0.0)   # ~ and explicit spaces are zero-width in math
 
-    elseif tok.kind === TKEOF
+    elseif tok.kind === TokenKind.EOF
         # Do not advance past the sentinel — leave it in place so every caller
-        # that loops on _current(p).kind sees TKEOF and exits cleanly.
+        # that loops on _current(p).kind sees TokenKind.EOF and exits cleanly.
         return space_node(0.0)
 
     else
-        # Anything else (unlikely in well-formed input): emit as TKChar.
+        # Anything else (unlikely in well-formed input): emit as TokenKind.Char.
         _advance!(p)
         return Node(NodeKind.Char, tok.value)
     end
 end
 
 # Read a mandatory braced word argument {name} and return the text content.
-# Consumes '{', all TKChar/TKCommand tokens, and '}' (lenient: stops at EOF).
+# Consumes '{', all TokenKind.Char/TokenKind.Command tokens, and '}' (lenient: stops at EOF).
 # Used to extract the environment name from \begin{pmatrix} and \end{pmatrix}.
 function _read_brace_word!(p::_Parser)::String
-    while _current(p).kind === TKSpace
+    while _current(p).kind === TokenKind.Space
         _advance!(p)
     end
-    _current(p).kind === TKLBrace && _advance!(p)   # consume '{'
+    _current(p).kind === TokenKind.LBrace && _advance!(p)   # consume '{'
     buf = Char[]
-    while _current(p).kind !== TKEOF && _current(p).kind !== TKRBrace
+    while _current(p).kind !== TokenKind.EOF && _current(p).kind !== TokenKind.RBrace
         tok = _advance!(p)
         append!(buf, tok.value)
     end
-    _current(p).kind === TKRBrace && _advance!(p)   # consume '}'
+    _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
     return String(buf)
 end
 
@@ -307,31 +307,31 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
     while true
         tok = _current(p)
 
-        if tok.kind === TKEOF
+        if tok.kind === TokenKind.EOF
             break   # unclosed environment: lenient, keep what we have
 
-        elseif tok.kind === TKCommand && tok.value == "\\end"
+        elseif tok.kind === TokenKind.Command && tok.value == "\\end"
             _advance!(p)
             _read_brace_word!(p)   # consume {env_name}; we don't check it matches
             break
 
-        elseif tok.kind === TKAmpersand
+        elseif tok.kind === TokenKind.Ampersand
             _advance!(p)
             finish_cell!()
 
-        elseif tok.kind === TKCommand && tok.value == "\\\\"
+        elseif tok.kind === TokenKind.Command && tok.value == "\\\\"
             _advance!(p)
             # Skip optional row-spacing argument \\[dim]
-            if _current(p).kind === TKChar && _current(p).value == "["
+            if _current(p).kind === TokenKind.Char && _current(p).value == "["
                 _advance!(p)   # consume '['
-                while _current(p).kind !== TKEOF && _current(p).value != "]"
+                while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
                     _advance!(p)
                 end
-                _current(p).kind !== TKEOF && _advance!(p)   # consume ']'
+                _current(p).kind !== TokenKind.EOF && _advance!(p)   # consume ']'
             end
             finish_row!()
 
-        elseif tok.kind === TKSpace
+        elseif tok.kind === TokenKind.Space
             _advance!(p)   # skip whitespace in matrix bodies (math mode)
 
         else
@@ -443,10 +443,10 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd ∈ _XARROW_COMMANDS
         # \xrightarrow[below]{above}: optional below label, mandatory above label.
         below_node = nothing
-        if _current(p).kind === TKChar && _current(p).value == "["
+        if _current(p).kind === TokenKind.Char && _current(p).value == "["
             _advance!(p)   # consume '['
             below_children = Node[]
-            while _current(p).kind !== TKEOF && _current(p).value != "]"
+            while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
                 push!(below_children, _parse_atom!(p))
             end
             _current(p).value == "]" && _advance!(p)   # consume ']'
@@ -458,11 +458,11 @@ function _parse_command!(p::_Parser)::Node
 
     elseif cmd == "\\sqrt"
         # Optional degree: \sqrt[3]{x}
-        if _current(p).kind === TKChar && _current(p).value == "["
+        if _current(p).kind === TokenKind.Char && _current(p).value == "["
             # Consume the degree argument up to the matching ']'.
             _advance!(p)   # consume '['
             deg_children = Node[]
-            while _current(p).kind !== TKEOF && _current(p).value != "]"
+            while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
                 push!(deg_children, _parse_atom!(p))
             end
             _current(p).value == "]" && _advance!(p)  # consume ']'
@@ -481,7 +481,7 @@ function _parse_command!(p::_Parser)::Node
         inner = _parse_delimited_children!(p)
         # Consume \right and record the right delimiter's PS glyph name.
         right_name = ""
-        if _current(p).kind === TKCommand && _current(p).value == "\\right"
+        if _current(p).kind === TokenKind.Command && _current(p).value == "\\right"
             _advance!(p)
             right_name = _parse_delim_name!(p)
         end
@@ -534,14 +534,14 @@ function _parse_command!(p::_Parser)::Node
     end
 end
 
-# Parse math atoms until TKMathShift or TKEOF, without consuming the closing $.
+# Parse math atoms until TokenKind.MathShift or TokenKind.EOF, without consuming the closing $.
 # Used by the document parser to handle inline $…$ math.
 function _parse_math_until_shift!(p::_Parser)::Node
     children = Node[]
     while true
         k = _current(p).kind
-        (k === TKEOF || k === TKMathShift) && break
-        k === TKSpace && (_advance!(p); continue)
+        (k === TokenKind.EOF || k === TokenKind.MathShift) && break
+        k === TokenKind.Space && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return Node(NodeKind.Sequence, children)
@@ -573,8 +573,8 @@ end
 # Advance past all tokens up to and including the matching \end{…}.
 # Used by parse_environment! when the environment name is unrecognised.
 function _skip_to_end_env!(p::_Parser, env_name::String)
-    while _current(p).kind !== TKEOF
-        if _current(p).kind === TKCommand && _current(p).value == "\\end"
+    while _current(p).kind !== TokenKind.EOF
+        if _current(p).kind === TokenKind.Command && _current(p).value == "\\end"
             _advance!(p)
             _read_brace_word!(p)   # consume {name}; correctness not checked
             return

@@ -48,6 +48,20 @@ EnumX.@enumx NodeKind begin
     XArrow        # \xrightarrow etc.; value = command name; children = [above] or [above, below]
 end
 
+"""Categories of token produced by the lexer."""
+EnumX.@enumx TokenKind begin
+    Char        # ordinary character: letter, digit, punctuation
+    Command     # \commandname or \\ or \{ etc.
+    Sup         # ^
+    Sub         # _
+    LBrace      # {
+    RBrace      # }
+    MathShift   # $
+    Ampersand   # &
+    Space       # whitespace run or explicit space (\ ~); math-mode parser skips these
+    EOF
+end
+
 _font_slot_from_symbol(slot::Symbol) =
     slot === :math ? FontSlot.Math :
     slot === :regular ? FontSlot.Regular :

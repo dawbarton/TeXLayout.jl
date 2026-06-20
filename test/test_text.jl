@@ -127,14 +127,14 @@
             @test node.kind === NodeKind.Matrix
         end
 
-        @testset "_parse_math_until_shift! stops before TKMathShift" begin
+        @testset "_parse_math_until_shift! stops before TokenKind.MathShift" begin
             toks = tokenize("x^2\$rest")
             p = TeXLayout._Parser(toks, 1)
             node = TeXLayout._parse_math_until_shift!(p)
             @test node.kind === NodeKind.Sequence
             @test length(node.children) >= 1
             # Dollar sign not consumed — still current.
-            @test TeXLayout._current(p).kind === TKMathShift
+            @test TeXLayout._current(p).kind === TokenKind.MathShift
         end
 
         @testset "_parse_math_until_shift! stops at EOF" begin
@@ -143,7 +143,7 @@
             node = TeXLayout._parse_math_until_shift!(p)
             @test node.kind === NodeKind.Sequence
             @test !isempty(node.children)
-            @test TeXLayout._current(p).kind === TKEOF
+            @test TeXLayout._current(p).kind === TokenKind.EOF
         end
     end
 

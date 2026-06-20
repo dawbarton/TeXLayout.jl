@@ -476,7 +476,7 @@ end
 # `node.kind`.  This per-kind split keeps each rule small enough to read in one
 # screen and isolates changes to a single function.
 
-# Strip the leading '\' from a TKCommand value, returning the bare command name.
+# Strip the leading '\' from a TokenKind.Command value, returning the bare command name.
 @inline _command_name(cmd::AbstractString) =
     startswith(cmd, '\\') ? cmd[2:end] : cmd
 

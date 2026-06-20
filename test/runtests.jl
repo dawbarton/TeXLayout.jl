@@ -45,8 +45,7 @@ using TeXLayout: is_cramped, is_display, is_script, is_script_script,
     cramp_style, size_scale
 
 # Lexer
-using TeXLayout: tokenize, TKChar, TKCommand, TKSup, TKSub,
-    TKLBrace, TKRBrace, TKMathShift, TKEOF
+using TeXLayout: tokenize, TokenKind
 
 # Parser / AST node kinds
 using TeXLayout: NodeKind
