@@ -120,10 +120,9 @@ function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
         italic = true
     elseif cmd == "\\emph"
         italic = !italic   # toggle
-    elseif cmd == "\\textrm" || cmd == "\\textnormal"
+    elseif cmd == "\\textrm" || cmd == "\\textnormal" || cmd == "\\textsf" || cmd == "\\texttt"
         bold = false
         italic = false
-        # \\textsf / \\texttt: v1 maps to regular slot — no change to bold/italic
     end
 
     new_slot = bold && italic ? FontSlot.BoldItalic :

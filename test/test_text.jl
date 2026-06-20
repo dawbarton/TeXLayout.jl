@@ -216,6 +216,16 @@
             @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
         end
 
+        @testset "\\textsf and \\texttt currently map to Regular slot" begin
+            for cmd in ("\\textsf", "\\texttt")
+                doc = TeXLayout.parse_document("\\textbf{$cmd{x}}")
+                all_spans = vcat(
+                    [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
+                )
+                @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
+            end
+        end
+
         @testset "\\emph toggles italic" begin
             doc1 = TeXLayout.parse_document("\\emph{x}")
             sp1 = vcat(
@@ -267,6 +277,35 @@
             @test doc[1] isa TeXLayout.DisplayBlock
             @test doc[1].kind === :align
             @test doc[1].node.kind === NodeKind.Matrix
+        end
+
+        @testset "Adjacent display blocks parse without synthetic paragraph" begin
+            doc = TeXLayout.parse_document(
+                "\\begin{equation}x\\end{equation}\\begin{equation}y\\end{equation}",
+            )
+            @test length(doc) == 2
+            @test all(blk -> blk isa TeXLayout.DisplayBlock, doc)
+        end
+
+        @testset "Display at start and end preserves neighbouring paragraphs" begin
+            start_doc = TeXLayout.parse_document("\\begin{equation}x\\end{equation}tail")
+            @test length(start_doc) == 2
+            @test start_doc[1] isa TeXLayout.DisplayBlock
+            @test start_doc[2] isa TeXLayout.ParagraphBlock
+            @test start_doc[2].lines[1].runs[1].spans[1].text == "tail"
+
+            end_doc = TeXLayout.parse_document("head\\begin{equation}x\\end{equation}")
+            @test length(end_doc) == 2
+            @test end_doc[1] isa TeXLayout.ParagraphBlock
+            @test end_doc[2] isa TeXLayout.DisplayBlock
+            @test end_doc[1].lines[1].runs[1].spans[1].text == "head"
+        end
+
+        @testset "Unknown environment in text mode is lenient" begin
+            @test_nowarn TeXLayout.parse_document("\\begin{unknown}x\\end{unknown}")
+            doc = TeXLayout.parse_document("\\begin{unknown}x\\end{unknown}")
+            @test !isempty(doc)
+            @test doc[1] isa TeXLayout.ParagraphBlock
         end
 
         @testset "The worked example: document structure (spec §3 worked example)" begin
@@ -582,6 +621,55 @@
             end
 
             @test first_math_y(with_above) ≈ first_math_y(no_above) - 0.5
+        end
+
+        @testset "Adjacent display blocks stack below the first display" begin
+            full_family = font_family(:new_cm)
+            result = TeXLayout.layout_document(
+                "\\begin{equation}x\\end{equation}\\begin{equation}y\\end{equation}";
+                family = full_family,
+            )
+            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            @test length(glyphs) == 2
+            ys = sort([b.y for b in glyphs]; rev = true)
+            @test abs(ys[1]) < 0.2
+            @test ys[2] < ys[1] - 1.0
+        end
+
+        @testset "Display alignment shifts narrow display inside fixed width" begin
+            full_family = font_family(:new_cm)
+            left = TeXLayout.layout_document(
+                "\\begin{equation}x\\end{equation}";
+                family = full_family,
+                width = 12.0,
+                display_align = :left,
+            )
+            center = TeXLayout.layout_document(
+                "\\begin{equation}x\\end{equation}";
+                family = full_family,
+                width = 12.0,
+                display_align = :center,
+            )
+            right = TeXLayout.layout_document(
+                "\\begin{equation}x\\end{equation}";
+                family = full_family,
+                width = 12.0,
+                display_align = :right,
+            )
+
+            first_x(box) = only(filter(b -> b.element isa Glyph, box.boxes)).x
+            @test left.width ≈ 12.0
+            @test center.width ≈ 12.0
+            @test right.width ≈ 12.0
+            @test first_x(left) < first_x(center) < first_x(right)
+        end
+
+        @testset "Fixed width smaller than content allows overflow but reports requested width" begin
+            result = TeXLayout.layout_document(
+                "wide text line"; family = family, width = 0.5, align = :center,
+            )
+            @test result.width ≈ 0.5
+            @test minimum(b.x for b in result.boxes if b.element isa Glyph) < 0.0
         end
 
         @testset "Case 9: first line glyphs have y ≈ 0 (y-origin invariant)" begin

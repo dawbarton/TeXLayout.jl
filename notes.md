@@ -730,3 +730,15 @@
 - Validation: `julia --project=tools tools/stress_test_text.jl :new_cm
   /tmp/texlayout-text-stress.png` succeeded and the generated sheet was visually
   inspected.
+
+## 2026-06-20T15:36+00:00 Text-layer edge-case regression pass
+
+- Added focused parser/layout tests for adjacent display blocks, display blocks at
+  document start/end, unknown environments in text mode, display alignment within
+  fixed width, fixed-width overflow, and display-block vertical stacking.
+- Found and fixed a document text font-switch bug: `\textsf` and `\texttt` were
+  preserving surrounding bold/italic state, despite the v1 decision that they map
+  to the regular slot.  `_apply_font_switch` now clears bold/italic for those
+  commands, matching `\textrm`/`\textnormal`.
+- Validation: targeted text test run passed (1148/1148 through the package test
+  harness), then the full package suite passed (1148/1148).

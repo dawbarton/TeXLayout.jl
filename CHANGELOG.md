@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `layout_document` now applies display skips as explicit extra vertical space
   instead of synthetic empty baselines, so a display-only document starts at the
   first real display baseline.
+- `\textsf` and `\texttt` in document text now use the v1 regular-slot fallback
+  instead of inheriting surrounding bold/italic state.
 - FreeType visualisation tools now compare `Glyph.font_slot` against `FontSlot`
   enum values instead of stale symbol values when choosing text fonts.
 
