@@ -51,7 +51,7 @@ units relative to the formula baseline, and a scale factor.
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
-  `NKCommand` leaf nodes that are silently skipped by the layout engine.
+  `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
 
 ## Makie integration
 
