@@ -113,6 +113,8 @@ function main()
     samples = _arg_int("--samples", 10)
     output = _arg_value("--output", DEFAULT_OUTPUT)
     baseline_path = _arg_value("--baseline", DEFAULT_BASELINE)
+    time_threshold = _arg_float("--time-threshold", 1.15)
+    allocation_threshold = _arg_float("--allocation-threshold", 1.20)
     update_baseline = "--update-baseline" in ARGS
     compare = "--compare" in ARGS || isfile(baseline_path)
 
@@ -127,8 +129,8 @@ function main()
         baseline = TOML.parsefile(baseline_path)
         failures = _compare_results(
             results, baseline;
-            time_threshold = 1.15,
-            allocation_threshold = 1.20,
+            time_threshold,
+            allocation_threshold,
         )
         if !isempty(failures)
             for failure in failures
