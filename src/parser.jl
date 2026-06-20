@@ -14,10 +14,10 @@
     NKSubscript     # base_{subscript} when superscript is absent
     NKDecorated     # base with both sub and sup: x_i^2
     NKFrac          # \frac{num}{den}
-    NKGenfrac       # \binom etc.: no-rule fraction + delimiters; value = "left_ps\x00right_ps"
+    NKGenfrac       # \binom etc.: no-rule fraction + delimiters; value encoded by _DelimiterPairPayload
     NKSqrt          # \sqrt[degree]{body}
-    NKDelimited     # \left…\right pair; value = "left_ps_name\x00right_ps_name"
-    NKBigDelim      # \bigl/\bigr/\big etc.; value = "ps_name\x00<size>\x00<class>" (size ∈ '1'-'4', class ∈ 'o','c','r','d')
+    NKDelimited     # \left…\right pair; value encoded by _DelimiterPairPayload
+    NKBigDelim      # \bigl/\bigr/\big etc.; value encoded by _BigDelimiterPayload
     NKAccent        # \hat, \bar, \vec, etc.
     NKOverUnder     # \overline / \underline; value is "overline" or "underline"
     NKCommand        # unrecognised command or atom-producing command (\alpha, \int, …)
@@ -27,7 +27,7 @@
     NKLimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
     NKFontSwitch     # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     NKHorizBrace     # \overbrace / \underbrace / …; value = command name; children[1] = body
-    NKMatrix         # \begin{env}…\end{env}: value = "env\x00nrow\x00colspec"; children = flat row-major cells
+    NKMatrix         # \begin{env}…\end{env}: value encoded by _MatrixPayload; children = flat row-major cells
     NKMiddle         # \middle<delim>: auto-sized inner delimiter; value = PS glyph name
     NKStyleOverride  # \dfrac / \displaystyle etc.; value = style name; children[1] = body
     NKSizing         # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body
@@ -188,27 +188,27 @@ const _HORIZ_BRACE_COMMANDS = Set{String}(
 
 # Matrix/array-like environments introduced by \begin{name}.
 # Each entry specifies the PostScript glyph names of the auto-sized left and right
-# delimiters (empty string = no delimiter), the column alignment (:center or :left),
+# delimiters (empty string = no delimiter), the column alignment,
 # and a scale factor relative to the surrounding text (1.0 for all except smallmatrix).
 # "dblverticalbar" is the NewCMMath PS name for U+2016 ‖; other fonts may differ, but
 # glyph_name_by_codepoint fallback is used if the literal name is absent.
-const _MatrixEnvInfo = @NamedTuple{left::String, right::String, align::Symbol, scale::Float64}
+const _MatrixEnvInfo = @NamedTuple{left::String, right::String, align::Alignment.T, scale::Float64}
 const _MATRIX_ENVS = Dict{String, _MatrixEnvInfo}(
-    "matrix" => (left = "", right = "", align = :center, scale = 1.0),
-    "pmatrix" => (left = "parenleft", right = "parenright", align = :center, scale = 1.0),
-    "bmatrix" => (left = "bracketleft", right = "bracketright", align = :center, scale = 1.0),
-    "Bmatrix" => (left = "braceleft", right = "braceright", align = :center, scale = 1.0),
-    "vmatrix" => (left = "bar", right = "bar", align = :center, scale = 1.0),
-    "Vmatrix" => (left = "dblverticalbar", right = "dblverticalbar", align = :center, scale = 1.0),
-    "smallmatrix" => (left = "", right = "", align = :center, scale = 0.9),
-    "cases" => (left = "braceleft", right = "", align = :left, scale = 1.0),
+    "matrix" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "pmatrix" => (left = "parenleft", right = "parenright", align = Alignment.Center, scale = 1.0),
+    "bmatrix" => (left = "bracketleft", right = "bracketright", align = Alignment.Center, scale = 1.0),
+    "Bmatrix" => (left = "braceleft", right = "braceright", align = Alignment.Center, scale = 1.0),
+    "vmatrix" => (left = "bar", right = "bar", align = Alignment.Center, scale = 1.0),
+    "Vmatrix" => (left = "dblverticalbar", right = "dblverticalbar", align = Alignment.Center, scale = 1.0),
+    "smallmatrix" => (left = "", right = "", align = Alignment.Center, scale = 0.9),
+    "cases" => (left = "braceleft", right = "", align = Alignment.Left, scale = 1.0),
     # \begin{array}{colspec} — explicit per-column alignment and vertical rules.
-    "array" => (left = "", right = "", align = :center, scale = 1.0),
+    "array" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
     # Display-math environments (document layer treats these as DisplayBlocks).
-    "align" => (left = "", right = "", align = :center, scale = 1.0),
-    "aligned" => (left = "", right = "", align = :center, scale = 1.0),
-    "gather" => (left = "", right = "", align = :center, scale = 1.0),
-    "equation" => (left = "", right = "", align = :center, scale = 1.0),
+    "align" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "aligned" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "gather" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "equation" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
 )
 
 # Mapping from style-switch commands to the target TeX style name (Display/Text/Script/ScriptScript).
@@ -517,7 +517,7 @@ function _read_brace_word!(p::_Parser)::String
 end
 
 # Parse the body of a matrix environment up to the matching \end{env_name}.
-# Returns an NKMatrix node with value "env_name\x00nrow\x00colspec" and a flat
+# Returns an NKMatrix node with encoded _MatrixPayload and a flat
 # row-major list of NKGroup children (one per cell).
 # colspec: explicit column-spec string (e.g. "|l|c|r|") for \begin{array};
 #          empty for shorthand environments (pmatrix, cases, etc.) — derived
@@ -602,12 +602,12 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
             colspec = repeat("c", ncol)
         else
             info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
-            align_ch = info.align === :left ? 'l' : 'c'
+            align_ch = info.align === Alignment.Left ? 'l' : 'c'
             colspec = repeat(align_ch, ncol)
         end
     end
 
-    return Node(NKMatrix, "$(env_name)\x00$(nrow)\x00$(colspec)", cells)
+    return Node(NKMatrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec)), cells)
 end
 
 # Parse a command token and return the appropriate node.
@@ -644,23 +644,26 @@ function _parse_command!(p::_Parser)::Node
     elseif cmd == "\\binom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKGenfrac, "parenleft\x00parenright", [num, den])
+        return Node(NKGenfrac, _encode_payload(_DelimiterPairPayload("parenleft", "parenright")), [num, den])
 
     elseif cmd == "\\dbinom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKStyleOverride, "Display", [Node(NKGenfrac, "parenleft\x00parenright", [num, den])])
+        payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
+        return Node(NKStyleOverride, "Display", [Node(NKGenfrac, payload, [num, den])])
 
     elseif cmd == "\\tbinom"
         num = _parse_argument!(p)
         den = _parse_argument!(p)
-        return Node(NKStyleOverride, "Text", [Node(NKGenfrac, "parenleft\x00parenright", [num, den])])
+        payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
+        return Node(NKStyleOverride, "Text", [Node(NKGenfrac, payload, [num, den])])
 
     elseif haskey(_BIG_DELIM_COMMANDS, cmd)
         # \bigl( \bigr) \Bigl[ \bigm| etc.: consume the following delimiter token.
         size_ch, cls_ch = _BIG_DELIM_COMMANDS[cmd]
         ps = _parse_delim_name!(p)
-        return Node(NKBigDelim, "$(ps)\x00$(size_ch)\x00$(cls_ch)", Node[])
+        payload = _encode_payload(_BigDelimiterPayload(ps, parse(Int, string(size_ch)), cls_ch))
+        return Node(NKBigDelim, payload, Node[])
 
     elseif haskey(_STYLE_COMMANDS, cmd)
         # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the
@@ -718,7 +721,7 @@ function _parse_command!(p::_Parser)::Node
             _advance!(p)
             right_name = _parse_delim_name!(p)
         end
-        return Node(NKDelimited, "$(left_name)\x00$(right_name)", inner)
+        return Node(NKDelimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
     elseif cmd == "\\operatorname"
         arg = _parse_argument!(p)

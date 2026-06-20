@@ -14,14 +14,14 @@ A single glyph to be rendered.
 
 `glyph_name` is the PostScript glyph name; the renderer resolves it to a glyph
 index via its font handle.  `font_slot` tells the renderer which font to use:
-`:math` for the OpenType math font (all math-mode glyphs), or `:regular` for
+`FontSlot.Math` for the OpenType math font (all math-mode glyphs), or `FontSlot.Regular` for
 the companion text font (glyphs inside `\\text{}`/`\\mbox{}`).  The metric
 fields are cached from the chosen font in design units so the renderer need not
 re-query them.
 """
 struct Glyph <: TeXElement
     glyph_name::String
-    font_slot::Symbol       # :math | :regular
+    font_slot::FontSlot.T
     advance_width::Int
     left_side_bearing::Int
     x_min::Int; y_min::Int; x_max::Int; y_max::Int
@@ -61,7 +61,7 @@ end
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 # Immutable context shared across all recursive layout calls.
-# `mode` is either :math (default) or :text (inside \text{…}/\mbox{…}).
+# `mode` is either LayoutMode.Math (default) or LayoutMode.Text (inside \text{…}/\mbox{…}).
 # Math-mode character remapping and automatic inter-atom spacing are suppressed
 # in text mode.
 # `font_variant` is :default or the variant name set by an enclosing NKFontSwitch
@@ -76,7 +76,7 @@ struct _LayoutCtx
     top_accent_attachments::Dict{String, Int}  # PS glyph name → x position (design units)
     italic_corrections::Dict{String, Int}      # PS glyph name → design units (from MATH table)
     min_connector_overlap::Int
-    mode::Symbol          # :math | :text
+    mode::LayoutMode.T
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
 end
 
@@ -110,11 +110,11 @@ end
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    :text, ctx.font_variant,
+    LayoutMode.Text, ctx.font_variant,
 )
 
 # Characters whose ASCII/Latin-1 codepoints differ from their correct math-mode
-# glyph.  Applied only in :math mode; text mode uses the literal codepoint.
+# glyph.  Applied only in math mode; text mode uses the literal codepoint.
 const _MATH_CHAR_REMAP = Dict{Char, Char}(
     '-' => '−',   # U+002D HYPHEN-MINUS  → U+2212 MINUS SIGN
     '*' => '∗',   # U+002A ASTERISK      → U+2217 ASTERISK OPERATOR
@@ -848,7 +848,7 @@ end
 # Always resolve by codepoint: the Unicode cmap yields the math-italic form for
 # letters, whereas glyph_metrics(family, "x") returns the upright roman slot.
 function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
-    if ctx.mode === :math
+    if ctx.mode === LayoutMode.Math
         ch = get(_MATH_CHAR_REMAP, ch, ch)
     end
     cp = UInt32(ch)
@@ -856,7 +856,7 @@ function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
     m === nothing && return nothing
     ps = glyph_name_by_codepoint(ctx.family, cp)
     return Glyph(
-        isempty(ps) ? string(ch) : ps, :math,
+        isempty(ps) ? string(ch) : ps, FontSlot.Math,
         m.advance_width, m.left_side_bearing,
         m.x_min, m.y_min, m.x_max, m.y_max
     )
@@ -874,7 +874,7 @@ function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
         ps = glyph_name_by_codepoint(family.regular, UInt32(ch))
         name = isempty(ps) ? string(ch) : ps
         return Glyph(
-            name, :regular, m.advance_width, m.left_side_bearing,
+            name, FontSlot.Regular, m.advance_width, m.left_side_bearing,
             m.x_min, m.y_min, m.x_max, m.y_max
         )
     else
@@ -883,7 +883,7 @@ function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
         ps = glyph_name_by_codepoint(family.math, UInt32(ch))
         name = isempty(ps) ? string(ch) : ps
         return Glyph(
-            name, :math, m.advance_width, m.left_side_bearing,
+            name, FontSlot.Math, m.advance_width, m.left_side_bearing,
             m.x_min, m.y_min, m.x_max, m.y_max
         )
     end
@@ -898,7 +898,7 @@ end
 function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph, Nothing}
     m = glyph_metrics(ctx.family, name)
     m !== nothing && return Glyph(
-        name, :math, m.advance_width, m.left_side_bearing,
+        name, FontSlot.Math, m.advance_width, m.left_side_bearing,
         m.x_min, m.y_min, m.x_max, m.y_max
     )
     # Fallback 1: AGL name with a known codepoint (e.g. "parenleft" in a font
@@ -916,7 +916,7 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph, Nothing}
     ps = glyph_name_by_codepoint(ctx.family, cp)
     actual = isempty(ps) ? name : ps
     return Glyph(
-        actual, :math, m2.advance_width, m2.left_side_bearing,
+        actual, FontSlot.Math, m2.advance_width, m2.left_side_bearing,
         m2.x_min, m2.y_min, m2.x_max, m2.y_max
     )
 end
@@ -958,7 +958,7 @@ function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph
         if m !== nothing
             ps = glyph_name_by_codepoint(ctx.family, cp)
             return Glyph(
-                isempty(ps) ? string(Char(cp)) : ps, :math,
+                isempty(ps) ? string(Char(cp)) : ps, FontSlot.Math,
                 m.advance_width, m.left_side_bearing,
                 m.x_min, m.y_min, m.x_max, m.y_max
             )
@@ -1682,7 +1682,7 @@ function _layout_children!(
             cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
             prev_class = :nothing
         else
-            if ctx.mode === :math && prev_class !== :nothing
+            if ctx.mode === LayoutMode.Math && prev_class !== :nothing
                 sp = _interatom_space(prev_class, cls, style) * scale
                 if sp > 0.0
                     push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
@@ -1741,12 +1741,10 @@ function _layout_matrix!(
         scale::Float64,
         boxes::Vector{LayoutBox},
     )::Float64
-    # Decode value = "env_name\x00nrow\x00colspec".
-    parts = split(node.value, '\x00'; limit = 3)
-    length(parts) < 3 && return 0.0
-    env_name = parts[1]
-    nrow = parse(Int, parts[2])
-    col_aligns, vrule = _parse_colspec(parts[3])
+    payload = _decode_matrix_payload(node.value)
+    env_name = payload.env_name
+    nrow = payload.nrow
+    col_aligns, vrule = _parse_colspec(payload.colspec)
     ncol = length(col_aligns)
     (nrow == 0 || ncol == 0) && return 0.0
 
@@ -1883,17 +1881,17 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     ch = only(node.value)
     g = if ctx.font_variant !== :default
         _variant_glyph(ctx, ctx.font_variant, ch)
-    elseif ctx.mode === :math && isletter(ch)
+    elseif ctx.mode === LayoutMode.Math && isletter(ch)
         # Standard LaTeX renders math-mode letters italic; use the
         # math-italic Unicode variant (U+1D400 block) so e.g. 'x' → u1D465.
         _variant_glyph(ctx, :mathit, ch)
-    elseif ctx.mode === :text && ch == ' '
+    elseif ctx.mode === LayoutMode.Text && ch == ' '
         # Space in text mode: emit a Space element with the font's word-space advance.
         m = glyph_metrics_upright(ctx.family, ' ')
         w = m === nothing ? 0.25 : m.advance_width / ctx.upm * scale
         push!(boxes, LayoutBox(Space(w), x0, y0, scale))
         return w
-    elseif ctx.mode === :text
+    elseif ctx.mode === LayoutMode.Text
         # \text{}/\mbox{}: use upright (regular-font) glyph; no italic remapping.
         _upright_glyph(ctx, ch)
     else
@@ -1958,7 +1956,7 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     m === nothing && return 0.0
     ps = glyph_name_by_codepoint(ctx.family, cp)
     g = Glyph(
-        isempty(ps) ? name : ps, :math,
+        isempty(ps) ? name : ps, FontSlot.Math,
         m.advance_width, m.left_side_bearing,
         m.x_min, m.y_min, m.x_max, m.y_max
     )
@@ -2271,12 +2269,10 @@ end
 # current scale so it appears smaller in subscripts, matching KaTeX behaviour.
 function _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
     isempty(node.value) && return 0.0
-    sep1 = findfirst('\x00', node.value)
-    sep2 = findlast('\x00', node.value)
-    (sep1 === nothing || sep2 === nothing || sep1 === sep2) && return 0.0
-    ps_name = node.value[1:prevind(node.value, sep1)]
-    size_ch = node.value[nextind(node.value, sep1):prevind(node.value, sep2)]
-    size = parse(Int, size_ch)
+    payload = _decode_big_delimiter_payload(node.value)
+    ps_name = payload.glyph_name
+    size = payload.size
+    (isempty(ps_name) || size < 1 || size > length(_BIG_DELIM_HEIGHTS)) && return 0.0
     required_du = _BIG_DELIM_HEIGHTS[size] * ctx.upm
     return _layout_delim!(ctx, ps_name, required_du, x0, y0, scale, boxes)
 end
@@ -2334,10 +2330,9 @@ end
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
-    # Delimiter PS glyph names encoded in value as "left\x00right".
-    delim_sep = findfirst('\x00', node.value)
-    left_name = delim_sep === nothing ? "" : node.value[1:prevind(node.value, delim_sep)]
-    right_name = delim_sep === nothing ? "" : node.value[nextind(node.value, delim_sep):end]
+    payload = _decode_delimiter_pair_payload(node.value)
+    left_name = payload.left
+    right_name = payload.right
 
     num_node, den_node = node.children[1], node.children[2]
     num_s = frac_num_style(style)
@@ -2451,10 +2446,9 @@ end
 function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     # \left…\right: size delimiters to the inner content, centred on the math axis.
-    # node.value encodes "left_ps_name\x00right_ps_name".
-    sep = findfirst('\x00', node.value)
-    left_name = sep === nothing ? node.value : node.value[1:(sep - 1)]
-    right_name = sep === nothing ? "" : node.value[(sep + 1):end]
+    payload = _decode_delimiter_pair_payload(node.value)
+    left_name = payload.left
+    right_name = payload.right
 
     # Partition inner children into content segments separated by NKMiddle nodes.
     # segments[i] holds the children between the (i-1)-th and i-th \middle delimiter.
@@ -2588,7 +2582,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     push!(
         boxes, LayoutBox(
             Glyph(
-                accent_ps, :math, accent_m.advance_width,
+                accent_ps, FontSlot.Math, accent_m.advance_width,
                 accent_m.left_side_bearing,
                 accent_m.x_min, accent_m.y_min,
                 accent_m.x_max, accent_m.y_max
@@ -2679,7 +2673,7 @@ function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutB
         family, mt.constants, Float64(mt.upm), mt.vert_constructions,
         mt.horiz_constructions, mt.top_accent_attachments,
         mt.italic_corrections,
-        mt.min_connector_overlap, :math, :default
+        mt.min_connector_overlap, LayoutMode.Math, :default
     )
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)

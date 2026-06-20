@@ -8,10 +8,10 @@
 
 """Font attributes for a run of text. `size` is an em multiplier (1.0 = body)."""
 struct TextAttrs
-    slot::Symbol    # :regular | :bold | :italic | :bolditalic
+    slot::FontSlot.T
     size::Float64
 end
-TextAttrs() = TextAttrs(:regular, 1.0)
+TextAttrs() = TextAttrs(FontSlot.Regular, 1.0)
 
 """A maximal run of characters sharing one set of TextAttrs."""
 struct TextSpan
@@ -111,8 +111,8 @@ const _DISPLAY_ENVS = Set{String}(["align", "aligned", "gather", "equation"])
 # Compute new TextAttrs by applying a font-switch command to the current attrs.
 function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
     slot = attrs.slot
-    bold = slot === :bold   || slot === :bolditalic
-    italic = slot === :italic || slot === :bolditalic
+    bold = slot === FontSlot.Bold || slot === FontSlot.BoldItalic
+    italic = slot === FontSlot.Italic || slot === FontSlot.BoldItalic
 
     if cmd == "\\textbf"
         bold = true
@@ -123,12 +123,12 @@ function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
     elseif cmd == "\\textrm" || cmd == "\\textnormal"
         bold = false
         italic = false
-        # \\textsf / \\texttt: v1 maps to :regular slot — no change to bold/italic
+        # \\textsf / \\texttt: v1 maps to regular slot — no change to bold/italic
     end
 
-    new_slot = bold && italic ? :bolditalic :
-        bold ? :bold :
-        italic ? :italic : :regular
+    new_slot = bold && italic ? FontSlot.BoldItalic :
+        bold ? FontSlot.Bold :
+        italic ? FontSlot.Italic : FontSlot.Regular
     return TextAttrs(new_slot, attrs.size)
 end
 

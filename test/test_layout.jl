@@ -633,34 +633,34 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test name_rm != name_it
     end
 
-    @testset "font_slot: math-mode glyphs carry :math" begin
-        # All math-mode glyphs must have font_slot = :math so the renderer queries
+    @testset "font_slot: math-mode glyphs carry FontSlot.Math" begin
+        # All math-mode glyphs must have font_slot = FontSlot.Math so the renderer queries
         # the math font.
         boxes = layout(parse_latex("x + \\alpha"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "font_slot: \\text glyphs carry :regular when family has regular font" begin
-        # When a regular font is configured, _upright_glyph should emit :regular.
+    @testset "font_slot: \\text glyphs carry FontSlot.Regular when family has regular font" begin
+        # When a regular font is configured, _upright_glyph should emit FontSlot.Regular.
         # Build a two-font family using the NewCM10-Regular companion for NewCMMath.
         reg_path = joinpath(dirname(FIXTURE_FONT_PATH), "NewCM10-Regular.otf")
         if isfile(reg_path)
             family_with_reg = FontFamily(FIXTURE_FONT_PATH, reg_path, nothing, nothing, nothing)
             boxes = layout(parse_latex(raw"\text{hi}"), family_with_reg, Text)
-            @test all(b.element.font_slot === :regular for b in find_glyphs(boxes))
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in find_glyphs(boxes))
         end
     end
 
-    @testset "font_slot: \\text glyphs fall back to :math when no regular font" begin
+    @testset "font_slot: \\text glyphs fall back to FontSlot.Math when no regular font" begin
         # Without a regular font, _upright_glyph falls back to the math font.
         boxes = layout(parse_latex(raw"\text{hi}"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "FontSwitch: \\mathrm uses math font (font_slot :math)" begin
+    @testset "FontSwitch: \\mathrm uses math font (FontSlot.Math)" begin
         boxes = layout(parse_latex("\\mathrm{x}"), family, Text)
         @test !isempty(find_glyphs(boxes))
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
     @testset "\\text{if } preserves trailing space" begin

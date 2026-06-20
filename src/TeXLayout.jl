@@ -12,9 +12,11 @@
 module TeXLayout
 
 include("math_table.jl")
+include("enums.jl")
 include("fonts.jl")
 include("style.jl")
 include("lexer.jl")
+include("payloads.jl")
 include("parser.jl")
 include("layout.jl")
 include("shaping.jl")

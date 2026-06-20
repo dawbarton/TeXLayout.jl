@@ -25,11 +25,11 @@ end
 
 """Options controlling text-layer layout. All fields have sensible defaults."""
 struct LayoutOptions
-    align::Symbol                      # text lines: :left (default) | :right | :center
+    align::Alignment.T                 # text lines
     line_height::Float64               # \baselineskip in em (default 1.2)
     lineskip::Float64                  # min baseline clearance in em (default 0.1)
     width::Union{Nothing, Float64}     # nothing ⇒ widest line; else fixed em width
-    display_align::Symbol              # display blocks: :center (default) | :left | :right
+    display_align::Alignment.T         # display blocks
     abovedisplayskip::Float64          # extra em above a display block (default 0.5)
     belowdisplayskip::Float64          # extra em below a display block (default 0.5)
     shaper::TextShaper                 # default MetricShaper()
@@ -46,8 +46,14 @@ function LayoutOptions(;
         shaper = MetricShaper(),
     )
     return LayoutOptions(
-        align, line_height, lineskip, width,
-        display_align, abovedisplayskip, belowdisplayskip, shaper,
+        align isa Symbol ? _alignment_from_symbol(align) : align,
+        line_height,
+        lineskip,
+        width,
+        display_align isa Symbol ? _alignment_from_symbol(display_align) : display_align,
+        abovedisplayskip,
+        belowdisplayskip,
+        shaper,
     )
 end
 
@@ -103,9 +109,12 @@ end
 
 # ── vstack helpers ────────────────────────────────────────────────────────────
 
-_dx_for(a::Symbol, W::Float64, w::Float64) =
-    a === :right ? W - w :
-    a === :center ? (W - w) / 2.0 :
+_normalise_alignment(a::Alignment.T) = a
+_normalise_alignment(a::Symbol) = _alignment_from_symbol(a)
+
+_dx_for(a, W::Float64, w::Float64) =
+    _normalise_alignment(a) === Alignment.Right ? W - w :
+    _normalise_alignment(a) === Alignment.Center ? (W - w) / 2.0 :
     0.0
 
 _place!(out::Vector{LayoutBox}, box::TeXBox, dx::Float64, dy::Float64) =
@@ -126,7 +135,7 @@ Baseline advance between consecutive items follows the LaTeX `\\baselineskip` /
 `\\lineskip` rule:
     advance = max(line_height, prevdepth + ascent(next) + lineskip)
 
-`align_of(i)` returns `:left`, `:right`, or `:center` for item `i`.
+`align_of(i)` returns an `Alignment` value for item `i`.
 `width` fixes the column width; `nothing` uses the widest item.
 """
 function vstack(
@@ -200,7 +209,7 @@ function layout_document(
     base_scale = size_scale(Text, mc)
 
     items = TeXBox[]
-    aligns = Symbol[]
+    aligns = Alignment.T[]
 
     for blk in doc
         if blk isa ParagraphBlock
@@ -210,12 +219,12 @@ function layout_document(
             end
         else   # DisplayBlock
             opts.abovedisplayskip > 0 && (
-                push!(items, _vskip(opts.abovedisplayskip)); push!(aligns, :left)
+                push!(items, _vskip(opts.abovedisplayskip)); push!(aligns, Alignment.Left)
             )
             push!(items, hlayout_math(blk.node, family, Display))
             push!(aligns, opts.display_align)
             opts.belowdisplayskip > 0 && (
-                push!(items, _vskip(opts.belowdisplayskip)); push!(aligns, :left)
+                push!(items, _vskip(opts.belowdisplayskip)); push!(aligns, Alignment.Left)
             )
         end
     end

@@ -171,14 +171,14 @@ end
 
 # Priority-ordered list of non-nothing font paths for a given style slot.
 # Falls back: requested slot → regular → math, de-duplicated.
-function _slot_fallback(family::FontFamily, slot::Symbol)::Vector{String}
-    raw = if slot === :bolditalic
+function _slot_fallback(family::FontFamily, slot::FontSlot.T)::Vector{String}
+    raw = if slot === FontSlot.BoldItalic
         [family.bolditalic, family.bold, family.italic, family.regular, family.math]
-    elseif slot === :bold
+    elseif slot === FontSlot.Bold
         [family.bold, family.regular, family.math]
-    elseif slot === :italic
+    elseif slot === FontSlot.Italic
         [family.italic, family.regular, family.math]
-    else  # :regular
+    else  # FontSlot.Regular
         [family.regular, family.math]
     end
     seen = Set{String}()
@@ -199,7 +199,7 @@ trying the slot's font first then falling back through regular → math. Returns
 `nothing` if the character is absent from all fallback fonts.
 """
 function glyph_metrics_slot(
-        family::FontFamily, ch::Char, slot::Symbol
+        family::FontFamily, ch::Char, slot::FontSlot.T
     )::Union{Tuple{GlyphMetrics, String}, Nothing}
     for path in _slot_fallback(family, slot)
         m = _codepoint_metrics(path, UInt32(ch))
