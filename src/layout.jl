@@ -307,11 +307,28 @@ function _emit_shifted!(
     return nothing
 end
 
+function _translate_range!(
+        boxes::Vector{LayoutBox},
+        start::Int,
+        stop::Int,
+        dx::Float64,
+        dy::Float64,
+    )::Nothing
+    start > stop && return nothing
+    for i in start:stop
+        b = boxes[i]
+        boxes[i] = LayoutBox(b.element, b.x + dx, b.y + dy, b.scale)
+    end
+    return nothing
+end
+
 # Maximum y-extent (top of the ink) of all boxes, in em units.
 # HRule stores its bottom edge in box.y; its top is box.y + element.thickness.
-function _boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64
+function _boxes_top(boxes::Vector{LayoutBox}, start::Int, stop::Int, upm::Float64)::Float64
     top = 0.0
-    for b in boxes
+    start > stop && return top
+    for i in start:stop
+        b = boxes[i]
         el = b.element
         if el isa Glyph
             top = max(top, b.y + el.y_max / upm * b.scale)
@@ -322,11 +339,16 @@ function _boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64
     return top
 end
 
+_boxes_top(boxes::Vector{LayoutBox}, upm::Float64)::Float64 =
+    _boxes_top(boxes, firstindex(boxes), lastindex(boxes), upm)
+
 # Minimum y-extent (bottom of the ink) of all boxes, in em units.
 # HRule stores its bottom edge in box.y.
-function _boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64
+function _boxes_bottom(boxes::Vector{LayoutBox}, start::Int, stop::Int, upm::Float64)::Float64
     bot = 0.0
-    for b in boxes
+    start > stop && return bot
+    for i in start:stop
+        b = boxes[i]
         el = b.element
         if el isa Glyph
             bot = min(bot, b.y + el.y_min / upm * b.scale)
@@ -336,6 +358,12 @@ function _boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64
     end
     return bot
 end
+
+_boxes_bottom(boxes::Vector{LayoutBox}, upm::Float64)::Float64 =
+    _boxes_bottom(boxes, firstindex(boxes), lastindex(boxes), upm)
+
+_boxes_vextent(boxes::Vector{LayoutBox}, start::Int, stop::Int, upm::Float64)::Tuple{Float64, Float64} =
+    (_boxes_top(boxes, start, stop, upm), _boxes_bottom(boxes, start, stop, upm))
 
 # ── Limits-placement helpers ─────────────────────────────────────────────────
 
@@ -347,16 +375,21 @@ _limits_base(node::Node) = node.kind === NodeKind.LimitsOverride ? node.children
 # Per the OpenType MATH spec and KaTeX, limits are offset by ±½ IC: subscripts shift
 # left and superscripts shift right.
 function _base_italic_correction_em(
-        boxes::Vector{LayoutBox}, ctx::_LayoutCtx,
+        boxes::Vector{LayoutBox}, start::Int, stop::Int, ctx::_LayoutCtx,
         scale::Float64
     )::Float64
-    for b in boxes
+    start > stop && return 0.0
+    for i in start:stop
+        b = boxes[i]
         b.element isa Glyph || continue
         ic = get(ctx.italic_corrections, b.element.glyph_name, 0)
         return ic * scale / ctx.upm
     end
     return 0.0
 end
+
+_base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx, scale::Float64)::Float64 =
+    _base_italic_correction_em(boxes, firstindex(boxes), lastindex(boxes), ctx, scale)
 
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).

@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored internal parser and layout organization: AST/token kinds now use
   namespaced `EnumX.@enumx` enums, parser/layout lookup tables live under
   `src/tables/`, and feature-specific layout helpers live under `src/layout/`.
+- Script and limits layout now measure emitted sub-ranges in place instead of
+  allocating temporary `LayoutBox` buffers before copying them into the result.
 - Document composition now uses an internal measured box-tree layer behind the
   existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
 - Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a

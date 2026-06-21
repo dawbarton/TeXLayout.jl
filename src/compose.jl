@@ -79,8 +79,8 @@ function measure(boxes::Vector{LayoutBox}, upm::Float64)::TeXBox
     for b in boxes
         width = max(width, b.x + _advance_em(b, upm))
     end
-    asc = _boxes_top(boxes, upm)
-    desc = -_boxes_bottom(boxes, upm)
+    asc = _boxes_top(boxes, firstindex(boxes), lastindex(boxes), upm)
+    desc = -_boxes_bottom(boxes, firstindex(boxes), lastindex(boxes), upm)
     return TeXBox(boxes, width, max(asc, 0.0), max(desc, 0.0))
 end
 

@@ -763,3 +763,12 @@
   temporary arrays from changing already-built box trees.
 - Added composition tests for validation failures, defensive copies, and nested
   recursive offset shaping.
+
+## 2026-06-21T13:13+00:00 Math flat layout range-emission first pass
+
+- Reviewed `math-flat-layout-plan.local.md`; the plan is sound for scratch-buffer removal, with snapshot identity as the right guardrail.
+- Added range-based `_boxes_top`, `_boxes_bottom`, `_boxes_vextent`, `_translate_range!`, and `_base_italic_correction_em` helpers in `src/layout.jl`.
+- Converted `src/layout/scripts.jl` script and limits placement to emit base/sub/sup boxes into the shared output buffer, measure those emitted ranges, and translate script ranges in place.
+- Updated `compose.measure` to use the same range-extent helpers for consistency.
+- Focused `test_layout.jl` + `test_snapshots.jl` run passed after the conversion.
+- Follow-up: constructs that currently emit delimiters or radicals before measured children (`sqrt`, `genfrac`, `delimited`, matrix delimiters) need explicit range reordering if converted without changing serialized emission order.
