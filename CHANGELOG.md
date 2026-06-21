@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compound math constructs now measure emitted sub-ranges in place for fractions,
   radicals, delimiters, arrows, accents, and over/under rules; snapshot tests now
   canonicalize box records so append order is not treated as layout semantics.
+- Horizontal brace layout now measures body and note sub-ranges in place instead
+  of allocating temporary `LayoutBox` buffers.
 - Document composition now uses an internal measured box-tree layer behind the
   existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
 - Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a

@@ -781,3 +781,9 @@
 - Changed snapshot serialization to sort rounded box records before hashing, so snapshots guard element geometry and metrics without treating append order as semantic.
 - Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).
 - Benchmark smoke after this pass: `layout/scripts_fraction` 51 allocs / 6432 bytes, `layout/radical_delimited` 33 allocs / 3248 bytes, `layout/accents_braces_arrows` 116 allocs / 12800 bytes, `layout/matrix_cases` 139 allocs / 12816 bytes.
+
+## 2026-06-21T13:49+00:00 Horizontal brace range-emission pass
+
+- Converted `_layout_horiz_brace!` in `src/layout/extensible.jl` to emit body, primary note, and secondary note into the shared buffer and translate recorded ranges in place.
+- Removed the remaining `LayoutBox[]` scratch buffers and `_emit_shifted!` use from `extensible.jl`.
+- Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).

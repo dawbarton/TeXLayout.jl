@@ -445,19 +445,21 @@ function _layout_horiz_brace!(
     secondary_node = is_over ? sub_node : sup_node
 
     # Body at current style.
-    tmp_body = LayoutBox[]
-    body_w = _layout_node!(brace_node.children[1], ctx, style, 0.0, 0.0, scale, tmp_body)
-    body_top = _boxes_top(tmp_body, upm)
-    body_bot = _boxes_bottom(tmp_body, upm)
+    body_start = lastindex(boxes) + 1
+    body_w = _layout_node!(brace_node.children[1], ctx, style, 0.0, 0.0, scale, boxes)
+    body_stop = lastindex(boxes)
+    body_top = _boxes_top(boxes, body_start, body_stop, upm)
+    body_bot = _boxes_bottom(boxes, body_start, body_stop, upm)
 
     # Primary note at the script style of the brace side.
     pri_s = is_over ? sup_style(style) : sub_style(style)
     pri_scale = size_scale(pri_s, mc)
-    tmp_pri = LayoutBox[]
+    pri_start = lastindex(boxes) + 1
     pri_w = 0.0
     if primary_node !== nothing
-        pri_w = _layout_node!(primary_node, ctx, pri_s, 0.0, 0.0, pri_scale, tmp_pri)
+        pri_w = _layout_node!(primary_node, ctx, pri_s, 0.0, 0.0, pri_scale, boxes)
     end
+    pri_stop = lastindex(boxes)
 
     # Total span: body and note are both centred over max(body_w, note_w).
     total_w = max(body_w, pri_w)
@@ -499,7 +501,7 @@ function _layout_horiz_brace!(
     end
 
     # Place body (centred over total_w at y0).
-    _emit_shifted!(boxes, tmp_body, x0 + Δbody, y0)
+    _translate_range!(boxes, body_start, body_stop, x0 + Δbody, y0)
 
     # Place brace (centred over body_w; extension fills body width).
     _layout_wide_accent!(ctx, glyph_ps, body_w, brace_y, x0 + Δbody, scale, boxes)
@@ -507,20 +509,21 @@ function _layout_horiz_brace!(
     # Place primary note centred over total_w.
     # Gap = 0.2 em between brace ink edge and note ink edge (KaTeX horizBrace.ts).
     note_gap = 0.2 * scale
-    if !isempty(tmp_pri)
+    if pri_start <= pri_stop
         Δpri = (total_w - pri_w) / 2
         note_y = is_over ?
-            brace_top + note_gap - _boxes_bottom(tmp_pri, upm) :
-            brace_bot - note_gap - _boxes_top(tmp_pri, upm)
-        _emit_shifted!(boxes, tmp_pri, x0 + Δpri, note_y)
+            brace_top + note_gap - _boxes_bottom(boxes, pri_start, pri_stop, upm) :
+            brace_bot - note_gap - _boxes_top(boxes, pri_start, pri_stop, upm)
+        _translate_range!(boxes, pri_start, pri_stop, x0 + Δpri, note_y)
     end
 
     # Secondary note: placed as a normal side script to the right of the stack.
     if secondary_node !== nothing
         sec_s = is_over ? sub_style(style) : sup_style(style)
         sec_scale = size_scale(sec_s, mc)
-        tmp_sec = LayoutBox[]
-        sec_w = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, tmp_sec)
+        sec_start = lastindex(boxes) + 1
+        sec_w = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, boxes)
+        sec_stop = lastindex(boxes)
         s = scale / upm
         script_x = x0 + total_w
         if is_over
@@ -528,8 +531,8 @@ function _layout_horiz_brace!(
                 y0 - mc.subscript_shift_down * s,
                 y0 + body_bot - mc.subscript_baseline_drop_min * s
             )
-            y_sub = min(y_sub, y0 - _boxes_top(tmp_sec, upm) + mc.subscript_top_max * s)
-            _emit_shifted!(boxes, tmp_sec, script_x, y_sub)
+            y_sub = min(y_sub, y0 - _boxes_top(boxes, sec_start, sec_stop, upm) + mc.subscript_top_max * s)
+            _translate_range!(boxes, sec_start, sec_stop, script_x, y_sub)
         else
             min_sup = is_cramped(style) ?
                 mc.superscript_shift_up_cramped * s : mc.superscript_shift_up * s
@@ -537,12 +540,11 @@ function _layout_horiz_brace!(
                 y0 + min_sup,
                 y0 + body_top - mc.superscript_baseline_drop_max * s
             )
-            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(tmp_sec, upm))
-            _emit_shifted!(boxes, tmp_sec, script_x, y_sup)
+            y_sup = max(y_sup, y0 + mc.superscript_bottom_min * s - _boxes_bottom(boxes, sec_start, sec_stop, upm))
+            _translate_range!(boxes, sec_start, sec_stop, script_x, y_sup)
         end
         total_w += sec_w + mc.space_after_script * s
     end
 
     return total_w
 end
-
