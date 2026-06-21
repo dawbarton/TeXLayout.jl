@@ -73,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parsed degree.
 - `align` / `aligned` cells after `&` now include the ordinary atom needed for
   TeX-style relation spacing before a leading relation such as `=`.
+- `align` / `aligned` no longer insert inter-column `\arraycolsep` within an
+  `r`/`l` pair, so the gap before a leading relation comes solely from the
+  relation atom (matching plain math) instead of being doubled up; the grid also
+  carries no outer column margin.
 - Blank lines in document input now create paragraph breaks with configurable
   `parskip` vertical spacing.
 - `layout_document` now applies display skips as explicit extra vertical space

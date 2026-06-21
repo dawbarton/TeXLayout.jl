@@ -1293,6 +1293,24 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(relation_spaces) == 1
     end
 
+    @testset "align glues r/l pair without extra column spacing" begin
+        # The relation in an align pair must sit exactly where it would in a plain
+        # math list: only the relation atom's spacing, no inter-column colsep.
+        align_eq = only(
+            filter(
+                b -> b.element isa Glyph && b.element.glyph_name == "equal",
+                layout(parse_latex("\\begin{align}x&=y\\end{align}"), family, Display),
+            ),
+        )
+        plain_eq = only(
+            filter(
+                b -> b.element isa Glyph && b.element.glyph_name == "equal",
+                layout(parse_latex("x=y"), family, Display),
+            ),
+        )
+        @test isapprox(align_eq.x, plain_eq.x; atol = 1.0e-6)
+    end
+
     # ── Style overrides ────────────────────────────────────────────────────────
 
     @testset "\\dfrac inside subscript renders at full scale" begin

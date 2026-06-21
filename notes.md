@@ -882,3 +882,18 @@
   (period looked raised, descenders/caps misaligned). Replaced with a fixed
   baseline `H÷2 + px÷3` and `top = baseline - by_px`, matching the baseline logic
   in `stress_test_text.jl render_text_line!`. Verified on NewCM and FiraMath.
+
+## 2026-06-21T15:55 Align spacing double-count fix
+
+- Reported: too much space before `=` in `\begin{align}x&=y+z...`. Cause: the
+  recent "Add align relation spacing" change inserts an empty ord group so the
+  leading `=` gets ord-rel spacing (5mu), but the matrix layout was *also*
+  applying inter-column `_MATRIX_COLSEP` (2×5mu) between the r/l pair → 15mu
+  before `=` instead of 5mu.
+- Fix (`src/layout/matrix.jl`): for align/aligned, columns form right/left pairs
+  glued at the alignment point — `col_gap(c)=0` for even c (inside a pair), full
+  `2·_MATRIX_COLSEP` only between pairs (odd c>1); outer margin 0. Relation
+  spacing now matches plain math: `=` in `\begin{align}x&=y\end{align}` lands at
+  the same x as in `x=y`.
+- Added layout regression test (align `=` x == plain `=` x); updated
+  `document_inline_display` snapshot hash. Full suite: 1195 pass.

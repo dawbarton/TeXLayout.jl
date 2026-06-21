@@ -102,15 +102,25 @@ function _layout_matrix!(
     axis_em = mc.axis_height / upm * scale
     y_shift = y0 + axis_em - (grid_top + grid_bot) / 2
 
+    # In align/aligned the columns form right/left pairs glued together at the
+    # alignment point (the `&`): no inter-column space is inserted within a pair,
+    # so the spacing around a leading relation comes solely from the math-list
+    # relation atom (see the empty-group insertion in the parser). Space is only
+    # added between successive pairs, and the grid carries no outer margin.
+    tight_pairs = env_name ∈ ("align", "aligned")
+    # Gap inserted to the left of column c (c = 2..ncol).
+    col_gap(c) = tight_pairs && iseven(c) ? 0.0 : 2 * _MATRIX_COLSEP * cell_scale
+    outer_margin = tight_pairs ? 0.0 : _MATRIX_COLSEP * cell_scale
+
     # Column left-edge positions (relative to content origin, before adding left delimiter).
     # Vertical rules occupy space within the column separations.
     vrule_thick = mc.fraction_rule_thickness / upm * cell_scale
     x_col = zeros(Float64, ncol)
-    x_col[1] = _MATRIX_COLSEP * cell_scale
+    x_col[1] = outer_margin
     for c in 2:ncol
-        x_col[c] = x_col[c - 1] + col_widths[c - 1] + 2 * _MATRIX_COLSEP * cell_scale
+        x_col[c] = x_col[c - 1] + col_widths[c - 1] + col_gap(c)
     end
-    content_w = x_col[ncol] + col_widths[ncol] + _MATRIX_COLSEP * cell_scale
+    content_w = x_col[ncol] + col_widths[ncol] + outer_margin
 
     # ── Delimiter sizing (if required) ──
     left_w = 0.0; right_w = 0.0
