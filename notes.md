@@ -801,3 +801,12 @@
 - `julia --project=tools tools/stress_test_all.jl` rendered all eight current sheets and downloaded all eight references.
 - Diff result: all fonts reported `CHANGED` with max delta 255 and ~27-29% changed pixels.
 - The large diff is dominated by reference/current sheet size mismatch: current sheets are ~11999-13654 px tall while v0.1.0-stress references are ~7867-9032 px tall, so the comparison pads the shorter reference with white. A fresh reference baseline for the current stress sheet content is needed before this tool can distinguish real layout drift from sheet-content/canvas changes.
+
+## 2026-06-21T14:24+00:00 Unified per-case stress-test suite
+
+- Added `tools/stress_test_suite.jl`, a unified stress CLI with `generate`, `pack`, `compare`, and `all` commands.
+- The suite renders stable per-case PNG paths grouped by font, suite, and section: `math_freetype`, `text_freetype`, and optional `makie_cairo`. Full math/text/Makie sheets are generated under `sheets/` for visual inspection but excluded from reference tarballs and comparisons.
+- Reference packaging uses Julia stdlib `Tar` and writes `stress_test_reference.tar`; comparison accepts either a local tarball or URL. New current images missing from the reference are reported as `NEW` and do not fail by default, preserving backwards-compatible addition of stress cases.
+- Added root `justfile` helpers for common test and stress commands.
+- Updated `tools/stress_test_all.jl` to delegate to the unified suite while preserving old usage with bare font-name arguments.
+- Validation: generated `new_cm` math/text outputs, packed and self-compared a reference tarball (152/152 identical); generated all eight font artifacts without sheets and self-compared the tarball (1216/1216 identical); verified a synthetic new case reports `NEW` without failing; generated the `new_cm` optional Makie subset (6 PNGs).

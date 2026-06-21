@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with literal source inputs beside `layout_document` output.
 - Layout-equivalence snapshot tests for representative math and document cases.
 - BenchmarkTools harness with configurable runtime/allocation regression thresholds.
+- Unified stress-test suite (`tools/stress_test_suite.jl`) that renders per-case
+  math, text, and optional CairoMakie PNGs for all bundled font artifacts,
+  packages references as `stress_test_reference.tar`, and compares current output
+  against local or downloaded references.
+- Root `justfile` helpers for common test, stress generation, packaging, and
+  comparison commands.
 
 ### Changed
 - Refactored internal parser and layout organization: AST/token kinds now use
@@ -61,8 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of inheriting surrounding bold/italic state.
 - FreeType visualisation tools now compare `Glyph.font_slot` against `FontSlot`
   enum values instead of stale symbol values when choosing text fonts.
-- `tools/stress_test_all.jl` now downloads stress-test reference images using
-  the release asset naming pattern `stress_test_output_<font>.png`.
+- `tools/stress_test_all.jl` now delegates to the unified per-case stress-test
+  suite while preserving the old font-name argument form.
 
 ## [v0.1.1] - 2026-06-19
 
