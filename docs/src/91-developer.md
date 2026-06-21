@@ -663,6 +663,11 @@ current attributes.  The display environments `align`, `aligned`, `gather`, and
 `equation` (in `_DISPLAY_ENVS`) become `DisplayBlock`s when they appear at the top
 level without `$…$`.
 
+Currently `\textbf`, `\textit`, and nested bold-italic text select the corresponding
+`FontFamily` text slots.  `\textsf` and `\texttt` are parsed as text-style scopes but
+fall back to the regular text slot until dedicated sans-serif and monospace slots are
+added.
+
 ### Shaping (`src/shaping.jl`)
 
 `TextShaper` is the abstract interface for turning a `TextSpan` into positioned
@@ -901,14 +906,19 @@ Julia's standard method dispatch selects the TeXLayout method automatically.
 
 ### Conversion pipeline
 
-The extension converts `Vector{LayoutBox}` to MathTeXEngine's expected output format:
+The extension converts TeXLayout output to MathTeXEngine's expected tuple format:
 
-1. Strip surrounding `$…$` delimiters that `LaTeXStrings.jl` adds around the content.
-2. Call `TeXLayout.parse_latex` and then `TeXLayout.layout` with
-   `TeXLayout.default_font_family()`.
-3. Convert each `LayoutBox` element to an MTE tuple `(element, Point2f, scale)`:
-   - `Glyph` → `MathTeXEngine.TeXChar` (glyph index resolved via the PS name, then
-     single-codepoint lookup, then `uni`-style encoding as a fallback).
+1. Inspect the `LaTeXString`.
+   - A string that starts and ends with a single `$` and contains no other `$` is
+     treated as one inline-math formula.  The extension strips the delimiters, calls
+     `TeXLayout.parse_latex`, and lays the result out in `Display` style with
+     `TeXLayout.default_font_family()`.
+   - Every other string is treated as document input and routed through
+     `TeXLayout.layout_document` with `TeXLayout.default_font_family()` and
+     `TeXLayout.default_layout_options()`.
+2. Convert each `LayoutBox` element to an MTE tuple `(element, Point2f, scale)`:
+   - `Glyph` → `MathTeXEngine.TeXChar`; glyph indices are resolved through the
+     glyph's `FontSlot` fallback paths and cached by `(font path, glyph name)`.
    - `HRule` → `MathTeXEngine.HLine` with the corresponding width and thickness.
    - `VRule` → `MathTeXEngine.VLine` with the corresponding height and thickness.
    - `Space` → skipped (carries no renderable geometry).
@@ -1116,6 +1126,20 @@ increases are usually more actionable than nanosecond-scale timing movement.
   text layer uses the `bold`, `italic`, and `bolditalic` `FontFamily` slots, but
   math-mode font switching does not yet use those slots to cover these cases.
 
+- **Dedicated sans-serif and monospace text slots** — `\textsf` and `\texttt` are
+  parsed by the document text layer but currently fall back to the regular text slot.
+  Extending `FontFamily` with sans-serif and monospace slots would let these render
+  distinct faces and would require matching Makie runtime-cache support.
+
+- **Matrix vertical spacing helpers** — `\strut`, `\phantom`/`\vphantom`/`\hphantom`,
+  and applied row-spacing arguments such as `\\[0.2em]` are not implemented.  The
+  parser currently recognises and skips bracketed matrix row-spacing arguments; layout
+  does not apply them.
+
+- **Whitespace conventions** — leading, trailing, and repeated whitespace handling in
+  math and document text modes needs a compatibility review against LaTeX before any
+  behavior changes.
+
 - **Makie type piracy** — the `MathTeXEngineExt` extension adds a method to a function
   and argument type that TeXLayout does not own.  Alternative integration strategies
   (a dedicated Makie recipe, or an upstream extension point in MathTeXEngine) are under
@@ -1124,3 +1148,8 @@ increases are usually more actionable than nanosecond-scale timing movement.
 - **Makie font-family argument ignored** — `generate_tex_elements(str, font_family)` in
   the extension always uses `default_font_family()`.  Call
   `set_default_font_family!(family)` to change the font used by Makie.
+
+- **Makie document options are session-wide** — Makie's fixed call site cannot pass
+  document `LayoutOptions` per render.  The extension reads `default_layout_options()`
+  for document-path renders; call `set_default_layout_options!` to change width,
+  alignment, and display alignment globally for the session.

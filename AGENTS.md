@@ -86,6 +86,7 @@ TeXLayout.jl/
 ├── CLAUDE.md               # Symlink to AGENTS.md for compatibility
 ├── katex_rules.md          # Rule-by-rule implementation notes against KaTeX/TeX
 ├── notes.md                # Cross-session engineering notes
+├── future.md               # Focused backlog notes for known follow-up layout work
 ├── justfile                # Common developer/test/stress-suite command shortcuts
 ├── Project.toml
 └── README.md
@@ -308,10 +309,14 @@ at the end of that file.
   produces blank space on all fonts.  It is not a standard LaTeX/AMS symbol and
   has no single Unicode codepoint; per-font investigation would be needed to
   support it.
-- **Font switching (text slots)** — `\mathbf`, `\boldsymbol`, `\mathit` etc. map Latin,
-  Greek, and common symbols (∇, ∂, variant letters) to their Unicode math-variant
-  codepoints.  The `bold`, `italic`, `bolditalic` slots in `FontFamily` are not yet used;
-  adding them would cover characters outside the Unicode math block.
+- **Math-mode font switching uses Unicode variants** — `\mathbf`, `\boldsymbol`,
+  `\mathit` etc. map Latin, Greek, and common symbols (∇, ∂, variant letters)
+  to their Unicode math-variant codepoints.  The document text layer does use
+  `regular`, `bold`, `italic`, and `bolditalic` `FontFamily` slots for
+  `\textbf`, `\textit`, and nested text styles, and the Makie adapter now
+  resolves those slots through the same fallback chains.  Math-mode font
+  switching still does not use the text slots for characters outside the
+  Unicode math block.
 - **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
   extension).  When `TeXLayout`, `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings`
   are all loaded, the extension adds a specialised
@@ -327,8 +332,9 @@ at the end of that file.
   math — is routed through `layout_document`, and the resulting `TeXBox.boxes` are
   converted by the same `_box_to_mte` adapter.
   The extension also maintains a per-font runtime cache so repeated Makie renders
-  reuse the loaded math/regular faces, the derived `MathTeXEngine.FontFamily`, and
-  glyph-name → glyph-index lookup tables.
+  reuse loaded FreeType faces for every configured font-slot fallback path, the
+  derived `MathTeXEngine.FontFamily`, and `(font path, glyph name)` → glyph-index
+  lookup tables.
   **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
   (`HRule.y` = bottom edge, `VRule.x` = left edge), while
   `MathTeXEngine.HLine` / `VLine` use line-centre positions.  The adapter in
@@ -345,6 +351,14 @@ at the end of that file.
   `=`, but the environment is not a full amsmath alignment template.
 - **`\textsf` / `\texttt` mapped to `:regular` slot** — no dedicated sans-serif or
   monospace font is wired to those slot names in v1; they render identically to `\textrm`.
+- **Matrix vertical spacing helpers not yet implemented** — `\strut`,
+  `\phantom`/`\vphantom`/`\hphantom`, and effective matrix row-spacing arguments
+  such as `\\[0.2em]` are future work.  The parser currently recognises and skips
+  bracketed row-spacing arguments in matrix bodies, but layout does not apply
+  them.  See `future.md` for the current focused backlog.
+- **Whitespace convention review pending** — leading, trailing, and repeated
+  whitespace handling in math and document text modes should be reviewed against
+  LaTeX conventions before changing parser behavior.  See `future.md`.
 - **HarfBuzz shaper not yet implemented** — the `TextShaper` interface and extension seam
   are in place (`ext/HarfBuzzExt.jl` is documented in `text-spec.md` but not yet built).
   Users opt in with `shaper = HarfBuzzShaper()` once the extension is available.

@@ -945,3 +945,78 @@
 - Exported both names. 10 new tests (merge, per-call override, reset, typo error,
   Makie pickup). Suite 1223 pass, no snapshot change. Docs: README, 01/03/05 doc
   pages, AGENTS.md Makie note, CHANGELOG.
+
+## 2026-06-21T20:25+00:00 eigen_demo Makie review
+
+- Investigating `examples/eigen_demo.jl` showed the mixed text/math label goes
+  through `MathTeXEngineExt`'s document path.
+- Found likely root causes: the Makie adapter resolves every non-math glyph
+  through the regular FreeType face, so `\textbf{...}` cannot render with a bold
+  face; the demo's raw triple-quoted label also preserves indentation as leading
+  spaces, which affects apparent left alignment.
+
+## 2026-06-21T20:35+00:00 eigen_demo fixes verified
+
+- Fixed `MathTeXEngineExt` to resolve glyphs through TeXLayout's per-slot fallback
+  chains and preserve useful `represented_char` values for standard glyph names
+  such as `space` and `Lambda`.
+- Fixed the eigen demo annotation as one multiline `text!` call: no indented
+  triple-quoted source, left-aligned display block, `V^{\,-1}` spacing, and a
+  standard Julia `"\\\\"` separator because `raw"and\\"` produced only one trailing
+  backslash and malformed the intended line break.
+- Rendered `/tmp/eigen_demo.png`; the prose is left aligned, bold text is bold,
+  and the `V^{-1}` superscript is visually separated.
+
+## 2026-06-21T20:50+00:00 eigen_demo prose line break follow-up
+
+- User review caught that the explanatory prose still had an awkward/misleading
+  break around `and`, making later text look like it had leaked into math mode.
+- Restored the original wording but made the break explicit as
+  `... \textbf{eigenvectors}` + `"\\\\"` + `and $\Lambda$ ...`, so `and` and the
+  following prose are text-mode on the next line while only `\Lambda` is math.
+- Regenerated `/tmp/eigen_demo.png` and visually confirmed the prose line now
+  breaks cleanly.
+
+## 2026-06-21T21:14+00:00 future.md refresh
+
+- Replaced stale `future.md` box-tree architecture note with a focused future
+  work list for matrix vertical spacing helpers.
+- Captured follow-up items: implement `\strut` and phantom-style invisible
+  measured boxes, make matrix row spacing arguments like `\\[0.2em]` affect
+  layout instead of being skipped, and revisit `_MATRIX_ROWGAP` only after
+  comparing against TeX/KaTeX expectations.
+
+## 2026-06-21T21:24+00:00 future.md text font slots
+
+- Added future-work notes for dedicated `\textsf` and `\texttt` support.
+- Current behavior maps both commands to the regular text slot; future work
+  should add sans-serif and monospace slots/fallbacks, keep nested bold/italic
+  behavior, update Makie extension font caches, and test fallback behavior.
+
+## 2026-06-21T21:33+00:00 future.md whitespace conventions
+
+- Added a parser-compatibility note to `future.md` to review leading, trailing,
+  and repeated whitespace handling in math and document text modes against
+  LaTeX conventions.
+
+## 2026-06-21T21:34+00:00 AGENTS.md refresh
+
+- Updated `AGENTS.md` for current session changes: added `future.md` to the file
+  tree, clarified that document text uses configured bold/italic text slots
+  while math-mode font switching remains Unicode-variant based, and updated the
+  Makie extension runtime-cache description to cover all slot fallback font
+  paths rather than only math/regular faces.
+- Added future-work caveats for matrix vertical spacing helpers and whitespace
+  convention review, pointing developers at `future.md`.
+
+## 2026-06-21T21:37+00:00 main docs refresh
+
+- Updated Documenter sources to match the current Makie extension behavior:
+  inline-math vs document routing, font-slot fallback glyph lookup, cached
+  FreeType faces, and session-wide document layout options.
+- Clarified public command docs so math-mode font switching is documented as
+  Unicode-variant based while document text styling uses the configured
+  bold/italic/bolditalic text slots.
+- Added public/developer limitations for future `\textsf`/`\texttt` slots,
+  matrix vertical spacing helpers, and whitespace convention review.
+- Verified the docs build with `julia --project=docs docs/make.jl`.

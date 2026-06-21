@@ -248,9 +248,10 @@ Apply to a braced argument; the variant propagates into sub/superscripts.
 Aliases: `\Bbb` = `\mathbb`, `\bold` = `\mathbf`, `\frak` = `\mathfrak`.
 
 Font switching maps Latin and Greek characters to their Unicode Mathematical
-Alphanumeric Symbols codepoints (U+1D400–U+1D7FF).  The `bold`, `italic`, and
-`bolditalic` slots in `FontFamily` are reserved for characters outside the Unicode
-math block and are not yet used.
+Alphanumeric Symbols codepoints (U+1D400–U+1D7FF).  Math-mode font switching does
+not use the `bold`, `italic`, or `bolditalic` `FontFamily` text slots; those slots
+are used by the document text layer for commands such as `\textbf`, `\textit`, and
+nested bold-italic text.
 
 ## Style overrides
 
@@ -347,3 +348,13 @@ require two-glyph overlay rendering, similar to how TeX builds `\not\leq`.
 
 `\bigplus` also has no Unicode codepoint and currently produces blank space on all
 fonts.
+
+Matrix vertical spacing helpers are still limited.  `\strut`,
+`\phantom`/`\vphantom`/`\hphantom`, and effective row-spacing arguments such as
+`\\[0.2em]` are not yet implemented in layout.  The parser recognises and skips
+bracketed row-spacing arguments in matrix bodies, but the extra spacing is not
+applied.
+
+Leading, trailing, and repeated whitespace behavior in math and document text modes
+is also pending a review against LaTeX conventions before any compatibility changes
+are made.

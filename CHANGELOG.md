@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compatibility symlink.
 
 ### Fixed
+- Makie rendering of mixed text/math `LaTeXString`s now resolves document text
+  glyphs through the correct regular/bold/italic/bold-italic font slot fallback
+  instead of always using the regular face, so `\textbf` and nested text styles
+  render with the intended text font. The adapter also preserves represented
+  characters for standard glyph names such as `space` and `Lambda`, improving
+  Makie's text measurement and wrapping for mixed text/math labels.
 - `\sqrt[n]{x}` now lays out the root index using the OpenType MATH radical
   degree kern and bottom-raise constants instead of silently ignoring the
   parsed degree.

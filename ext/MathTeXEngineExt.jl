@@ -30,13 +30,32 @@ const _RuntimeKey = Tuple{
     String, Union{String, Nothing}, Union{String, Nothing},
     Union{String, Nothing}, Union{String, Nothing},
 }
+const _REPRESENTED_CHAR_BY_GLYPH_NAME = Dict(
+    "space" => ' ',
+    "hyphen" => '-',
+    "minus" => '-',
+    "period" => '.',
+    "comma" => ',',
+    "colon" => ':',
+    "semicolon" => ';',
+    "plus" => '+',
+    "equal" => '=',
+    "parenleft" => '(',
+    "parenright" => ')',
+    "bracketleft" => '[',
+    "bracketright" => ']',
+    "braceleft" => '{',
+    "braceright" => '}',
+    "slash" => '/',
+    "backslash" => '\\',
+    "Lambda" => 'Λ',
+)
 
 mutable struct _RuntimeBundle
-    math_font::FreeTypeAbstraction.FTFont
-    reg_font::FreeTypeAbstraction.FTFont
+    fonts::Dict{String, FreeTypeAbstraction.FTFont}
     mte_family::MathTeXEngine.FontFamily
-    math_glyph_indices::Dict{String, Culong}
-    reg_glyph_indices::Dict{String, Culong}
+    slot_paths::Dict{TeXLayout.FontSlot.T, Vector{String}}
+    glyph_indices::Dict{Tuple{String, String}, Culong}
 end
 
 const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
@@ -95,8 +114,10 @@ function _glyph_index_uncached(font, name::String)::Culong
     return Culong(0)
 end
 
-@inline function _glyph_index(cache::Dict{String, Culong}, font, name::String)::Culong
-    return get!(cache, name) do
+@inline function _glyph_index(
+        cache::Dict{Tuple{String, String}, Culong}, font, path::String, name::String
+    )::Culong
+    return get!(cache, (path, name)) do
         _glyph_index_uncached(font, name)
     end
 end
@@ -106,6 +127,8 @@ end
 # (spaces/newlines), which does not apply inside math mode.
 function _represented_char(name::String)::Char
     isempty(name) && return '?'
+    mapped = get(_REPRESENTED_CHAR_BY_GLYPH_NAME, name, nothing)
+    mapped !== nothing && return mapped
     ch = _single_char(name)
     ch !== nothing && return ch
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
@@ -143,23 +166,42 @@ end
 
 function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
     return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
-        math_font, _ = TeXLayout._load_font(tl_family.math)
-        reg_path = something(tl_family.regular, tl_family.math)
-        reg_font, _ = TeXLayout._load_font(reg_path)
+        slot_paths = Dict(
+            TeXLayout.FontSlot.Math => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Math),
+            TeXLayout.FontSlot.Regular => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Regular),
+            TeXLayout.FontSlot.Bold => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Bold),
+            TeXLayout.FontSlot.Italic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Italic),
+            TeXLayout.FontSlot.BoldItalic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.BoldItalic),
+        )
+        paths = unique!(reduce(vcat, values(slot_paths)))
+        fonts = Dict{String, FreeTypeAbstraction.FTFont}()
+        for path in paths
+            fonts[path], _ = TeXLayout._load_font(path)
+        end
         _RuntimeBundle(
-            math_font,
-            reg_font,
+            fonts,
             _mte_font_family(tl_family),
-            Dict{String, Culong}(),
-            Dict{String, Culong}(),
+            slot_paths,
+            Dict{Tuple{String, String}, Culong}(),
         )
     end
+end
+
+function _glyph_index_for_slot(
+        runtime::_RuntimeBundle, slot::TeXLayout.FontSlot.T, name::String
+    )::Union{Tuple{Culong, FreeTypeAbstraction.FTFont}, Nothing}
+    for path in runtime.slot_paths[slot]
+        font = runtime.fonts[path]
+        gid = _glyph_index(runtime.glyph_indices, font, path, name)
+        gid > 0 && return (gid, font)
+    end
+    return nothing
 end
 
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
-# `font_slot` field selects which one to use for glyph-index resolution.
+# `font_slot` field selects the fallback chain to use for glyph-index resolution.
 # TeXLayout rules are rectangle-anchored (`HRule.y` / `VRule.x` are the bottom /
 # left edges).  MathTeXEngine's `HLine` / `VLine` instead use centered line
 # positions, so the adapter must shift by half the rule thickness.
@@ -171,20 +213,11 @@ function _box_to_mte(
     el = box.element
 
     if el isa TeXLayout.Glyph
-        if el.font_slot !== TeXLayout.FontSlot.Math
-            gid = _glyph_index(runtime.reg_glyph_indices, runtime.reg_font, el.glyph_name)
-            gid == 0 && return nothing
-            tc = MathTeXEngine.TeXChar(
-                gid, runtime.reg_font, runtime.mte_family, false,
-                _represented_char(el.glyph_name)
-            )
-            return (tc, pos, scale)
-        end
-
-        gid = _glyph_index(runtime.math_glyph_indices, runtime.math_font, el.glyph_name)
-        gid == 0 && return nothing
+        resolved = _glyph_index_for_slot(runtime, el.font_slot, el.glyph_name)
+        resolved === nothing && return nothing
+        gid, font = resolved
         tc = MathTeXEngine.TeXChar(
-            gid, runtime.math_font, runtime.mte_family, false,
+            gid, font, runtime.mte_family, false,
             _represented_char(el.glyph_name)
         )
         return (tc, pos, scale)

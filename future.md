@@ -1,165 +1,61 @@
-# Future direction: a unified box-and-glue layout IR
+# Future Work: Matrix Vertical Spacing Helpers
 
-This file records the **long-term** architectural target for TeXLayout's layout
-engine.  It is *not* the plan for the current iteration — the text/paragraph work
-landing on the `latex-text` branch follows the pragmatic wrapper approach
-described in `text-spec.md` ("Option 1").  This document describes where that
-wrapper is expected to evolve to ("Option 2"), so that the Option 1 data
-structures are chosen to migrate cleanly rather than to be thrown away.
+These notes record small layout features to implement later. They came up while
+reviewing `examples/eigen_demo.jl`, where a compact `bmatrix` looked vertically
+cramped.
 
-## Motivation
+## `\strut` / phantom-style height support
 
-The layout engine today (`src/layout.jl`) walks the `Node` AST and pushes
-`LayoutBox` values directly into a flat `Vector{LayoutBox}`, threading a single
-`(x0, y0, scale)` cursor and returning only an *advance width*.  Vertical
-construction (fractions, limits, radicals, matrix rows, accents) is done with
-ad-hoc scratch vectors that are measured with `_boxes_top` / `_boxes_bottom` and
-spliced back in with `_emit_shifted!`.  Every vertical construct re-implements
-the same "measure a sub-layout, decide an offset, shift it in" dance by hand.
+- Implement `\strut` as an invisible zero-width box with TeX-like height and
+  depth, so users can force a row or expression to reserve normal vertical
+  space without drawing anything.
+- Consider adding related primitives at the same time:
+  - `\vphantom{...}` for invisible height/depth copied from an argument.
+  - `\hphantom{...}` for invisible width copied from an argument.
+  - `\phantom{...}` for invisible width/height/depth copied from an argument.
+- Parser work: add AST representation for invisible measured boxes rather than
+  treating them as glyphs or spaces.
+- Layout work: measure the argument normally, emit no visible boxes, but return
+  the measured advance/ascent/descent contribution.
 
-This works, but it has three structural costs:
+## Matrix row spacing arguments
 
-1. **Dimensions are derived, not carried.** A laid-out sub-expression has no
-   intrinsic width/ascent/descent; callers re-scan its boxes every time they need
-   them.  Text/paragraph stacking (`text-spec.md`) has to bolt a measured
-   `TeXBox` wrapper on top precisely because the engine throws this information
-   away.
-2. **Composition is bespoke per construct.** There is no shared vocabulary for
-   "stack these on a baseline" or "stack these vertically with this gap".  Each
-   `_layout_*!` open-codes it.
-3. **No separation between arranging and emitting.** Position assignment and
-   element emission are fused, so there is no point at which a whole sub-tree
-   exists as a movable, measurable object before it is committed to absolute
-   coordinates.
+- The parser currently recognizes optional row-spacing syntax after a matrix row
+  break, e.g. `\\[0.2em]`, but only skips the bracketed dimension.
+- Preserve that parsed dimension in `NodeKind.Matrix` payload data or a child-row
+  metadata structure.
+- Apply the extra spacing in `src/layout/matrix.jl` when computing row baselines:
+  the additional amount should increase the gap below the row where it appears.
+- Add tests for positive, zero, and malformed row-spacing arguments.
 
-## Target model
+## Matrix default row spacing
 
-Introduce an explicit intermediate representation — a **box tree** — between the
-`Node` AST and the flat `Vector{LayoutBox}` the renderer consumes:
+- Revisit `_MATRIX_ROWGAP` in `src/layout/matrix.jl`. The current fixed
+  `3 / 18` em gap can make small two-row vectors such as
+  `\begin{bmatrix}x\\y\end{bmatrix}` look cramped.
+- Compare against KaTeX, TeX/LaTeX, and OpenType MATH expectations before
+  changing the default. If changed, update layout snapshots intentionally.
+- Prefer explicit row-spacing support first, so demos and users can opt in
+  without changing global matrix layout behavior.
 
-```
-String → tokenize → parse → Node → build → Box tree → shape → Vector{LayoutBox}
-```
+## Dedicated sans-serif and monospace text slots
 
-The box tree is TeX's hbox/vbox (box-and-glue) model.  Every box carries its own
-measured dimensions; container boxes carry a composition policy; a final `shape`
-pass assigns absolute coordinates and flattens to the existing output type.
+- `\textsf{...}` and `\texttt{...}` currently reset to the regular text slot,
+  so they render identically to `\textrm{...}`.
+- Extend `FontFamily` with optional sans-serif and monospace slots, likely with
+  regular/bold/italic/bold-italic variants for each family if the API can stay
+  manageable.
+- Update text attribute parsing so `\textsf` selects a sans-serif family and
+  `\texttt` selects a monospace family while preserving nested bold/italic state.
+- Update slot fallback rules so missing sans-serif or monospace fonts degrade
+  predictably to the current regular-slot behavior.
+- Update the Makie extension runtime cache and `MathTeXEngine.FontFamily`
+  conversion so those additional text faces render correctly through CairoMakie.
+- Add tests showing `\textsf`, `\texttt`, nested `\textbf`, nested `\textit`, and
+  fallback behavior produce the intended font slots.
 
-### Box types
+## Leading and trailing whitespace conventions
 
-```julia
-abstract type Box end
-
-# Leaves
-struct GlyphBox <: Box     # one positioned glyph
-    glyph::Glyph           # reuse existing element type
-    width::Float64; ascent::Float64; descent::Float64
-end
-struct RuleBox <: Box      # horizontal/vertical rule (fraction bar, radical, …)
-    width::Float64; ascent::Float64; descent::Float64
-    thickness::Float64
-end
-struct Glue <: Box         # stretchable/shrinkable space (v1: natural size only)
-    natural::Float64
-    stretch::Float64       # 0.0 until justification is implemented
-    shrink::Float64
-end
-struct Kern <: Box         # rigid space (inter-atom spacing, italic correction)
-    amount::Float64
-end
-
-# Containers
-struct HBox <: Box         # children share a baseline; laid left→right
-    children::Vector{Box}
-    width::Float64; ascent::Float64; descent::Float64
-end
-struct VBox <: Box         # children stacked top→bottom on successive baselines
-    children::Vector{Box}
-    offsets::Vector{Float64}   # baseline y of each child relative to VBox origin
-    align::Symbol              # :left | :right | :center
-    width::Float64; ascent::Float64; descent::Float64
-end
-```
-
-All dimensions are in em units (design units / UPM × scale), matching the current
-convention.  `ascent` is the extent above the box's own baseline (≥ 0); `descent`
-is below (≥ 0).  A `VBox`'s baseline is, by convention, the baseline of its first
-child (see `text-spec.md` — the y-origin decision is shared between the two
-designs precisely so this migration is seamless).
-
-### Construction (`build`)
-
-Each `_layout_*!` becomes a pure `build_*(node, ctx, style) -> Box` returning a
-measured box instead of mutating a shared vector:
-
-- A character / symbol / command → `GlyphBox` (or a small `HBox` for multi-glyph
-  constructions).
-- A sequence → `HBox` whose children interleave the sub-boxes with `Kern`s for
-  inter-atom spacing (replacing the inline `Space` pushes in `_layout_children!`).
-- A fraction → `VBox` of `[numerator HBox, RuleBox, denominator HBox]` with the
-  axis-height offset baked into `offsets`.  This replaces the hand-rolled
-  centering in `_layout_frac!`.
-- Limits / over-under / accents / radicals / matrix rows → `VBox`es.
-- `\left…\right`, `\sqrt` radate → `HBox`es containing assembled delimiter boxes.
-
-Because each builder returns a measured box, the "measure sub-layout, compute
-offset, shift in" pattern collapses into "build child boxes, construct the
-container, let the container compute its own extent from its children".
-
-### Shaping (`shape`)
-
-A single recursive pass walks the box tree with an absolute `(x, y)` accumulator
-and emits the flat `Vector{LayoutBox}` exactly as today:
-
-```julia
-shape(box::Box, x::Float64, y::Float64, out::Vector{LayoutBox})
-```
-
-`HBox` advances `x` by each child's width; `VBox` places each child at
-`y + offsets[i]` and applies the horizontal alignment shift; leaves push a single
-`LayoutBox`.  `Glue`/`Kern` advance the cursor without emitting.  The renderer and
-the Makie extension are **unchanged** — they still receive `Vector{LayoutBox}`.
-
-## Why this subsumes the Option 1 text work
-
-The `text-spec.md` design introduces:
-
-- `TeXBox { boxes::Vector{LayoutBox}, width, ascent, descent }` — a measured,
-  already-positioned horizontal run.
-- `vstack(::Vector{TeXBox}; align, line_height)` and `hconcat(::Vector{TeXBox})`.
-
-These are deliberately the *degenerate, eagerly-flattened* form of `VBox` /
-`HBox`:
-
-- `TeXBox` ≡ a `Box` that has already been `shape`d (its `boxes` are the shaped
-  output, and it still carries `width/ascent/descent`).
-- `vstack` ≡ constructing a `VBox` and immediately `shape`-ing it.
-- `hconcat` ≡ constructing an `HBox` and immediately `shape`-ing it.
-
-So the migration path is: keep the public `layout_document` API and the
-`(width, ascent, descent)` contract; replace the `TeXBox`/`vstack`/`hconcat`
-internals with `Box`/`VBox`/`HBox` + a single deferred `shape` at the very end;
-then progressively rewrite the math `_layout_*!` functions into `build_*`
-returning `Box`es, deleting `_emit_shifted!` and the scratch-vector idioms as each
-construct is converted.  Nothing in the document/text layer or the renderer
-contract changes.
-
-## What the box tree unlocks later
-
-- **Justification / glue.** `Glue` with non-zero stretch/shrink + a line-breaker
-  enables full justification and (eventually) automatic line breaking — both
-  currently out of scope.  The data model is in place from day one; only the
-  break-point search and glue-setting pass are added.
-- **`\raisebox`, `\phantom`, `\smash`, `\strut`, `\rule`** become trivial box
-  manipulations rather than special cases.
-- **Vertical alignment of inline material** (e.g. an inline fraction sitting on a
-  text baseline) is just an `HBox` whose children have differing ascent/descent.
-- **Caching / incremental relayout.** A measured, immutable box tree is reusable;
-  only `shape` need re-run when only positions change.
-
-## Non-goals (still out of scope at the Option 2 stage)
-
-- Automatic line breaking and full justification *algorithms* (the data model
-  permits them; the iterative optimiser is separate future work).
-- Microtypography (protrusion, font expansion).
-- Page/column breaking.
+- Review parser behavior for leading, trailing, and repeated whitespace in math
+  and document text modes, and decide whether it should match LaTeX conventions
+  more closely or preserve the current TeXLayout behavior.

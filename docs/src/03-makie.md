@@ -20,9 +20,11 @@ built-in fallback.  No monkey-patching, no `__precompile__(false)`, and no chang
 any upstream package are needed.
 
 For repeated rendering with the same font family, the extension reuses a cached
-runtime bundle derived from the active `FontFamily`, and the underlying TeXLayout
-pipeline reuses cached font handles and parsed MATH tables.  In steady-state Makie
-workloads this avoids reparsing the OpenType font data on every formula.
+runtime bundle derived from the active `FontFamily`: loaded FreeType faces for each
+font-slot fallback path, the derived MathTeXEngine font family, and glyph-index
+lookups keyed by `(font path, glyph name)`.  The underlying TeXLayout pipeline also
+reuses parsed MATH tables.  In steady-state Makie workloads this avoids reparsing
+the OpenType font data on every formula.
 
 ## Inline math vs. mixed text and math
 
@@ -112,9 +114,11 @@ built from file paths can be passed to `set_default_font_family!`.  See
 
 ## Matching text and math fonts
 
-By default, Makie renders axis labels, tick marks, and legends using its own bundled
-fonts.  To achieve a visually consistent result, pass the companion text fonts from
-the chosen `FontFamily` to Makie via `set_theme!`:
+By default, Makie renders non-LaTeX axis labels, tick marks, and legends using its
+own bundled fonts.  The TeXLayout document path uses the companion text slots in the
+active `FontFamily` for commands such as `\textbf` and `\textit`; to make ordinary
+Makie text match that same family, pass those companion fonts to Makie via
+`set_theme!`:
 
 ```julia
 using TeXLayout, CairoMakie, LaTeXStrings
