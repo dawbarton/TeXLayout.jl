@@ -110,7 +110,7 @@ end
 # ── Reference download ────────────────────────────────────────────────────────
 
 function _ensure_reference(name::Symbol, old_dir::String)::Union{String, Nothing}
-    filename = "stress_test_$(name).png"
+    filename = "stress_test_output_$(name).png"
     path = joinpath(old_dir, filename)
     isfile(path) && return path
 

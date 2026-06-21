@@ -794,3 +794,10 @@
 - Removed per-cell scratch `LayoutBox` buffers from matrix/array layout and deleted the now-unused `_emit_shifted!` helper from `src/layout.jl`.
 - Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).
 - Full package validation passed (1168/1168). Final benchmark smoke: `layout/scripts_fraction` 51 allocs / 6432 bytes, `layout/radical_delimited` 33 allocs / 3248 bytes, `layout/accents_braces_arrows` 112 allocs / 12128 bytes, `layout/matrix_cases` 128 allocs / 11328 bytes, `layout_document/document_inline_display` 671 allocs / 49648 bytes.
+
+## 2026-06-21T14:04+00:00 Stress-test reference URL fix and visual diff run
+
+- Fixed `tools/stress_test_all.jl` reference downloads to use GitHub release asset names `stress_test_output_<font>.png`; the previous `stress_test_<font>.png` pattern returned 404 for all bundled fonts.
+- `julia --project=tools tools/stress_test_all.jl` rendered all eight current sheets and downloaded all eight references.
+- Diff result: all fonts reported `CHANGED` with max delta 255 and ~27-29% changed pixels.
+- The large diff is dominated by reference/current sheet size mismatch: current sheets are ~11999-13654 px tall while v0.1.0-stress references are ~7867-9032 px tall, so the comparison pads the shorter reference with white. A fresh reference baseline for the current stress sheet content is needed before this tool can distinguish real layout drift from sheet-content/canvas changes.

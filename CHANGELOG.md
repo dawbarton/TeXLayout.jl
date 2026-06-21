@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of inheriting surrounding bold/italic state.
 - FreeType visualisation tools now compare `Glyph.font_slot` against `FontSlot`
   enum values instead of stale symbol values when choosing text fonts.
+- `tools/stress_test_all.jl` now downloads stress-test reference images using
+  the release asset naming pattern `stress_test_output_<font>.png`.
 
 ## [v0.1.1] - 2026-06-19
 
