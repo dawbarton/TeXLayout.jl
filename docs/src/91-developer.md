@@ -32,6 +32,10 @@ on hot paths such as repeated Makie rendering.  A parsed AST can still be reused
 across multiple font choices or style levels without re-parsing, and each stage can
 be tested and debugged in isolation.
 
+Mixed text-and-math input is handled by a second layer built on top of this math
+pipeline — see the **Document and text layer** section below for `parse_document`,
+the shaping interface, and `layout_document`.
+
 The public entry points are:
 
 ```julia
@@ -39,7 +43,7 @@ The public entry points are:
 boxes = generate_tex_elements(raw"\frac{a}{b}", family)
 
 # Run stages individually.
-tokens = tokenize(raw"\frac{a}{b}")
+tokens = TeXLayout.tokenize(raw"\frac{a}{b}")   # tokenize is internal (not exported)
 node   = parse_latex(tokens)          # or parse_latex(raw"\frac{a}{b}")
 boxes  = layout(node, family, TeXLayout.Display)
 ```
@@ -620,6 +624,72 @@ Math-mode font switching operates within the Unicode math block.  The `bold`,
 `italic`, and `bolditalic` `FontFamily` slots are used by the document text layer
 for `\textbf`, `\textit`, and nested bold-italic text, but not yet by math-mode
 font switching.
+
+---
+
+## Document and text layer (`src/document.jl`, `src/shaping.jl`, `src/boxes.jl`, `src/compose.jl`)
+
+The math pipeline above lays out a single formula.  A second layer, sitting on top
+of it, handles mixed text-and-math input and multi-line composition.  Its public
+entry point is `layout_document`, which returns a `TeXBox`:
+
+```julia
+struct TeXBox
+    boxes::Vector{LayoutBox}   # flat, positioned across all lines
+    width::Float64             # em
+    ascent::Float64            # em above the first baseline
+    descent::Float64           # em below the last baseline
+end
+```
+
+### Document AST (`src/document.jl`)
+
+`parse_document(input)` parses a mixed string into a `Document` (`Vector{Block}`),
+where text is the default mode and math is entered with `$…$` or a top-level display
+environment:
+
+| Type | Role |
+|:-----|:-----|
+| `TextAttrs` | Resolved text styling for a span: `font_slot::FontSlot.T` and `size` |
+| `TextSpan` | A maximal run of characters sharing one `TextAttrs` |
+| `Run` (`TextRun` / `MathRun`) | A horizontal run within a line: shaped text, or a math `Node` with its `TexStyle` |
+| `Line` | A sequence of `Run`s separated by `\\` |
+| `Block` (`ParagraphBlock` / `DisplayBlock` / `ParagraphBreakBlock`) | A paragraph of lines, a free-standing display-math block, or a blank-line break |
+
+Text font-switch commands (`\textbf`, `\textit`, `\emph`, `\textrm`, `\textnormal`,
+`\textsf`, `\texttt`) update the current `TextAttrs`; `\emph` toggles italic relative
+to the surrounding state.  `\text` / `\mbox` open a grouping scope that inherits the
+current attributes.  The display environments `align`, `aligned`, `gather`, and
+`equation` (in `_DISPLAY_ENVS`) become `DisplayBlock`s when they appear at the top
+level without `$…$`.
+
+### Shaping (`src/shaping.jl`)
+
+`TextShaper` is the abstract interface for turning a `TextSpan` into positioned
+glyphs; `shape_span(shaper, span, family, scale)` is the entry point.  The default
+`MetricShaper` does metric-only shaping (one glyph per character, advances from the
+font's `hmtx` table) with no contextual substitution or kerning.  This is the seam a
+future `HarfBuzzShaper` (in an `ext/HarfBuzzExt.jl` extension) would plug into.
+
+### Internal box tree (`src/boxes.jl`)
+
+Composition uses a small measured box tree — `ShapedBox` (a leaf wrapping laid-out
+`LayoutBox`es with extents), `HBox` (horizontal), and `VBox` (vertical) — all
+subtypes of the internal `Box`.  `shape(box)` flattens the tree into the final
+`Vector{LayoutBox}`.  This keeps measurement (width/ascent/descent) separate from
+the flat output the renderer consumes.
+
+### Composition (`src/compose.jl`)
+
+`compose.jl` ties the layers together:
+
+- `hlayout_math` / `hlayout_run` lay out a math node or a text/math run into a `TeXBox`.
+- `hconcat` joins runs horizontally on a shared baseline; `vstack` / `_vstack_with_skips`
+  stack lines and display blocks with `line_height`, `lineskip`, and display skips.
+- `LayoutOptions` collects the keyword-configurable parameters (`align`, `width`,
+  `line_height`, `lineskip`, `display_align`, `abovedisplayskip`, `belowdisplayskip`,
+  `parskip`, `shaper`); `layout_document` builds it from keyword arguments, walks the
+  `Document`, and returns the composed `TeXBox`.
 
 ---
 

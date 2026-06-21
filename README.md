@@ -32,6 +32,10 @@ tokenize → parse_latex → layout → Vector{LayoutBox}
 Each `LayoutBox` carries a `TeXElement` (glyph, rule, or space), a 2-D position in em
 units relative to the formula baseline, and a scale factor.
 
+Beyond single formulas, `layout_document` typesets mixed text-and-math input —
+styled text, inline `$…$` math, and display-math environments — into a measured
+`TeXBox` of positioned elements ready for the same renderers.
+
 ## Key features
 
 - Full TeX style cascade (Display / Text / Script / ScriptScript, each with a cramped
@@ -49,6 +53,12 @@ units relative to the formula baseline, and a scale factor.
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
+- Mixed text-and-math document layout (`layout_document`): styled text
+  (`\textbf`, `\textit`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
+  environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
+  (`\\`), and blank-line paragraph breaks, with configurable line and display
+  spacing.  A pluggable `TextShaper` interface (default `MetricShaper`) leaves a
+  seam for a future HarfBuzz shaper.
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
@@ -172,6 +182,32 @@ node  = parse_latex(raw"\sum_{k=0}^{n} k^2")  # → Node (AST)
 boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
 ```
 
+### Mixed text and math
+
+`layout_document` accepts a string mixing styled text, inline `$…$` math, and
+display-math environments, and returns a `TeXBox` — a flat `Vector{LayoutBox}`
+together with the laid-out `width`, `ascent`, and `descent`:
+
+```julia
+using TeXLayout
+
+doc = layout_document(raw"""
+The Gaussian integral is $\int_{-\infty}^\infty e^{-x^2}\,dx = \sqrt{\pi}$.
+We can \textbf{align} a derivation:
+\begin{align}
+  (a+b)^2 &= a^2 + 2ab + b^2 \\
+          &= a^2 + b^2 + 2ab
+\end{align}
+""")
+
+# doc.boxes is a Vector{LayoutBox}; doc.width / doc.ascent / doc.descent are em extents.
+```
+
+Layout is controlled with keyword arguments (forwarded to `LayoutOptions`):
+`align`, `width`, `line_height`, `lineskip`, `display_align`, `abovedisplayskip`,
+`belowdisplayskip`, `parskip`, and `shaper`.  For example, `layout_document(text;
+family = font_family(:stix_two), align = :center, width = 30.0)`.
+
 ## API reference
 
 The public API is intentionally small.  All other names (lexer tokens, parser node
@@ -189,6 +225,11 @@ exported.
 | `parse_latex` | function | Tokenise and parse a LaTeX math string into a `Node` AST |
 | `layout` | function | Lay out a `Node` into a `Vector{LayoutBox}` given a `FontFamily` and `TexStyle` |
 | `generate_tex_elements` | function | Convenience: `parse_latex` + `layout` in one call |
+| `layout_document` | function | Lay out mixed text/math input into a `TeXBox`; keyword options control spacing, alignment, width, and shaping |
+| `TeXBox` | struct | Document layout result: `.boxes`, `.width`, `.ascent`, `.descent` |
+| `LayoutOptions` | struct | Keyword-configurable options for `layout_document` |
+| `TextShaper` | abstract type | Interface for text shaping; default implementation is `MetricShaper` |
+| `MetricShaper` | struct | Default metric-only text shaper (no contextual shaping) |
 | `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |
 | `TeXElement` | union type | Union of `Glyph`, `HRule`, `VRule`, `Space` |
 | `Glyph` | struct | A single rendered glyph, identified by PostScript name and font role |

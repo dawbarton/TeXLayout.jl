@@ -304,6 +304,33 @@ The following commands insert explicit horizontal space:
 
 1 mu = 1/18 em.  Negative spaces are fully supported.
 
+## Document text mode
+
+The commands above apply to **math** input.  `layout_document` additionally accepts
+mixed text-and-math input, where the top-level mode is *text* and math is entered
+explicitly.  The following constructs are recognised only in this document context:
+
+| Construct | Effect |
+|:----------|:-------|
+| `\textbf{…}` | Bold text |
+| `\textit{…}` | Italic text |
+| `\emph{…}` | Emphasis — toggles italic relative to the surrounding text |
+| `\textrm{…}`, `\textnormal{…}` | Upright (regular) text |
+| `\textsf{…}` | Sans-serif (falls back to the regular slot in v1) |
+| `\texttt{…}` | Monospace (falls back to the regular slot in v1) |
+| `\text{…}`, `\mbox{…}` | Grouping scope that inherits the current text attributes |
+| `$…$` | Inline math, laid out in `Text` style on the current line |
+| `\begin{align}…\end{align}` (and `aligned`, `gather`, `equation`) | Free-standing centred display-math block |
+| `\\` | Explicit line break |
+| blank line | Paragraph break with `parskip` vertical space |
+
+Styling nests correctly: `\textbf` inside `\textit` produces bold-italic, and `\emph`
+flips italic on or off depending on the surrounding state.  Ordinary runs of
+whitespace are collapsed to a single inter-word space.
+
+See [`layout_document`](05-api.md) and the [Getting Started](01-getting-started.md#Mixed-text-and-math)
+walkthrough for usage and the available `LayoutOptions`.
+
 ## Known limitations
 
 A small set of negated and variant relations currently produce **blank space** because
