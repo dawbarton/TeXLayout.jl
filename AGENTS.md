@@ -100,8 +100,8 @@ All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activa
 | `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
-| `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [out.png] [:font_symbol]` |
-| `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [out.png\|out.pdf] [:font_symbol]` |
+| `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [:font_symbol] [out.png]` |
+| `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [:font_symbol] [png\|pdf\|svg] [out]` |
 | `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
 | `stress_test_suite.jl` | Unified stress suite: generate per-case PNGs for all bundled fonts, optionally include CairoMakie integration checks, pack a reference tarball, and compare current output against a local or downloaded reference. | `julia tools/stress_test_suite.jl all` |
 | `stress_test_all.jl` | Compatibility wrapper for the unified suite. Old font-list invocations still work, and explicit suite commands pass through. | `julia tools/stress_test_all.jl [all\|generate\|pack\|compare]` |

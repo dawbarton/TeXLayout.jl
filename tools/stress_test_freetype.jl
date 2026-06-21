@@ -159,17 +159,20 @@ function render_text!(
     )
     px = max(1, round(Int, scale * BASE_PX))
     H = size(canvas, 1)
+    # Common baseline for all glyphs, placing the cap-height band roughly centred
+    # within the strip (≈cap height is 0.7·px, so half is ≈px÷3).
+    baseline = H ÷ 2 + px ÷ 3
     x = x0
     for ch in text
         local bmp, ext
         try
-            bmp, ext = renderface(face, string(ch), px)
+            bmp, ext = renderface(face, ch, px)
         catch
             x += px ÷ 2; continue
         end
         bx_px = round(Int, ext.horizontal_bearing[1])
         by_px = round(Int, ext.horizontal_bearing[2])
-        top = H ÷ 2 - by_px ÷ 2 + 2
+        top = baseline - by_px
         left = x + bx_px
         for row in axes(bmp, 2), col in axes(bmp, 1)
             alpha = bmp[col, row]; alpha == 0x00 && continue

@@ -84,6 +84,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   enum values instead of stale symbol values when choosing text fonts.
 - `tools/stress_test_all.jl` now delegates to the unified per-case stress-test
   suite while preserving the old font-name argument form.
+- `tools/stress_test_freetype.jl` section/title headers now resolve characters by
+  codepoint (cmap) instead of by PostScript glyph name, so headings render on
+  fonts with non-AGL glyph names (e.g. FiraMath, Luciole) instead of `.notdef`
+  boxes. Header glyphs are also now placed on a common baseline instead of being
+  individually vertically centred.
+- `tools/visualise_metrics_makie.jl` now imports `Makie` via `CairoMakie.Makie`
+  so it loads without `Makie` being a direct dependency of the tools project.
 
 ## [v0.1.1] - 2026-06-19
 

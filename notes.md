@@ -851,3 +851,34 @@
 - Kept separate left-context and emitted-spacing classifications so right-cancelled binary operators do not accidentally change the left context seen by later atoms.
 - Left a collect-based fallback for non-vector iterables; normal parser/layout paths use `Vector{Node}` and avoid the extra class vector.
 - Validation: focused layout/snapshot tests passed (1194/1194). Benchmark smoke showed lower layout allocations on representative math cases: `simple_atom` 37 allocs, `scripts_fraction` 49, `radical_delimited` 31, `accents_braces_arrows` 108, `matrix_cases` 124.
+
+## 2026-06-21T15:32 Tool verification after layout refactor
+
+- Verified all `tools/` scripts run against the refactored code (split layout
+  modules + new document/compose/shaping/boxes layers). Package loads cleanly.
+- Working: `visualise_bitmap`, `visualise_metrics`, `visualise_text`,
+  `stress_test_freetype`, `stress_test_text`, `stress_test_latex`,
+  `stress_test_makie`, `stress_test_suite` (generate/pack/compare round-trip
+  identical), `stress_test_all` (wrapper passthrough). `prepare_font_artifacts`
+  is a self-contained downloader (no TeXLayout API), parses/loads fine.
+- **Fixed (Fira headings):** `stress_test_freetype.jl render_text!` called
+  `renderface(face, string(ch), px)`, which resolves by *PostScript glyph name*.
+  Works on AGL-named fonts (NewCM) but yields `.notdef` tofu on FiraMath
+  (uni-names) / Luciole. Changed to pass the `Char` → cmap lookup, portable
+  across all fonts. The box-glyph path (TeXLayout-supplied glyph names) is
+  unchanged and correct; the text stress tool already used Char.
+- **Fixed (Makie metrics tool):** `visualise_metrics_makie.jl` did `import Makie`,
+  but Makie is only a transitive dep of the tools project → load error. Changed
+  to `import CairoMakie.Makie`.
+- Doc fix: corrected stale arg-order examples in AGENTS.md for
+  `stress_test_freetype.jl` / `stress_test_makie.jl` (all per-font tools take the
+  font spec first; freetype: `[:font] [out]`; makie: `[:font] [fmt] [out]`).
+- Note: font symbols changed to underscore form (`:new_cm`, not `:newcm`).
+
+## 2026-06-21T15:40 Stress-sheet header baseline fix
+
+- `stress_test_freetype.jl render_text!` was vertically centring each header glyph
+  independently (`top = H÷2 - by_px÷2 + 2`), so glyphs did not share a baseline
+  (period looked raised, descenders/caps misaligned). Replaced with a fixed
+  baseline `H÷2 + px÷3` and `top = baseline - by_px`, matching the baseline logic
+  in `stress_test_text.jl render_text_line!`. Verified on NewCM and FiraMath.
