@@ -245,7 +245,20 @@ end
 function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     # \sqrt[degree]{body}: children are [body] or [degree, body].
-    body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
+    has_degree = length(node.children) > 1
+    degree_node = has_degree ? node.children[1] : nothing
+    body_node = has_degree ? node.children[2] : node.children[1]
+
+    degree_start = lastindex(boxes) + 1
+    degree_w = 0.0
+    degree_scale = scale
+    if has_degree
+        degree_style = ScriptScript
+        degree_scale = _scale_for_child(scale, style, degree_style, mc)
+        degree_w = _layout_node!(degree_node, ctx, degree_style, 0.0, 0.0, degree_scale, boxes)
+    end
+    degree_stop = lastindex(boxes)
+
     # Rule 11: body is built in the cramped style (prevents superscripts inside
     # the radicand from protruding above the rule bar).
     body_start = lastindex(boxes) + 1
@@ -280,10 +293,22 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     # `required_cover_du` is the vertical span from body bottom to the rule top.
     required_cover_du = (rule_top_local - body_bot) / scale * upm
     required_du = required_cover_du
-    rule_top_em = y0 + rule_top_local
-    body_x_offset = _layout_radical!(ctx, required_du, rule_top_em, x0, scale, boxes)
+    degree_before = has_degree ? mc.radical_kern_before_degree / upm * scale : 0.0
+    degree_after = has_degree ? mc.radical_kern_after_degree / upm * scale : 0.0
+    radical_x = has_degree ? x0 + degree_before + degree_w + degree_after : x0
 
-    body_x = x0 + body_x_offset
+    rule_top_em = y0 + rule_top_local
+    radical = _layout_radical!(ctx, required_du, rule_top_em, radical_x, scale, boxes)
+
+    if has_degree
+        degree_bottom = _boxes_bottom(boxes, degree_start, degree_stop, upm)
+        degree_raise = mc.radical_degree_bottom_raise_percent / 100.0 * radical.cover
+        degree_x = x0 + degree_before
+        degree_y = y0 + degree_raise - degree_bottom
+        _translate_range!(boxes, degree_start, degree_stop, degree_x, degree_y)
+    end
+
+    body_x = radical_x + radical.body_offset
     rule_overlap = rule_thickness / 2
     rule_x = body_x - rule_overlap
 
@@ -294,7 +319,7 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
             rule_x, y0 + rule_y_local, scale
         )
     )
-    return body_x_offset + body_w
+    return max(body_x + body_w, x0 + degree_before + degree_w) - x0
 end
 
 function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)

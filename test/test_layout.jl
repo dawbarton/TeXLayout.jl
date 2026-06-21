@@ -145,6 +145,25 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test body_x - rule.x ≈ rule.element.thickness / 2 atol = 1.0e-6
     end
 
+    @testset "Sqrt with degree places root index" begin
+        boxes = layout(parse_latex("\\sqrt[3]{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        degree = only(filter(b -> b.element.glyph_name == "three", glyphs))
+        radical = only(filter(b -> startswith(b.element.glyph_name, "radical"), glyphs))
+        body = only(filter(b -> b.element.glyph_name == "u1D465", glyphs))
+
+        @test degree.scale ≈ mt.constants.script_script_percent_scale_down / 100 atol = 1.0e-6
+        @test radical.x < degree.x < body.x
+        @test body.x - radical.x ≈ radical.element.advance_width / FONT_UPM * radical.scale atol = 1.0e-6
+
+        degree_bottom = degree.y + degree.element.y_min / FONT_UPM * degree.scale
+        radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
+        radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
+        expected_bottom = mt.constants.radical_degree_bottom_raise_percent / 100 *
+            (radical_top - radical_bottom)
+        @test degree_bottom ≈ expected_bottom atol = 1.0e-6
+    end
+
     @testset "Nested sqrt: radicand starts at radical advance width" begin
         boxes = layout(
             parse_latex("\\sqrt{1 + \\sqrt{1 + \\sqrt{1 + \\sqrt{1 + x}}}}"),

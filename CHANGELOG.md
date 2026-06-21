@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   compatibility symlink.
 
 ### Fixed
+- `\sqrt[n]{x}` now lays out the root index using the OpenType MATH radical
+  degree kern and bottom-raise constants instead of silently ignoring the
+  parsed degree.
 - `layout_document` now applies display skips as explicit extra vertical space
   instead of synthetic empty baselines, so a display-only document starts at the
   first real display baseline.

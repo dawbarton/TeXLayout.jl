@@ -148,8 +148,9 @@ end
 
 # Lay out a radical glyph assembly so that the TOP of the assembly aligns with
 # `rule_top_em`.  Unlike delimiter assemblies (centred on the math axis),
-# radical assemblies are top-anchored.  Returns the horizontal offset at which
-# the radicand should start.
+# radical assemblies are top-anchored.  Returns placement data for the radical:
+# the horizontal offset at which the radicand should start, and the actual
+# vertical cover of the chosen radical sign in em units.
 @inline _radical_cover_du(g::Glyph) = Float64(g.y_max - g.y_min)
 # TeX packs the radical delimiter and the overbar/radicand into an hlist, so the
 # body starts after the delimiter box width (advance width), not after the
@@ -174,13 +175,13 @@ function _layout_radical_assembly!(
         x0::Float64,
         scale::Float64,
         boxes::Vector{LayoutBox},
-    )::Float64
+    )
     upm = ctx.upm
     min_conn = ctx.min_connector_overlap
 
     n = _min_extender_reps(asm.parts, required_du, min_conn)
     parts = _expand_assembly_parts(asm.parts, n)
-    isempty(parts) && return 0.0
+    isempty(parts) && return (body_offset = 0.0, cover = 0.0)
 
     overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
     for i in eachindex(overlaps)
@@ -205,7 +206,7 @@ function _layout_radical_assembly!(
         i <= length(overlaps) && (cursor_du += Float64(p.full_advance) - overlaps[i])
     end
 
-    return max_body_offset_du / upm * scale
+    return (body_offset = max_body_offset_du / upm * scale, cover = total_du / upm * scale)
 end
 
 # Return the GlyphMetrics for the smallest radical variant that covers
@@ -250,8 +251,7 @@ end
 
 # Choose and place a radical glyph (or assembly) whose top ink aligns with
 # `rule_top_em`.  `required_du` is the minimum vertical span (design units)
-# the radical must cover.
-# Returns the horizontal offset at which the radicand should start.
+# the radical must cover.  Returns placement data for the radical.
 function _layout_radical!(
         ctx::_LayoutCtx,
         required_du::Float64,
@@ -259,14 +259,17 @@ function _layout_radical!(
         x0::Float64,
         scale::Float64,
         boxes::Vector{LayoutBox},
-    )::Float64
+    )
     upm = ctx.upm
 
-    function _place_variant(name::String)::Float64
+    function _place_variant(name::String)
         g = _cmd_glyph(ctx, name)
-        g === nothing && return 0.0
+        g === nothing && return (body_offset = 0.0, cover = 0.0)
         push!(boxes, LayoutBox(g, x0, rule_top_em - g.y_max / upm * scale, scale))
-        return _radical_body_offset_du(g) / upm * scale
+        return (
+            body_offset = _radical_body_offset_du(g) / upm * scale,
+            cover = _radical_cover_du(g) / upm * scale,
+        )
     end
 
     rkey = _construction_key(ctx, "radical")

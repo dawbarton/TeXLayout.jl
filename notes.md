@@ -824,3 +824,9 @@
 - Replaced the old "purely additive" invariant with the current contract: layout helpers append boxes, measure just-emitted ranges, and may translate only those ranges in place.
 - Documented that snapshot records are sorted before hashing, so append-order changes from allocation-reduction refactors are not treated as layout changes.
 - Updated the ignored `math-flat-layout-plan.local.md` workspace note to stop referring to `_emit_shifted!` and emission-order identity as current requirements.
+
+## 2026-06-21T15:01+00:00 Root-index radical placement
+
+- Implemented `\sqrt[n]{x}` degree placement in `_layout_sqrt!`; the parser already produced `[degree, body]`, but layout previously ignored the degree child.
+- Radical placement helpers now return the radicand offset and actual radical cover height so the degree can use `RadicalKernBeforeDegree`, `RadicalKernAfterDegree`, and `RadicalDegreeBottomRaisePercent`.
+- Added a layout regression test checking degree scale, horizontal placement, and MATH-table bottom raise for `\sqrt[3]{x}`.
