@@ -319,4 +319,3 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "colon" => 0x003A, "cdotp" => 0x22C5,
     "ldotp" => 0x002E,
 )
-

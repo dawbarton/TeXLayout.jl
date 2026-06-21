@@ -125,7 +125,8 @@ text!(
             raw"\frac{\mathrm{d}y}{\mathrm{d}t} &= x(\rho-z)-y\\ " *
             raw"\frac{\mathrm{d}z}{\mathrm{d}t} &= xy-\beta z" *
             raw"\end{align}" *
-            raw"As are things like $\underbrace{x^2 + y^2 - 2xy\cos(\mathbf{\theta})}_\text{underbraces}$ (and bold greek).")
+            raw"As are things like $\underbrace{x^2 + y^2 - 2xy\cos(\mathbf{\theta})}_\text{underbraces}$ (and bold greek)."
+    )
 )
 
 out = isempty(ARGS) ? joinpath(@__DIR__, "eigen_demo.png") : ARGS[1]

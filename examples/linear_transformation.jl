@@ -1,4 +1,3 @@
-
 # !!!!!!! WORK IN PROGRESS !!!!!!!
 
 # Pedagogic Linear Transformation Visualiser

@@ -36,4 +36,3 @@ function _node_text(node::Node)::String
         return join(_node_text(c) for c in node.children)
     return ""
 end
-

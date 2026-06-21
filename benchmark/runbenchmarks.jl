@@ -70,8 +70,10 @@ function _run_benchmarks(; seconds::Float64, samples::Int)
             "memory_bytes" => Int(estimate.memory),
             "allocs" => Int(estimate.allocs),
         )
-        @printf("%-48s %10.1f ns  %8d bytes  %5d allocs\n",
-            name, estimate.time, estimate.memory, estimate.allocs)
+        @printf(
+            "%-48s %10.1f ns  %8d bytes  %5d allocs\n",
+            name, estimate.time, estimate.memory, estimate.allocs
+        )
     end
     return results
 end
@@ -114,7 +116,7 @@ function main()
     output = _arg_value("--output", DEFAULT_OUTPUT)
     baseline_path = _arg_value("--baseline", DEFAULT_BASELINE)
     time_threshold = _arg_float("--time-threshold", 1.15)
-    allocation_threshold = _arg_float("--allocation-threshold", 1.20)
+    allocation_threshold = _arg_float("--allocation-threshold", 1.2)
     update_baseline = "--update-baseline" in ARGS
     compare = "--compare" in ARGS || isfile(baseline_path)
 

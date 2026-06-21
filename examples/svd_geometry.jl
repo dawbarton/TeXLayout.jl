@@ -1,4 +1,3 @@
-
 # !!!!!!! WORK IN PROGRESS !!!!!!!
 
 # Singular Value Decomposition — Geometry Visualiser
