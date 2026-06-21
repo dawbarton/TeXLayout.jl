@@ -158,10 +158,26 @@ Spacing and alignment are controlled with keyword arguments forwarded to
 doc = layout_document(text;
                       family       = font_family(:stix_two),
                       align        = :center,   # :left | :center | :right
-                      width        = 30.0,      # fixed line width in em (default: widest line)
+                      width        = 30.0,      # fixed line width in em (default: widest item)
                       line_height  = 1.2,       # baseline-to-baseline in em
                       display_align = :center)
 ```
+
+### Width and alignment
+
+Both text lines and display blocks are positioned within a single reference width
+`W`:
+
+- If `width` is left unset (the default `nothing`), `W` is the width of the
+  **widest item** in the document — counting every text line *and* every display
+  block. If you pass `width = <em>`, that fixed value is used instead.
+- Each item is offset within `W` by its alignment: text lines follow `align`
+  (default `:left`), display blocks follow `display_align` (default `:center`).
+
+So by default there is no fixed page width: text is flush-left and equations are
+centred against the widest item. The centring reference is the widest item
+*overall* — it coincides with "the longest text line" only when no display block is
+wider than every text line.
 
 The `TeXBox.boxes` field is a `Vector{LayoutBox}` exactly like the output of
 `generate_tex_elements`, so the same rendering loop (see below) applies — the only

@@ -234,6 +234,21 @@ Keyword arguments populate `LayoutOptions` (see its docstring). The result's
 coordinate frame has the first line's baseline at y = 0; later lines and
 display blocks have negative y. `result.boxes` is a flat `Vector{LayoutBox}`
 ready for the existing renderer and Makie extension.
+
+# Width and alignment
+
+The layout has a single reference width `W`:
+
+  - if the `width` option is `nothing` (the default), `W` is the width of the
+    *widest item* in the document — every text line **and** every display block;
+  - otherwise `W` is the given fixed em width.
+
+Each item is then positioned within `W` according to its alignment: text lines use
+`align` (default `:left`) and display blocks use `display_align` (default
+`:center`). So with the defaults there is no fixed page width — text is flush-left
+and equations are centred against the widest item. Note the centring reference is
+the widest item overall, which is only "the longest text line" when no display
+block is wider.
 """
 function layout_document(
         input::AbstractString;
