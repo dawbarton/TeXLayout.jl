@@ -817,3 +817,10 @@
 - Documented the canonical stress reference workflow: generate per-case PNGs, pack `stress_test_reference.tar` with Julia's `Tar` stdlib, compare against a local or downloaded reference, and treat full sheets as visual-only outputs.
 - Updated `README.md` with concise developer-tooling instructions and clarified that the linked release images are full-sheet stress-renderer examples.
 - Refreshed `math-flat-layout-plan.local.md` so its validation steps point at the per-case stress suite rather than the older sheet-only comparison.
+
+## 2026-06-21T14:41+00:00 Flat-layout documentation correction
+
+- Audited documentation for the range-emission math layout refactor and found stale wording in `AGENTS.md` / `docs/src/91-developer.md`.
+- Replaced the old "purely additive" invariant with the current contract: layout helpers append boxes, measure just-emitted ranges, and may translate only those ranges in place.
+- Documented that snapshot records are sorted before hashing, so append-order changes from allocation-reduction refactors are not treated as layout changes.
+- Updated the ignored `math-flat-layout-plan.local.md` workspace note to stop referring to `_emit_shifted!` and emission-order identity as current requirements.

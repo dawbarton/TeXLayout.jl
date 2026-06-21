@@ -262,7 +262,7 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
    correct PS name.  The display-size variant is selected from `vert_constructions`
    using the `display_operator_min_height` MATH constant.
 
-6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.** (See also invariant 7 on layout purity.)
+6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.**
    PS glyph naming conventions differ across fonts: NewCMMath/Pagella/STIXTwo use standard
    AGL names (`"parenleft"`, `"ltimes"`, `"alpha"`), while FiraMath uses uni-style names
    (`"uni0028"`, `"uni22C9"`, `"uni03B1"`) and Luciole uses its own convention (`"lparen"`,
@@ -277,9 +277,12 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
    AGL names to the font's own names when looking up `vert_constructions`/`horiz_constructions`
    (those dicts are keyed by the font's MATH table PS names and cannot be changed).
 
-7. **Layout is purely additive.** `_layout_node!` only pushes to `boxes`; it never
-   removes or modifies existing entries.  Temporary `LayoutBox` vectors (used for
-   centering fractions and limits) are merged in with adjusted coordinates.
+7. **Math layout uses range emission.** `_layout_node!` appends new boxes to the
+   shared `Vector{LayoutBox}`.  Construct helpers that need child measurements
+   record the just-emitted `(start, stop)` ranges, scan those ranges for extents,
+   and translate those same ranges in place with `_translate_range!`.  They must
+   not mutate boxes outside the ranges they emitted.  Append order is not
+   semantic; geometry, metrics, font slots, and rule/space dimensions are.
 
 ## Feature index
 
@@ -366,10 +369,12 @@ inline comments citing the originating KaTeX file and line numbers.
 
 `test/test_snapshots.jl` is the layout-equivalence guard.  It hashes normalized
 layout output for representative math and document cases: glyph names, font
-slots, glyph metrics, rules, positions, scales, and document extents.  If a
-snapshot hash changes, either the layout changed or the normalization changed.
-Do not update a hash casually; inspect the rendered/serialized difference and
-document whether the change is an intentional bug fix or feature change.
+slots, glyph metrics, rules, positions, scales, and document extents.  Box
+records are sorted before hashing so append order changes from range-emission
+refactors do not count as layout changes.  If a snapshot hash changes, either
+the geometry/metrics changed or the normalization changed.  Do not update a
+hash casually; inspect the rendered/serialized difference and document whether
+the change is an intentional bug fix or feature change.
 
 ## Benchmarks
 

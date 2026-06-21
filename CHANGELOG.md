@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Developer documentation now describes the unified per-case stress-test suite,
   `stress_test_reference.tar` workflow, visual-only full sheets, optional
   CairoMakie stress cases, and root `justfile` helpers.
+- Developer documentation now reflects the math flat-layout range-emission
+  refactor, including in-place sub-range translation and order-insensitive
+  snapshot normalization.
 - Document composition now uses an internal measured box-tree layer behind the
   existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
 - Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a

@@ -265,8 +265,11 @@ partially typed or otherwise broken expressions.
 
 The layout engine converts the AST into a flat list of positioned renderable elements.
 It is a recursive tree walk: `_layout_node!` in `src/layout.jl` performs the core
-dispatch and pushes `LayoutBox` values into a shared accumulator vector.  Feature
-helpers that used to live in the same file are split into `src/layout/extensible.jl`,
+dispatch and appends `LayoutBox` values into a shared accumulator vector.  Feature
+helpers that need child extents record the sub-range they just emitted, scan that
+range, and translate it in place with `_translate_range!`; append order is therefore
+an implementation detail rather than a rendering contract.  Feature helpers that used
+to live in the same file are split into `src/layout/extensible.jl`,
 `src/layout/scripts.jl`, `src/layout/constructs.jl`, and `src/layout/matrix.jl`.
 
 ### Font and MATH-table caching
@@ -299,7 +302,7 @@ struct _LayoutCtx
     top_accent_attachments::Dict{String, Int}
     italic_corrections::Dict{String, Int}
     min_connector_overlap::Int
-    mode::Symbol          # :math | :text
+    mode::LayoutMode.T    # LayoutMode.Math | LayoutMode.Text
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
 end
 ```
@@ -311,7 +314,7 @@ this:
 - **`_with_variant(ctx, variant)`** — returns a copy with `font_variant` set; used by
   `_layout_font_switch!` so that the entire subtree of a `\mathbf{…}` node is rendered
   in the bold variant.
-- **`_with_text_mode(ctx)`** — returns a copy with `mode = :text`; used by
+- **`_with_text_mode(ctx)`** — returns a copy with `mode = LayoutMode.Text`; used by
   `_layout_text!` so that `\text{…}` content uses upright glyph lookup and suppresses
   math-mode inter-atom spacing and italic remapping.
 
@@ -370,6 +373,22 @@ resolution:
 Renderer/debug code should use internal helper `_font_path_for_slot(family, slot)`
 when resolving a `Glyph.font_slot` to a physical font path, so fallback behaviour
 stays consistent across tools.
+
+### Range emission and measurement
+
+Math layout is flat and range-based.  Constructs such as scripts, fractions,
+radicals, delimiters, accents, horizontal braces, and matrices lay out children at a
+temporary origin directly into the final `Vector{LayoutBox}`.  They record the emitted
+`(start, stop)` range, measure ink extents with `_boxes_top`, `_boxes_bottom`, or
+`_boxes_vextent`, then apply the final placement by rewriting that same range through
+`_translate_range!`.
+
+This removes the older pattern of allocating temporary `LayoutBox[]` buffers,
+measuring them, and copying shifted boxes into the output.  The important invariant is
+that helpers may only translate ranges they just emitted; they should not mutate boxes
+from earlier siblings or callers.  Because some constructs now emit children before
+rules or delimiters for simpler measurement, consumers and tests must not rely on
+append order as paint order.  Compare geometry and element identity instead.
 
 ### Coordinate system
 
@@ -492,8 +511,8 @@ applied to the superscript (which is already displaced by the base's advance).
    (or `fraction_denom_display_style_gap_min`).
 5. Emit the fraction rule as an `HRule` centred on the math axis, with thickness
    `fraction_rule_thickness / upm` em.
-6. Emit numerator and denominator boxes, each horizontally centred over the widest of
-   the three (num, rule, den).
+6. Translate numerator and denominator ranges so they are horizontally centred over
+   the widest of the numerator, rule, and denominator, then emit the fraction rule.
 
 ### Radical layout
 
@@ -975,9 +994,11 @@ used by `test/test_math_table.jl` to validate the parser against known values.
 
 `test/test_snapshots.jl` is the guard for unintended layout changes.  It hashes
 normalized layout output: glyph names, font slots, glyph metrics, rules, positions,
-scales, and document extents.  If a snapshot changes, inspect the serialized or rendered
-difference before updating the expected hash, and document whether the change is an
-intentional bug fix or feature change.
+scales, and document extents.  Box records are sorted before hashing, so changes in
+append order from range-emission refactors do not count as layout changes.  If a
+snapshot changes, inspect the serialized or rendered difference before updating the
+expected hash, and document whether the change is an intentional bug fix or feature
+change.
 
 ## Benchmarks
 
