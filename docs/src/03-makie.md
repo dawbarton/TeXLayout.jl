@@ -52,9 +52,26 @@ save("mixed.png", fig)
     embedded math) construct the string so it is *not* a single `$…$` span — for
     instance with surrounding text, or via `latexstring(...)`.
 
-    The document path uses `layout_document`'s defaults (left-aligned, natural
-    width); per-call `LayoutOptions` are not currently exposed through the Makie
-    seam.  Call `layout_document` directly if you need that control.
+### Document-layer options through Makie
+
+Makie's call site (`generate_tex_elements(::LaTeXString)`) has a fixed signature, so
+per-render [`LayoutOptions`](@ref) cannot be passed for the document path.  Instead,
+set them session-wide with [`set_default_layout_options!`](@ref) — the extension
+reads [`default_layout_options`](@ref) on every document-path render, just as it
+reads [`default_font_family`](@ref) for the font:
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+
+# Centre text and equations within a fixed 40 em column for all Makie renders.
+set_default_layout_options!(width = 40.0, align = :center, display_align = :center)
+
+Label(fig[1, 1], latexstring("A line of text and a display:\n\$\$x^2 + y^2 = r^2\$\$"))
+```
+
+The keyword form merges over the current default, so you can change just one field
+(e.g. `set_default_layout_options!(align = :center)`).  A single inline-math
+`L"…"` string is unaffected — it takes the Display-style math path regardless.
 
 ## Quick start
 

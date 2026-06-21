@@ -929,3 +929,19 @@
   math"), AGENTS.md routing note, CHANGELOG Added entry.
 - Limitation kept/documented: the Makie seam still ignores the caller font_family
   arg, and document-path LayoutOptions aren't exposed (use layout_document directly).
+
+## 2026-06-21T17:30 Session-wide default LayoutOptions
+
+- Added `default_layout_options()` / `set_default_layout_options!` (compose.jl),
+  mirroring the `default_font_family` Ref pattern. Keyword setter merges over the
+  current default via `_merge_options` (strict: unknown keys throw); positional
+  setter replaces wholesale (`LayoutOptions()` resets).
+- `layout_document` refactored into two methods: core takes `opts::LayoutOptions`;
+  the kwarg convenience merges kwargs over `default_layout_options()`. So direct
+  callers and the Makie path both honour the global; output unchanged until set.
+- Makie extension (document path) now calls `layout_document(str, default_layout_
+  options(); family)`. This is the only channel for width/alignment via Makie,
+  since the `generate_tex_elements(::LaTeXString)` signature is fixed.
+- Exported both names. 10 new tests (merge, per-call override, reset, typo error,
+  Makie pickup). Suite 1223 pass, no snapshot change. Docs: README, 01/03/05 doc
+  pages, AGENTS.md Makie note, CHANGELOG.

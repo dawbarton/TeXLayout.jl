@@ -41,6 +41,8 @@ paragraph spacing (`parskip`), alignment, width, and text shaping.
 layout_document
 TeXBox
 LayoutOptions
+default_layout_options
+set_default_layout_options!
 TextShaper
 MetricShaper
 ```

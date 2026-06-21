@@ -627,6 +627,39 @@
             @test opts.shaper isa TeXLayout.MetricShaper
         end
 
+        @testset "Session-wide default layout options" begin
+            saved = TeXLayout.default_layout_options()
+            try
+                @test TeXLayout.default_layout_options() isa TeXLayout.LayoutOptions
+
+                # Keyword form overrides only the named fields (merge).
+                TeXLayout.set_default_layout_options!(width = 30.0, display_align = :right)
+                cur = TeXLayout.default_layout_options()
+                @test cur.width == 30.0
+                @test cur.display_align === TeXLayout.Alignment.Right
+                @test cur.align === TeXLayout.Alignment.Left      # untouched
+                @test cur.parskip ≈ 0.6                           # untouched
+
+                # layout_document picks up the global default.
+                doc = TeXLayout.layout_document("hi \$x\$"; family = family)
+                @test doc.width ≈ 30.0
+
+                # Per-call kwargs override the global for that call only.
+                doc2 = TeXLayout.layout_document("hi \$x\$"; family = family, width = 10.0)
+                @test doc2.width ≈ 10.0
+                @test TeXLayout.default_layout_options().width == 30.0
+
+                # Positional form replaces wholesale (factory reset).
+                TeXLayout.set_default_layout_options!(TeXLayout.LayoutOptions())
+                @test TeXLayout.default_layout_options().width === nothing
+
+                # Unknown option name is rejected.
+                @test_throws ArgumentError TeXLayout.set_default_layout_options!(widht = 1.0)
+            finally
+                TeXLayout.set_default_layout_options!(saved)
+            end
+        end
+
         @testset "Case 1: plain text, glyphs at y=0, ascent > 0" begin
             result = TeXLayout.layout_document("abc"; family = family)
             @test result isa TeXLayout.TeXBox

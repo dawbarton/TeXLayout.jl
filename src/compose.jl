@@ -60,6 +60,58 @@ function LayoutOptions(;
     )
 end
 
+# The field names accepted by `set_default_layout_options!` and the per-call
+# keyword arguments of `layout_document`; they coincide with `LayoutOptions`
+# fields so merges can read defaults straight off an existing value.
+const _LAYOUT_OPTION_KEYS = (
+    :align, :line_height, :lineskip, :width, :display_align,
+    :abovedisplayskip, :belowdisplayskip, :parskip, :shaper,
+)
+
+# Return a copy of `base` with the supplied keyword fields overridden. Errors on
+# any unknown key so typos surface instead of being silently ignored.
+function _merge_options(base::LayoutOptions; kwargs...)
+    for k in keys(kwargs)
+        k in _LAYOUT_OPTION_KEYS || throw(ArgumentError("unknown layout option: $k"))
+    end
+    return LayoutOptions(; (k => get(kwargs, k, getfield(base, k)) for k in _LAYOUT_OPTION_KEYS)...)
+end
+
+# Session-wide default options, mirroring `default_font_family()`. Consulted by
+# `layout_document` (and therefore the Makie extension) when no explicit options
+# are supplied.
+const _DEFAULT_LAYOUT_OPTIONS = Ref{LayoutOptions}(LayoutOptions())
+
+"""
+    default_layout_options() -> LayoutOptions
+
+Return the session-wide default [`LayoutOptions`](@ref) used by
+[`layout_document`](@ref) (and hence the Makie extension) when no per-call options
+are given. Override with [`set_default_layout_options!`](@ref).
+"""
+default_layout_options() = _DEFAULT_LAYOUT_OPTIONS[]
+
+"""
+    set_default_layout_options!(opts::LayoutOptions) -> LayoutOptions
+    set_default_layout_options!(; kwargs...) -> LayoutOptions
+
+Set the session-wide default layout options returned by
+[`default_layout_options`](@ref). The keyword form overrides only the named fields,
+leaving the rest of the current default unchanged; the positional form replaces the
+whole value (pass `LayoutOptions()` to reset to factory defaults).
+
+This is the way to control text/display alignment and line width for the Makie
+extension, whose call site cannot accept per-render options:
+
+```julia
+using TeXLayout
+set_default_layout_options!(width = 40.0, display_align = :center)
+```
+"""
+set_default_layout_options!(opts::LayoutOptions) = (_DEFAULT_LAYOUT_OPTIONS[] = opts)
+set_default_layout_options!(; kwargs...) =
+    (_DEFAULT_LAYOUT_OPTIONS[] = _merge_options(_DEFAULT_LAYOUT_OPTIONS[]; kwargs...))
+
 # ── Measurement ───────────────────────────────────────────────────────────────
 
 # Em advance contributed by a single LayoutBox.
@@ -227,10 +279,13 @@ end
 
 """
     layout_document(input; family, kwargs...) -> TeXBox
+    layout_document(input, opts::LayoutOptions; family) -> TeXBox
 
 Lay out a mixed text/math string with line breaks and display blocks.
 
-Keyword arguments populate `LayoutOptions` (see its docstring). The result's
+The keyword form merges the given options over the session-wide
+[`default_layout_options`](@ref); the positional form uses `opts` directly.
+Keyword names are the `LayoutOptions` fields (see its docstring). The result's
 coordinate frame has the first line's baseline at y = 0; later lines and
 display blocks have negative y. `result.boxes` is a flat `Vector{LayoutBox}`
 ready for the existing renderer and Makie extension.
@@ -255,7 +310,14 @@ function layout_document(
         family::FontFamily = default_font_family(),
         kwargs...,
     )::TeXBox
-    opts = LayoutOptions(; kwargs...)
+    return layout_document(input, _merge_options(default_layout_options(); kwargs...); family)
+end
+
+function layout_document(
+        input::AbstractString,
+        opts::LayoutOptions;
+        family::FontFamily = default_font_family(),
+    )::TeXBox
     doc = parse_document(input)
     mc = load_math_table(family.math).constants
     base_scale = size_scale(Text, mc)

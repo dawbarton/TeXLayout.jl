@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   usual `L"…"` form) as one Display-style formula as before, but routes any other
   string (surrounding text, several `$…$` spans, `\(…\)`, or `$$…$$` / `\[…\]`
   display math) through `layout_document`.
+- `default_layout_options()` / `set_default_layout_options!` — session-wide default
+  `LayoutOptions` (mirroring `default_font_family`). `layout_document` merges
+  per-call keyword arguments over these defaults, and the Makie extension reads them
+  on the document path, giving width/alignment control where Makie's fixed call site
+  cannot accept per-render options. `layout_document(input, opts::LayoutOptions;
+  family)` is also available to pass an explicit options value.
 
 ### Changed
 - Refactored internal parser and layout organization: AST/token kinds now use

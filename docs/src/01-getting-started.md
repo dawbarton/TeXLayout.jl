@@ -179,6 +179,16 @@ centred against the widest item. The centring reference is the widest item
 *overall* — it coincides with "the longest text line" only when no display block is
 wider than every text line.
 
+These options also have a session-wide default. `set_default_layout_options!(;
+kwargs...)` sets the defaults returned by `default_layout_options()`; per-call
+keyword arguments to `layout_document` are merged over them. This is the only way to
+control width and alignment for the [Makie integration](03-makie.md), whose call
+site cannot take per-render options:
+
+```julia
+set_default_layout_options!(width = 40.0, align = :center)
+```
+
 The `TeXBox.boxes` field is a `Vector{LayoutBox}` exactly like the output of
 `generate_tex_elements`, so the same rendering loop (see below) applies — the only
 difference is that boxes now span multiple baselines.

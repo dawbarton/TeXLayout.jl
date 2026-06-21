@@ -75,7 +75,9 @@ The extension routes each `LaTeXString` by shape: a single inline-math span
 (`"$…$"`, the usual `L"…"` form) is laid out as one formula in Display style, as
 before; anything else — surrounding text, several `$…$` spans, `\(…\)` inline
 math, or `$$…$$` / `\[…\]` display math — goes through `layout_document`, so a
-single `text!` call can render mixed text and math.
+single `text!` call can render mixed text and math.  Width and alignment for that
+document path are controlled session-wide with `set_default_layout_options!`
+(e.g. `set_default_layout_options!(width = 40.0, align = :center)`).
 
 ```julia
 using TeXLayout       # activates MathTeXEngineExt automatically
@@ -234,6 +236,8 @@ exported.
 | `layout_document` | function | Lay out mixed text/math input into a `TeXBox`; keyword options control spacing, alignment, width, and shaping |
 | `TeXBox` | struct | Document layout result: `.boxes`, `.width`, `.ascent`, `.descent` |
 | `LayoutOptions` | struct | Keyword-configurable options for `layout_document` |
+| `default_layout_options` | function | Return the session-wide default `LayoutOptions` used by `layout_document` and the Makie extension |
+| `set_default_layout_options!` | function | Override the session-wide default options (keyword form merges; positional `LayoutOptions` replaces) |
 | `TextShaper` | abstract type | Interface for text shaping; default implementation is `MetricShaper` |
 | `MetricShaper` | struct | Default metric-only text shaper (no contextual shaping) |
 | `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |

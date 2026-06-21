@@ -353,6 +353,9 @@ at the end of that file.
   with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
   Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
   before rendering; the extension will pick up the new default automatically.
+  Likewise, the document path's width/alignment cannot be passed through Makie's
+  fixed call site, so it reads `TeXLayout.default_layout_options()`; set these with
+  `TeXLayout.set_default_layout_options!` (e.g. `width`, `align`, `display_align`).
 
 ## Changelog
 

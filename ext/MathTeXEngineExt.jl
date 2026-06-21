@@ -239,7 +239,11 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = Mat
         node = TeXLayout.parse_latex(_strip_math_delimiters(str))
         TeXLayout.layout(node, tl_family, TeXLayout.Display)
     else
-        TeXLayout.layout_document(String(str); family = tl_family).boxes
+        # Width/alignment cannot be passed through Makie's fixed call site, so the
+        # document path uses the session-wide default options
+        # (set via TeXLayout.set_default_layout_options!).
+        opts = TeXLayout.default_layout_options()
+        TeXLayout.layout_document(String(str), opts; family = tl_family).boxes
     end
 
     result = Vector{_MTEElementTuple}()
