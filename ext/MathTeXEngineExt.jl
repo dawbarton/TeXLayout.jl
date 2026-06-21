@@ -49,6 +49,16 @@ function _strip_math_delimiters(s::AbstractString)
     return str
 end
 
+# True when the whole string is a single inline-math span: it starts and ends with
+# a single `$` and contains no other `$`.  This is the canonical `L"…"` form (e.g.
+# "$x^2$").  Anything else — surrounding text, `$$…$$`/`\[…\]` display math, or
+# several `$…$` spans — is routed through the document layer instead.
+function _is_inline_math(s::AbstractString)::Bool
+    length(s) >= 2 || return false
+    (first(s) == '$' && last(s) == '$') || return false
+    return count(==('$'), s) == 2
+end
+
 # Return the single character encoded by `name`, or `nothing` if the string is
 # empty or contains multiple characters.
 @inline function _single_char(name::String)::Union{Char, Nothing}
@@ -210,6 +220,14 @@ This is a new method (not an overwrite), so the extension is fully precompiled.
 Makie always passes a `LaTeXString` at this call site, so this method takes
 priority via normal dispatch specificity.
 
+Routing depends on the string's shape:
+
+  - A single inline-math span (`"\$…\$"`, the usual `L"…"` form) is laid out as one
+    formula in `Display` style — MathTeXEngine's traditional behaviour.
+  - Anything else — surrounding text, `\$\$…\$\$` / `\\[…\\]` display math, or several
+    `\$…\$` spans — is routed through [`TeXLayout.layout_document`](@ref), so mixed
+    text-and-math `LaTeXString`s render through the document layer.
+
 The `font_family` argument is accepted for API compatibility but is currently
 ignored; TeXLayout's `default_font_family()` is used instead.
 """
@@ -217,9 +235,12 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = Mat
     tl_family = TeXLayout.default_font_family()
     runtime = _runtime_bundle(tl_family)
 
-    input = _strip_math_delimiters(str)
-    node = TeXLayout.parse_latex(input)
-    boxes = TeXLayout.layout(node, tl_family, TeXLayout.Display)
+    boxes = if _is_inline_math(str)
+        node = TeXLayout.parse_latex(_strip_math_delimiters(str))
+        TeXLayout.layout(node, tl_family, TeXLayout.Display)
+    else
+        TeXLayout.layout_document(String(str); family = tl_family).boxes
+    end
 
     result = Vector{_MTEElementTuple}()
     sizehint!(result, length(boxes))

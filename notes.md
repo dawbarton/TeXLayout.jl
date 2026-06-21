@@ -915,3 +915,17 @@
   unknown control sequences in text mode are still dropped (future work: a
   text-mode command/escape table).
 - 7 new testsets in test_text.jl; full suite 1213 pass, no snapshot changes.
+
+## 2026-06-21T17:00 Makie extension: route mixed text/math via layout_document
+
+- `ext/MathTeXEngineExt.jl` `generate_tex_elements(::LaTeXString)` now branches on
+  `_is_inline_math(str)`: a single `$…$` span (starts/ends with `$`, exactly two `$`
+  total) keeps the old behaviour (parse_latex + layout, Display style); everything
+  else goes through `layout_document(String(str)).boxes`. The shared `_box_to_mte`
+  loop converts either box list.
+- Verified end-to-end via CairoMakie: `L"x^2+\frac12"` (math), `"Energy $E=mc^2$ is
+  famous."` (mixed text+math), and `$$…$$` (display) all render correctly.
+- Docs: README Makie section, docs/src/03-makie.md ("Inline math vs. mixed text and
+  math"), AGENTS.md routing note, CHANGELOG Added entry.
+- Limitation kept/documented: the Makie seam still ignores the caller font_family
+  arg, and document-path LayoutOptions aren't exposed (use layout_document directly).

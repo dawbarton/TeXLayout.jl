@@ -320,6 +320,12 @@ at the end of that file.
   `LaTeXString`, so dispatch picks our method over MathTeXEngine's fallback.  The
   extension is fully precompiled (no `__precompile__(false)` needed) because adding
   a method with a more specific argument type is a new method, not an overwrite.
+  **Routing:** `_is_inline_math` treats a string that starts and ends with a single
+  `$` and contains no other `$` (the usual `L"…"` form) as one inline-math formula,
+  laid out via `parse_latex` + `layout` in Display style.  Every other string —
+  surrounding text, multiple `$…$` spans, `\(…\)`, or `$$…$$` / `\[…\]` display
+  math — is routed through `layout_document`, and the resulting `TeXBox.boxes` are
+  converted by the same `_box_to_mte` adapter.
   The extension also maintains a per-font runtime cache so repeated Makie renders
   reuse the loaded math/regular faces, the derived `MathTeXEngine.FontFamily`, and
   glyph-name → glyph-index lookup tables.

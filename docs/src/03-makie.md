@@ -24,6 +24,38 @@ runtime bundle derived from the active `FontFamily`, and the underlying TeXLayou
 pipeline reuses cached font handles and parsed MATH tables.  In steady-state Makie
 workloads this avoids reparsing the OpenType font data on every formula.
 
+## Inline math vs. mixed text and math
+
+The extension inspects each `LaTeXString` and routes it one of two ways:
+
+- **A single inline-math span** — a string that starts and ends with a single `$`
+  and contains no other `$` (the usual `L"…"` form, e.g. `L"x^2"` → `"$x^2$"`) — is
+  laid out as one formula in **`Display`** style, exactly as MathTeXEngine would.
+  This is the common case for axis labels, legend entries, and annotations.
+- **Anything else** is routed through [`layout_document`](@ref): surrounding prose,
+  several `$…$` spans, `\(…\)` inline math, and `$$…$$` / `\[…\]` display math.  This
+  lets a single `text!` call render mixed text-and-math content.
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+
+fig = Figure()
+Label(fig[1, 1], L"x^2 + \frac{1}{2}"; fontsize = 40)                       # → math
+Label(fig[2, 1], latexstring("Energy \$E=mc^2\$ is famous."); fontsize = 30) # → document
+Label(fig[3, 1], latexstring("\$\$\\int_0^1 x^2\\,dx = \\tfrac13\$\$"); fontsize = 30) # → display
+save("mixed.png", fig)
+```
+
+!!! note
+    Because `L"…"` wraps its argument in `$…$`, a plain `L"x^2"` is a single inline
+    span and takes the math path.  To force the document path (e.g. for prose with
+    embedded math) construct the string so it is *not* a single `$…$` span — for
+    instance with surrounding text, or via `latexstring(...)`.
+
+    The document path uses `layout_document`'s defaults (left-aligned, natural
+    width); per-call `LayoutOptions` are not currently exposed through the Makie
+    seam.  Call `layout_document` directly if you need that control.
+
 ## Quick start
 
 Load `TeXLayout` before (or alongside) `CairoMakie`; the extension activates

@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against local or downloaded references.
 - Root `justfile` helpers for common test, stress generation, packaging, and
   comparison commands.
+- Makie integration now renders mixed text-and-math `LaTeXString`s: the
+  `MathTeXEngineExt` extension lays out a single inline-math span (`"$…$"`, the
+  usual `L"…"` form) as one Display-style formula as before, but routes any other
+  string (surrounding text, several `$…$` spans, `\(…\)`, or `$$…$$` / `\[…\]`
+  display math) through `layout_document`.
 
 ### Changed
 - Refactored internal parser and layout organization: AST/token kinds now use
