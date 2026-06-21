@@ -844,3 +844,10 @@
 - Added internal `ParagraphBreakBlock` markers for top-level blank lines and `LayoutOptions.parskip` (default `0.6em`) to control the extra vertical gap.
 - Updated `layout_document` to fold paragraph-break markers into its existing pending-skip flow, including before display blocks.
 - Added lexer, parser, and layout tests for raw whitespace preservation, blank-line parsing, default paragraph spacing, and custom `parskip`.
+
+## 2026-06-21T15:12+00:00 Child-layout atom-class allocation cleanup
+
+- Reworked `_layout_children!` to stream TeX Rule 5/6 binary-operator reclassification instead of allocating a `Vector{Symbol}` of atom classes for each child list.
+- Kept separate left-context and emitted-spacing classifications so right-cancelled binary operators do not accidentally change the left context seen by later atoms.
+- Left a collect-based fallback for non-vector iterables; normal parser/layout paths use `Vector{Node}` and avoid the extra class vector.
+- Validation: focused layout/snapshot tests passed (1194/1194). Benchmark smoke showed lower layout allocations on representative math cases: `simple_atom` 37 allocs, `scripts_fraction` 49, `radical_delimited` 31, `accents_braces_arrows` 108, `matrix_cases` 124.

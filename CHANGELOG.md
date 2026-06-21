@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of allocating temporary `LayoutBox` buffers.
 - Matrix and array layout now records emitted cell ranges and translates them in
   place, removing per-cell scratch `LayoutBox` buffers from the math layout path.
+- Math-list child layout now computes binary-operator reclassification without a
+  per-call atom-class vector on normal `Vector{Node}` paths.
 - Developer documentation now describes the unified per-case stress-test suite,
   `stress_test_reference.tar` workflow, visual-only full sheets, optional
   CairoMakie stress cases, and root `justfile` helpers.

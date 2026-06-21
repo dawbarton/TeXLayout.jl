@@ -169,6 +169,24 @@ function _interatom_space(prev::Symbol, next::Symbol, style::TexStyle)::Float64
     return get(tight ? _TIGHT_SPACINGS : _SPACINGS, (prev, next), 0.0)
 end
 
+@inline function _left_reclassified_atom_class(cls::Symbol, prev_nc::Symbol)::Symbol
+    cls === :bin && (prev_nc === :nothing || prev_nc ∈ _BIN_LEFT_CANCEL) && return :ord
+    return cls
+end
+
+function _next_left_reclassified_atom_class(
+        nodes::AbstractVector{Node},
+        i::Int,
+        prev_nc::Symbol,
+    )::Symbol
+    for j in (i + 1):lastindex(nodes)
+        cls = _atom_class(nodes[j])
+        cls === :neutral && continue
+        return _left_reclassified_atom_class(cls, prev_nc)
+    end
+    return :nothing
+end
+
 # Return a Glyph for a Unicode character.
 # In math mode, certain ASCII characters are remapped to their correct math
 # Unicode equivalents before the glyph lookup (e.g. '-' → U+2212).
@@ -426,6 +444,45 @@ end
 # a mbin atom is demoted to mord when the surrounding context would produce
 # nonsensical spacing (e.g. a leading or trailing binary operator).
 function _layout_children!(
+        nodes::AbstractVector{Node},
+        ctx::_LayoutCtx,
+        style::TexStyle,
+        x0::Float64,
+        y0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Float64
+    isempty(nodes) && return 0.0
+
+    # Emit nodes with inter-atom spacing using the reclassified classes.
+    cursor = x0
+    prev_left_class = :nothing
+    prev_emit_class = :nothing
+    for i in eachindex(nodes)
+        raw_cls = _atom_class(nodes[i])
+        if raw_cls === :neutral
+            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
+            prev_emit_class = :nothing
+        else
+            left_cls = _left_reclassified_atom_class(raw_cls, prev_left_class)
+            next_cls = _next_left_reclassified_atom_class(nodes, i, left_cls)
+            cls = left_cls === :bin && next_cls ∈ _BIN_RIGHT_CANCEL ? :ord : left_cls
+            if ctx.mode === LayoutMode.Math && prev_emit_class !== :nothing
+                sp = _interatom_space(prev_emit_class, cls, style) * scale
+                if sp > 0.0
+                    push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
+                    cursor += sp
+                end
+            end
+            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
+            prev_left_class = left_cls
+            prev_emit_class = cls
+        end
+    end
+    return cursor - x0
+end
+
+function _layout_children!(
         children,
         ctx::_LayoutCtx,
         style::TexStyle,
@@ -434,60 +491,7 @@ function _layout_children!(
         scale::Float64,
         boxes::Vector{LayoutBox},
     )::Float64
-    isempty(children) && return 0.0
-
-    # Collect into an indexable array and compute initial atom classes.
-    nodes = children isa Vector ? children : collect(children)
-    n = length(nodes)
-    classes = Vector{Symbol}(undef, n)
-    for i in 1:n
-        classes[i] = _atom_class(nodes[i])
-    end
-
-    # Rule 5: mbin → mord when left-context is start-of-list, bin, open, rel, op, or punct.
-    # Neutral (space) nodes are transparent: they do not update the context.
-    prev_nc = :nothing
-    for i in 1:n
-        cls = classes[i]
-        cls === :neutral && continue
-        if cls === :bin && (prev_nc === :nothing || prev_nc ∈ _BIN_LEFT_CANCEL)
-            classes[i] = :ord
-        end
-        prev_nc = classes[i]
-    end
-
-    # Rule 6: mbin → mord when right-context is rel, close, or punct.
-    next_nc = :nothing
-    for i in n:-1:1
-        cls = classes[i]
-        cls === :neutral && continue
-        if cls === :bin && next_nc ∈ _BIN_RIGHT_CANCEL
-            classes[i] = :ord
-        end
-        next_nc = classes[i]
-    end
-
-    # Emit nodes with inter-atom spacing using the reclassified classes.
-    cursor = x0
-    prev_class = :nothing
-    for i in 1:n
-        cls = classes[i]
-        if cls === :neutral
-            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
-            prev_class = :nothing
-        else
-            if ctx.mode === LayoutMode.Math && prev_class !== :nothing
-                sp = _interatom_space(prev_class, cls, style) * scale
-                if sp > 0.0
-                    push!(boxes, LayoutBox(Space(sp), cursor, y0, scale))
-                    cursor += sp
-                end
-            end
-            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
-            prev_class = cls
-        end
-    end
-    return cursor - x0
+    return _layout_children!(collect(children), ctx, style, x0, y0, scale, boxes)
 end
 
 # ── Per-kind layout helpers ──────────────────────────────────────────────────
