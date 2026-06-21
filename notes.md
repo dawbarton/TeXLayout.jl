@@ -810,3 +810,10 @@
 - Added root `justfile` helpers for common test and stress commands.
 - Updated `tools/stress_test_all.jl` to delegate to the unified suite while preserving old usage with bare font-name arguments.
 - Validation: generated `new_cm` math/text outputs, packed and self-compared a reference tarball (152/152 identical); generated all eight font artifacts without sheets and self-compared the tarball (1216/1216 identical); verified a synthetic new case reports `NEW` without failing; generated the `new_cm` optional Makie subset (6 PNGs).
+
+## 2026-06-21T14:30+00:00 Stress-suite documentation sweep
+
+- Updated `AGENTS.md` / `CLAUDE.md` to list `tools/stress_test_suite.jl`, the `stress_test_all.jl` compatibility wrapper, and the root `justfile`.
+- Documented the canonical stress reference workflow: generate per-case PNGs, pack `stress_test_reference.tar` with Julia's `Tar` stdlib, compare against a local or downloaded reference, and treat full sheets as visual-only outputs.
+- Updated `README.md` with concise developer-tooling instructions and clarified that the linked release images are full-sheet stress-renderer examples.
+- Refreshed `math-flat-layout-plan.local.md` so its validation steps point at the per-case stress suite rather than the older sheet-only comparison.

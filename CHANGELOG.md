@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of allocating temporary `LayoutBox` buffers.
 - Matrix and array layout now records emitted cell ranges and translates them in
   place, removing per-cell scratch `LayoutBox` buffers from the math layout path.
+- Developer documentation now describes the unified per-case stress-test suite,
+  `stress_test_reference.tar` workflow, visual-only full sheets, optional
+  CairoMakie stress cases, and root `justfile` helpers.
 - Document composition now uses an internal measured box-tree layer behind the
   existing `TeXBox`, `hconcat`, and `vstack` compatibility surface.
 - Internal renderer/debug tooling now resolves `Glyph.font_slot` paths through a

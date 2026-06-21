@@ -67,7 +67,8 @@ TeXLayout.jl/
 │   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
 │   ├── stress_test_text.jl        # Render mixed text/math document stress-test sheet
 │   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
-│   ├── stress_test_all.jl         # Batch-render all font families and compare with reference images
+│   ├── stress_test_suite.jl       # Unified per-case stress PNG generator/packer/comparator
+│   ├── stress_test_all.jl         # Compatibility wrapper for stress_test_suite.jl
 │   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
 │   └── prepare_font_artifacts.jl  # Build artifact tarballs + draft Artifacts.toml stanzas
 ├── docs/
@@ -85,24 +86,59 @@ TeXLayout.jl/
 ├── CLAUDE.md               # Symlink to AGENTS.md for compatibility
 ├── katex_rules.md          # Rule-by-rule implementation notes against KaTeX/TeX
 ├── notes.md                # Cross-session engineering notes
+├── justfile                # Common developer/test/stress-suite command shortcuts
 ├── Project.toml
 └── README.md
 ```
 
 ### Rendering tools
 
-All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activate automatically via `julia --project=tools/ tools/<script>.jl`.  PNG output uses ImageMagick (`magick` / `convert`), which must be available on `PATH`.
+All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activate automatically via `julia --project=tools/ tools/<script>.jl`.  Most PNG outputs are written directly from Julia; some single-expression visualisers may still require ImageMagick (`magick` / `convert`) on `PATH`.
 
 | Script | Purpose | Key invocation |
 |--------|---------|----------------|
 | `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
-| `stress_test_freetype.jl` | Full stress-test sheet rendered via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [out.png] [:font_symbol]` |
-| `stress_test_makie.jl` | Full stress-test sheet rendered via CairoMakie. | `julia tools/stress_test_makie.jl [out.png\|out.pdf] [:font_symbol]` |
-| `stress_test_text.jl` | Mixed text/math document stress-test sheet rendered via `layout_document`; source text appears beside the rendered output. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
-| `stress_test_all.jl` | Batch-render all 8 bundled families and diff against reference images from the `v0.1.0-stress` release. | `julia tools/stress_test_all.jl` |
+| `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [out.png] [:font_symbol]` |
+| `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [out.png\|out.pdf] [:font_symbol]` |
+| `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
+| `stress_test_suite.jl` | Unified stress suite: generate per-case PNGs for all bundled fonts, optionally include CairoMakie integration checks, pack a reference tarball, and compare current output against a local or downloaded reference. | `julia tools/stress_test_suite.jl all` |
+| `stress_test_all.jl` | Compatibility wrapper for the unified suite. Old font-list invocations still work, and explicit suite commands pass through. | `julia tools/stress_test_all.jl [all\|generate\|pack\|compare]` |
 | `prepare_font_artifacts.jl` | Download fonts from CTAN/GitHub, build artifact tarballs, and draft `Artifacts.toml` stanzas.  Run when adding fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
+
+The root `justfile` provides shortcuts for the common paths:
+
+```
+just test
+just stress-generate
+just stress-generate-makie
+just stress-pack
+just stress-compare
+just stress-all
+```
+
+### Stress references
+
+`tools/stress_test_suite.jl` is the canonical image regression tool.  It generates a directory tree of stable, per-expression PNGs grouped by font, suite, and source category:
+
+```
+stress_outputs/current/<font>/<suite>/<section>/<case>.png
+```
+
+The built-in suites are `math_freetype`, `text_freetype`, and the optional `makie_cairo` suite enabled with `--include-makie`.  `makie_cairo` is intentionally opt-in because it loads CairoMakie, but it should be used before changing Makie extension behaviour.
+
+Reference archives are named `stress_test_reference.tar` and are created with Julia's `Tar` stdlib:
+
+```
+julia tools/stress_test_suite.jl generate --out stress_outputs/current
+julia tools/stress_test_suite.jl pack --input stress_outputs/current --out stress_test_reference.tar
+julia tools/stress_test_suite.jl compare --current stress_outputs/current --reference stress_test_reference.tar
+```
+
+The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.1.0-stress` release asset `stress_test_reference.tar`.
+
+Full-sheet outputs remain useful for quick visual inspection and are written under each font's `sheets/` directory, but they are deliberately excluded from reference tarballs and comparisons.  Adding new stress cases is backwards-compatible: images present only in the current output are reported as `NEW` and do not fail comparison unless `--fail-on-new` is passed.  Missing, changed, or unreadable reference images still fail.
 
 ### Formatting
 
