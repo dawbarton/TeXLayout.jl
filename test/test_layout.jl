@@ -1281,6 +1281,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test g_lcr[1].x <= g_ccc[1].x + 1.0e-6
     end
 
+    @testset "align inserts relation spacing after alignment marker" begin
+        boxes = layout(parse_latex("\\begin{align}x&=y\\end{align}"), family, Display)
+        equal = only(filter(b -> b.element isa Glyph && b.element.glyph_name == "equal", boxes))
+        relation_spaces = filter(
+            b -> b.element isa Space &&
+                isapprox(b.element.width, 5 / 18; atol = 1.0e-6) &&
+                isapprox(b.x + b.element.width, equal.x; atol = 1.0e-6),
+            boxes,
+        )
+        @test length(relation_spaces) == 1
+    end
+
     # ── Style overrides ────────────────────────────────────────────────────────
 
     @testset "\\dfrac inside subscript renders at full scale" begin

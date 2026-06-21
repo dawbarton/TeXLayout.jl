@@ -322,6 +322,14 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
         end
     end
 
+    if env_name ∈ ("align", "aligned")
+        for r in 1:nrow, c in 2:2:ncol
+            idx = (r - 1) * ncol + c
+            cell = cells[idx]
+            cells[idx] = Node(cell.kind, cell.value, [Node(NodeKind.Group, Node[]); cell.children])
+        end
+    end
+
     # Derive colspec from env alignment if not explicitly provided.
     if isempty(colspec)
         if env_name ∈ ("align", "aligned")

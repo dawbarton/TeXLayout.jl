@@ -10,7 +10,7 @@ const SNAPSHOT_MATH_CASES = [
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "5e6ade456231082d5d8db443cee91aba7df9667e0ef41c3d11dfdb61f6faca38"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "936a2e4ea04a26f89cbe396226acf7f8d701c4105868ae1d7dc8809d49f0709f"),
     ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "38e695096188a456a72c1e4fa4d8ef2f8f036e7bc275b2f23b1b9fcea504516f"),
 ]
 

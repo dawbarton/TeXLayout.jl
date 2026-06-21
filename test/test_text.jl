@@ -134,6 +134,19 @@
             @test split(mat.value, "\x00")[3] == "rl"
         end
 
+        @testset "Align inserts empty group before post-& cells" begin
+            tree = parse_latex("\\begin{align}x&=y\\\\a&=b\\end{align}")
+            mat = tree.children[1]
+            @test length(mat.children) == 4
+            for idx in (2, 4)
+                first = mat.children[idx].children[1]
+                @test first.kind === NodeKind.Group
+                @test isempty(first.children)
+            end
+            @test mat.children[1].children[1].kind !== NodeKind.Group
+            @test mat.children[3].children[1].kind !== NodeKind.Group
+        end
+
         @testset "Align colspec: 4 columns → rlrl" begin
             tree = parse_latex("\\begin{align}a&b&c&d\\end{align}")
             mat = tree.children[1]

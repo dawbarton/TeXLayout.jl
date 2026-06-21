@@ -830,3 +830,10 @@
 - Implemented `\sqrt[n]{x}` degree placement in `_layout_sqrt!`; the parser already produced `[degree, body]`, but layout previously ignored the degree child.
 - Radical placement helpers now return the radicand offset and actual radical cover height so the degree can use `RadicalKernBeforeDegree`, `RadicalKernAfterDegree`, and `RadicalDegreeBottomRaisePercent`.
 - Added a layout regression test checking degree scale, horizontal placement, and MATH-table bottom raise for `\sqrt[3]{x}`.
+
+## 2026-06-21T15:03+00:00 Align relation spacing
+
+- Adjusted `parse_environment!` for `align` / `aligned` so every even column (the cell after an alignment marker) starts with an empty `NodeKind.Group`.
+- The empty group classifies as an ordinary atom and emits no boxes, letting existing math-list spacing produce `ord-rel-ord` spacing for cells like `=y`.
+- Added parser and layout regression tests for the inserted empty group and the relation-space box before a leading `=`.
+- Updated the `document_inline_display` snapshot hash for the intentional `align` geometry change.
