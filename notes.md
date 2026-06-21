@@ -897,3 +897,21 @@
   the same x as in `x=y`.
 - Added layout regression test (align `=` x == plain `=` x); updated
   `document_inline_display` snapshot hash. Full suite: 1195 pass.
+
+## 2026-06-21T16:30 Display math ($$, \[) and text-mode literal tokens
+
+- Document parser (`src/document.jl`) now recognises display math `$$…$$` and
+  `\[…\]` (→ free-standing `DisplayBlock(node, :displaymath)`, Sequence body laid
+  out in Display style) and inline `\(…\)` (→ `MathRun`, Text style). A single
+  `:displaymath` kind is used for both `$$` and `\[` (kind is informational;
+  `compose.jl` ignores it).
+- `$$` vs `$ $`: disambiguated by peeking — `$$` is two adjacent `MathShift`
+  tokens; a spaced `$ $` has a Space between and stays inline. Display forms are
+  gated on `!in_group` so they never open inside `{…}`/`\text{}`.
+- Generalised `_parse_math_until_shift!` into `_parse_math_until!(p, isstop)` +
+  added `_parse_math_until_command!(p, close)` and a `_peek` helper in parser.jl.
+- Text-mode token dropping: `^`/`_`/`&` (and stray top-level `}`) now render as
+  literal characters instead of being dropped by the catch-all `else`. Genuine
+  unknown control sequences in text mode are still dropped (future work: a
+  text-mode command/escape table).
+- 7 new testsets in test_text.jl; full suite 1213 pass, no snapshot changes.

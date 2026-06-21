@@ -298,6 +298,53 @@
             @test math_runs[1].node.kind === NodeKind.Sequence
         end
 
+        @testset "\\(…\\) is inline math" begin
+            doc = TeXLayout.parse_document("a \\(x^2\\) b")
+            runs = doc[1].lines[1].runs
+            math_runs = filter(r -> r isa TeXLayout.MathRun, runs)
+            @test length(math_runs) == 1
+            @test math_runs[1].style === Text
+            @test math_runs[1].node.children[1].kind === NodeKind.Superscript
+        end
+
+        @testset "\$\$…\$\$ is a display block (script preserved)" begin
+            doc = TeXLayout.parse_document("Disp \$\$x^2\$\$ end.")
+            @test length(doc) == 3
+            @test doc[1] isa TeXLayout.ParagraphBlock
+            @test doc[2] isa TeXLayout.DisplayBlock
+            @test doc[2].kind === :displaymath
+            @test doc[2].node.kind === NodeKind.Sequence
+            @test doc[2].node.children[1].kind === NodeKind.Superscript
+            @test doc[3] isa TeXLayout.ParagraphBlock
+        end
+
+        @testset "\\[…\\] is a display block" begin
+            doc = TeXLayout.parse_document("Disp \\[x^2\\] end.")
+            @test length(doc) == 3
+            @test doc[2] isa TeXLayout.DisplayBlock
+            @test doc[2].kind === :displaymath
+            @test doc[2].node.children[1].kind === NodeKind.Superscript
+        end
+
+        @testset "\$ \$ (spaced) stays inline, not display" begin
+            doc = TeXLayout.parse_document("a \$ \$ b")
+            @test all(blk -> blk isa TeXLayout.ParagraphBlock, doc)
+            @test any(r -> r isa TeXLayout.MathRun, doc[1].lines[1].runs)
+        end
+
+        @testset "\$\$ inside a text group does not open a display block" begin
+            doc = TeXLayout.parse_document("\\textbf{a \$x\$ b}")
+            @test all(blk -> blk isa TeXLayout.ParagraphBlock, doc)
+        end
+
+        @testset "^, _, & render as literal text outside math" begin
+            doc = TeXLayout.parse_document("a^b_c&d")
+            spans = vcat(
+                [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
+            )
+            @test join(sp.text for sp in spans) == "a^b_c&d"
+        end
+
         @testset "Blank line creates paragraph break block" begin
             doc = TeXLayout.parse_document("a\n\nb")
             @test length(doc) == 3

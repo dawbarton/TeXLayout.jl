@@ -53,6 +53,8 @@ end
 
 @inline _current(p::_Parser) = p.tokens[p.pos]
 @inline _advance!(p::_Parser) = (t = p.tokens[p.pos]; p.pos += 1; t)
+# Look ahead `n` tokens without consuming; clamps to the EOF sentinel.
+@inline _peek(p::_Parser, n::Int = 1) = p.tokens[min(p.pos + n, lastindex(p.tokens))]
 
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
@@ -507,17 +509,26 @@ function _parse_command!(p::_Parser)::Node
     end
 end
 
-# Parse math atoms until TokenKind.MathShift or TokenKind.EOF, without consuming the closing $.
-# Used by the document parser to handle inline $…$ math.
-function _parse_math_until_shift!(p::_Parser)::Node
+# Parse math atoms until `isstop(token)` is true or TokenKind.EOF, without consuming
+# the stop token. Used by the document parser for inline ($…$, \(…\)) and display
+# ($$…$$, \[…\]) math, each of which stops at a different closing delimiter.
+function _parse_math_until!(p::_Parser, isstop)::Node
     children = Node[]
     while true
-        k = _current(p).kind
-        (k === TokenKind.EOF || k === TokenKind.MathShift) && break
-        k === TokenKind.Space && (_advance!(p); continue)
+        tok = _current(p)
+        (tok.kind === TokenKind.EOF || isstop(tok)) && break
+        tok.kind === TokenKind.Space && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return Node(NodeKind.Sequence, children)
+end
+
+# Stop at the next math-shift ($) token; used for $…$ and $$…$$ math.
+_parse_math_until_shift!(p::_Parser) = _parse_math_until!(p, t -> t.kind === TokenKind.MathShift)
+
+# Stop at a specific closing command token (e.g. "\]" or "\)").
+function _parse_math_until_command!(p::_Parser, close::String)::Node
+    return _parse_math_until!(p, t -> t.kind === TokenKind.Command && t.value == close)
 end
 
 # ── Public API ────────────────────────────────────────────────────────────────

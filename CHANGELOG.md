@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `\textit`, `\textrm`, `\textnormal`, `\emph`, `\textsf`, `\texttt`, `\text`, `\mbox`
   with correct bold/italic nesting and `\emph` toggle
 - Explicit line breaks (`\\`) and configurable `\baselineskip` / `\lineskip` spacing
-- Inline math (`$…$`) embedded in text lines; display-math blocks (`\begin{align}`,
-  `\begin{aligned}`, `\begin{gather}`, `\begin{equation}`) as free-standing vertical items
+- Inline math (`$…$`, `\(…\)`) embedded in text lines; display-math blocks
+  (`$$…$$`, `\[…\]`, `\begin{align}`, `\begin{aligned}`, `\begin{gather}`,
+  `\begin{equation}`) as free-standing vertical items
 - `TeXBox`, `LayoutOptions`, `TextShaper`, `MetricShaper` exported types
 - Pluggable text shaper interface (`TextShaper` abstract type, `MetricShaper` default);
   extension seam in place for a future HarfBuzz shaper via `ext/HarfBuzzExt.jl`
@@ -95,6 +96,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   individually vertically centred.
 - `tools/visualise_metrics_makie.jl` now imports `Makie` via `CairoMakie.Makie`
   so it loads without `Makie` being a direct dependency of the tools project.
+- Document input now recognises `$$…$$` and `\[…\]` as display-math blocks and
+  `\(…\)` as inline math. Previously `$$…$$` was mis-parsed as two empty inline
+  toggles with the body leaking into text, and `\[…\]` / `\(…\)` were dropped.
+- `^`, `_`, and `&` in document text mode now render as literal characters instead
+  of being silently dropped (so `x^2` outside math no longer becomes `x2`).
 
 ## [v0.1.1] - 2026-06-19
 

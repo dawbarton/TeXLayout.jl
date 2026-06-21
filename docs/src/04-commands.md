@@ -319,7 +319,8 @@ explicitly.  The following constructs are recognised only in this document conte
 | `\textsf{…}` | Sans-serif (falls back to the regular slot in v1) |
 | `\texttt{…}` | Monospace (falls back to the regular slot in v1) |
 | `\text{…}`, `\mbox{…}` | Grouping scope that inherits the current text attributes |
-| `$…$` | Inline math, laid out in `Text` style on the current line |
+| `$…$`, `\(…\)` | Inline math, laid out in `Text` style on the current line |
+| `$$…$$`, `\[…\]` | Free-standing centred display-math block |
 | `\begin{align}…\end{align}` (and `aligned`, `gather`, `equation`) | Free-standing centred display-math block |
 | `\\` | Explicit line break |
 | blank line | Paragraph break with `parskip` vertical space |

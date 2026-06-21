@@ -143,10 +143,11 @@ The recognised text-mode constructs are:
 
 - **Styled text** — `\textbf`, `\textit`, `\emph` (toggles italic), `\textrm`,
   `\textnormal`, `\textsf`, `\texttt`, and `\text` / `\mbox` grouping.
-- **Inline math** — anything between `$…$` is laid out in `Text` style and placed on
-  the current line.
-- **Display math** — top-level `\begin{align}`, `\begin{aligned}`, `\begin{gather}`,
-  and `\begin{equation}` environments become free-standing, centred display blocks.
+- **Inline math** — anything between `$…$` or `\(…\)` is laid out in `Text` style and
+  placed on the current line.
+- **Display math** — `$$…$$`, `\[…\]`, and top-level `\begin{align}`,
+  `\begin{aligned}`, `\begin{gather}`, and `\begin{equation}` environments become
+  free-standing, centred display blocks.
 - **Line and paragraph breaks** — `\\` forces a new line; a blank line starts a new
   paragraph with `parskip` vertical space.
 

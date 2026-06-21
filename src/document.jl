@@ -183,10 +183,37 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
             _advance!(p)
 
         elseif tok.kind === TokenKind.MathShift
-            _advance!(p)   # consume opening $
+            if !in_group && _peek(p).kind === TokenKind.MathShift
+                # $$…$$ display math (free-standing block).
+                _advance!(p); _advance!(p)   # consume opening $$
+                _end_paragraph!(builder)
+                node = _parse_math_until_shift!(p)
+                _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
+                _current(p).kind === TokenKind.MathShift && _advance!(p)   # …$
+                push!(builder.blocks, DisplayBlock(node, :displaymath))
+            else
+                # $…$ inline math.
+                _advance!(p)   # consume opening $
+                _flush_text_run!(builder)
+                node = _parse_math_until_shift!(p)
+                _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
+                push!(builder.cur_runs, MathRun(node, Text))
+            end
+
+        elseif tok.kind === TokenKind.Command && tok.value == "\\[" && !in_group
+            # \[…\] display math (free-standing block).
+            _advance!(p)   # consume \[
+            _end_paragraph!(builder)
+            node = _parse_math_until_command!(p, "\\]")
+            _current(p).value == "\\]" && _advance!(p)   # consume \]
+            push!(builder.blocks, DisplayBlock(node, :displaymath))
+
+        elseif tok.kind === TokenKind.Command && tok.value == "\\("
+            # \(…\) inline math.
+            _advance!(p)   # consume \(
             _flush_text_run!(builder)
-            node = _parse_math_until_shift!(p)
-            _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
+            node = _parse_math_until_command!(p, "\\)")
+            _current(p).value == "\\)" && _advance!(p)   # consume \)
             push!(builder.cur_runs, MathRun(node, Text))
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\\\"
@@ -216,6 +243,13 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
 
         elseif tok.kind === TokenKind.LBrace
             _parse_text_group!(p, builder, builder.attrs)   # bare grouping
+
+        elseif tok.kind === TokenKind.Sup || tok.kind === TokenKind.Sub ||
+                tok.kind === TokenKind.Ampersand || tok.kind === TokenKind.RBrace
+            # These have no scripting/alignment meaning in text mode; render the
+            # literal character (^, _, &, }) instead of silently dropping it.
+            write(builder.buf, tok.value)
+            _advance!(p)
 
         else
             _advance!(p)   # unknown command, stray token — skip
