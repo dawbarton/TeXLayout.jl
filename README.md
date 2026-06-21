@@ -202,6 +202,21 @@ Early development (v0.1).  The following features are not yet implemented:
 
 - Type-piracy-free Makie integration (current approach is functional but uses a specialised method on types owned by other packages; see note above).
 
+## Scope
+
+TeXLayout typesets individual formulas and fixed text runs (with explicit line
+breaks via `\\`).  Layout is single-pass: each call produces a measured,
+positioned result directly.  The following are **explicitly out of scope** and
+will not be implemented:
+
+- **Automatic line breaking** — wrapping or filling text/math to a target width.
+- **Justification and glue setting** — stretchable/shrinkable spacing and the
+  associated break-point optimisation.
+- **Iterative or incremental relayout** — multi-pass layout optimisation, or
+  re-flowing/caching previously laid-out content.
+- **Page and column breaking.**
+- **Microtypography** (protrusion, font expansion).
+
 ## Acknowledgements
 
 TeXLayout.jl draws heavily on the following prior work:
