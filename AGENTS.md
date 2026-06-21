@@ -334,13 +334,11 @@ at the end of that file.
   recipe or a proper upstream extension point in MathTeXEngine) will be investigated
   in future.
 - **`align` column-spacing approximation** — `\begin{align}` reuses the matrix column
-  machinery, so the `&` gap is `_MATRIX_COLSEP` rather than true relation spacing.
-  This renders `x = y` with a small column gap instead of TeX's full relation spacing.
-  A later refinement can classify the post-`&` cell's leading atom as a relation.
+  machinery and its column-separation model.  Cells after `&` do insert the
+  ordinary atom needed for TeX-style spacing before leading relations such as
+  `=`, but the environment is not a full amsmath alignment template.
 - **`\textsf` / `\texttt` mapped to `:regular` slot** — no dedicated sans-serif or
   monospace font is wired to those slot names in v1; they render identically to `\textrm`.
-- **Blank-line paragraph breaks not honoured** — a blank line between text runs produces
-  no extra vertical space in v1 (same as a non-blank empty line: dropped).
 - **HarfBuzz shaper not yet implemented** — the `TextShaper` interface and extension seam
   are in place (`ext/HarfBuzzExt.jl` is documented in `text-spec.md` but not yet built).
   Users opt in with `shaper = HarfBuzzShaper()` once the extension is available.

@@ -96,10 +96,10 @@ The lexer scans the input string from left to right using UTF-8 codepoint iterat
   `\\` → `TokenKind.Command("\\\\")`.
 - **Bare backslash at end of input** — treated as `TokenKind.Char("\\")` rather than the start
   of a command.
-- **Whitespace runs** — any sequence of characters satisfying `isspace` is collapsed
-  into a single `TokenKind.Space(" ")` token regardless of length or composition.  The parser
-  ignores `TokenKind.Space` tokens in math mode and preserves them as explicit spaces in text
-  mode.
+- **Whitespace runs** — any sequence of characters satisfying `isspace` is emitted
+  as a single `TokenKind.Space` token whose `value` preserves the raw run.  The math
+  parser ignores `TokenKind.Space` tokens; the document parser collapses ordinary
+  whitespace to one text space and treats blank lines as paragraph breaks.
 - **Tilde** — `~` is immediately emitted as `TokenKind.Space("~")`.  In LaTeX, `~` is a
   non-breaking inter-word space; in math mode it is effectively ignored like any other
   space.
@@ -986,7 +986,7 @@ used by `test/test_math_table.jl` to validate the parser against known values.
 | `test/test_math_table.jl` | Binary MATH table parsing against all ground-truth constants from `newcm_math.jl` |
 | `test/test_metrics.jl` | Glyph metric lookups: PS-name, codepoint, and upright paths; cache behaviour |
 | `test/test_style.jl` | All eight style transitions and `size_scale` correctness |
-| `test/test_lexer.jl` | Tokeniser: multi-letter commands, single-char commands, whitespace collapsing, TokenKind.EOF sentinel |
+| `test/test_lexer.jl` | Tokeniser: multi-letter commands, single-char commands, whitespace run preservation, TokenKind.EOF sentinel |
 | `test/test_parser.jl` | AST structure for a representative set of expressions; resilience under ill-formed input |
 | `test/test_layout.jl` | Layout engine invariants: non-empty box lists, relative positions, fraction/radical geometry |
 | `test/test_katex.jl` | KaTeX-derived smoke tests (well-formed), malformed-input tests, and deeply nested expressions |

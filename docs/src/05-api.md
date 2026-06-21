@@ -35,7 +35,7 @@ layout
 
 `layout_document` handles mixed text/math input and returns a measured `TeXBox`.
 Use `LayoutOptions` or keyword arguments to control line spacing, display spacing,
-alignment, width, and text shaping.
+paragraph spacing (`parskip`), alignment, width, and text shaping.
 
 ```@docs
 layout_document

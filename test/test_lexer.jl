@@ -78,6 +78,13 @@
         @test char_toks[2].value == "y"
     end
 
+    @testset "Whitespace token preserves raw run" begin
+        toks = tokenize("x \n\n y")
+        spaces = filter(t -> t.kind === TokenKind.Space, toks)
+        @test length(spaces) == 1
+        @test spaces[1].value == " \n\n "
+    end
+
     @testset "Mixed expression: x_i^{2} + y" begin
         toks = tokenize("x_i^{2}+y")
         kinds = [t.kind for t in toks if t.kind !== TokenKind.EOF]

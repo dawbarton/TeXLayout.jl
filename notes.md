@@ -837,3 +837,10 @@
 - The empty group classifies as an ordinary atom and emits no boxes, letting existing math-list spacing produce `ord-rel-ord` spacing for cells like `=y`.
 - Added parser and layout regression tests for the inserted empty group and the relation-space box before a leading `=`.
 - Updated the `document_inline_display` snapshot hash for the intentional `align` geometry change.
+
+## 2026-06-21T15:08+00:00 Blank-line paragraph breaks
+
+- Preserved raw whitespace runs in `TokenKind.Space.value` so document parsing can distinguish ordinary whitespace from blank lines while math parsing continues to ignore space tokens.
+- Added internal `ParagraphBreakBlock` markers for top-level blank lines and `LayoutOptions.parskip` (default `0.6em`) to control the extra vertical gap.
+- Updated `layout_document` to fold paragraph-break markers into its existing pending-skip flow, including before display blocks.
+- Added lexer, parser, and layout tests for raw whitespace preservation, blank-line parsing, default paragraph spacing, and custom `parskip`.

@@ -298,6 +298,18 @@
             @test math_runs[1].node.kind === NodeKind.Sequence
         end
 
+        @testset "Blank line creates paragraph break block" begin
+            doc = TeXLayout.parse_document("a\n\nb")
+            @test length(doc) == 3
+            @test doc[1] isa TeXLayout.ParagraphBlock
+            @test doc[2] isa TeXLayout.ParagraphBreakBlock
+            @test doc[3] isa TeXLayout.ParagraphBlock
+
+            doc2 = TeXLayout.parse_document("\n\na\n\n")
+            @test length(doc2) == 1
+            @test doc2[1] isa TeXLayout.ParagraphBlock
+        end
+
         @testset "Display align block parsed as DisplayBlock" begin
             doc = TeXLayout.parse_document("\\begin{align}x&=y\\end{align}")
             @test length(doc) == 1
@@ -564,6 +576,7 @@
             @test opts.display_align === TeXLayout.Alignment.Center
             @test opts.abovedisplayskip ≈ 0.5
             @test opts.belowdisplayskip ≈ 0.5
+            @test opts.parskip ≈ 0.6
             @test opts.shaper isa TeXLayout.MetricShaper
         end
 
@@ -588,6 +601,31 @@
             @test length(glyphs) == 2
             @test glyphs[1].y ≈ 0.0
             @test glyphs[2].y ≈ -1.2   atol = 0.1
+        end
+
+        @testset "Blank line applies paragraph skip" begin
+            line_result = TeXLayout.layout_document("a\\\\b"; family = family)
+            para_result = TeXLayout.layout_document("a\n\nb"; family = family)
+
+            line_ys = sort(
+                unique(round(b.y; digits = 6) for b in line_result.boxes if b.element isa Glyph);
+                rev = true,
+            )
+            para_ys = sort(
+                unique(round(b.y; digits = 6) for b in para_result.boxes if b.element isa Glyph);
+                rev = true,
+            )
+            @test length(line_ys) == 2
+            @test length(para_ys) == 2
+            @test line_ys[1] - line_ys[2] ≈ 1.2 atol = 0.1
+            @test para_ys[1] - para_ys[2] ≈ 1.8 atol = 0.1
+
+            custom = TeXLayout.layout_document("a\n\nb"; family = family, parskip = 0.25)
+            custom_ys = sort(
+                unique(round(b.y; digits = 6) for b in custom.boxes if b.element isa Glyph);
+                rev = true,
+            )
+            @test custom_ys[1] - custom_ys[2] ≈ 1.45 atol = 0.1
         end
 
         @testset "Case 3: tall line forces advance > line_height" begin

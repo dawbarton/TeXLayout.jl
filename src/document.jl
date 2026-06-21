@@ -50,6 +50,9 @@ struct DisplayBlock <: Block
     kind::Symbol   # :align | :aligned | :gather | :equation
 end
 
+"""A blank-line paragraph break between document blocks."""
+struct ParagraphBreakBlock <: Block end
+
 """A parsed document: an ordered sequence of paragraph and display blocks."""
 const Document = Vector{Block}
 
@@ -90,6 +93,14 @@ function _end_paragraph!(b::_DocBuilder)
     return empty!(b.cur_lines)
 end
 
+function _push_paragraph_break!(b::_DocBuilder)
+    _end_paragraph!(b)
+    isempty(b.blocks) && return nothing
+    b.blocks[end] isa ParagraphBreakBlock && return nothing
+    push!(b.blocks, ParagraphBreakBlock())
+    return nothing
+end
+
 # ── Font-switch helpers ───────────────────────────────────────────────────────
 
 # Commands that change the text font slot and are followed by a braced group.
@@ -107,6 +118,7 @@ const _TEXT_FONT_SWITCH_CMDS = Set{String}(
 
 # Environments that the document layer treats as free-standing display blocks.
 const _DISPLAY_ENVS = Set{String}(["align", "aligned", "gather", "equation"])
+const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
 
 # Compute new TextAttrs by applying a font-switch command to the current attrs.
 function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
@@ -162,6 +174,11 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
             _advance!(p)
 
         elseif tok.kind === TokenKind.Space
+            if !in_group && occursin(_BLANK_LINE_RE, tok.value)
+                _advance!(p)
+                _push_paragraph_break!(builder)
+                continue
+            end
             write(builder.buf, " ")
             _advance!(p)
 
@@ -223,5 +240,8 @@ function parse_document(input::AbstractString)::Document
     builder = _DocBuilder(Block[], Line[], Run[], TextSpan[], IOBuffer(), TextAttrs())
     _parse_text_body!(p, builder, false)
     _end_paragraph!(builder)
+    while !isempty(builder.blocks) && builder.blocks[end] isa ParagraphBreakBlock
+        pop!(builder.blocks)
+    end
     return builder.blocks
 end

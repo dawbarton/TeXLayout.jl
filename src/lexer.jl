@@ -64,10 +64,11 @@ function tokenize(input::AbstractString)::Vector{Token}
         elseif isspace(c)
             # Collapse the entire whitespace run into one TokenKind.Space token.
             # The parser decides whether spaces are significant (text mode) or not (math mode).
+            start = i
             while next <= n && isspace(s[next])
                 next = nextind(s, next)
             end
-            push!(tokens, Token(TokenKind.Space, " ", i))
+            push!(tokens, Token(TokenKind.Space, s[start:prevind(s, next)], i))
             i = next
         else
             # Everything else is an ordinary character (may be multi-byte UTF-8).

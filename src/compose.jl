@@ -32,6 +32,7 @@ struct LayoutOptions
     display_align::Alignment.T         # display blocks
     abovedisplayskip::Float64          # extra em above a display block (default 0.5)
     belowdisplayskip::Float64          # extra em below a display block (default 0.5)
+    parskip::Float64                   # extra em between paragraphs split by blank lines
     shaper::TextShaper                 # default MetricShaper()
 end
 
@@ -43,6 +44,7 @@ function LayoutOptions(;
         display_align = :center,
         abovedisplayskip = 0.5,
         belowdisplayskip = 0.5,
+        parskip = 0.6,
         shaper = MetricShaper(),
     )
     return LayoutOptions(
@@ -53,6 +55,7 @@ function LayoutOptions(;
         display_align isa Symbol ? _alignment_from_symbol(display_align) : display_align,
         abovedisplayskip,
         belowdisplayskip,
+        parskip,
         shaper,
     )
 end
@@ -260,6 +263,8 @@ function layout_document(
                 push_item!(_layout_line(line, family, opts, base_scale), opts.align, pending_skip)
                 pending_skip = 0.0
             end
+        elseif blk isa ParagraphBreakBlock
+            !isempty(items) && (pending_skip = max(pending_skip, opts.parskip))
         else   # DisplayBlock
             skip = (isempty(items) ? 0.0 : pending_skip + opts.abovedisplayskip)
             push_item!(hlayout_math(blk.node, family, Display), opts.display_align, skip)

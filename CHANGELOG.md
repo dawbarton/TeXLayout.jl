@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `layout_document(input; family, align, line_height, lineskip, width, display_align,
-  abovedisplayskip, belowdisplayskip, shaper)` — top-level text/paragraph layout entry
+  abovedisplayskip, belowdisplayskip, parskip, shaper)` — top-level text/paragraph layout entry
   point producing a `TeXBox` (flat `Vector{LayoutBox}` + measured extents)
 - Text mode with significant spaces and literal characters; styled text via `\textbf`,
   `\textit`, `\textrm`, `\textnormal`, `\emph`, `\textsf`, `\texttt`, `\text`, `\mbox`
@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parsed degree.
 - `align` / `aligned` cells after `&` now include the ordinary atom needed for
   TeX-style relation spacing before a leading relation such as `=`.
+- Blank lines in document input now create paragraph breaks with configurable
+  `parskip` vertical spacing.
 - `layout_document` now applies display skips as explicit extra vertical space
   instead of synthetic empty baselines, so a display-only document starts at the
   first real display baseline.
