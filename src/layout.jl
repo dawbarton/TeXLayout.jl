@@ -294,19 +294,6 @@ function _variant_glyph(ctx::_LayoutCtx, variant::Symbol, ch::Char)::Union{Glyph
     return _char_glyph(ctx, ch)
 end
 
-# Copy every element of `src` into `dst`, translating each box by (dx, dy).
-# Used throughout the layout engine to splice a scratch sub-layout (laid out
-# at origin (0,0) or some local origin) into the parent's coordinate system.
-function _emit_shifted!(
-        dst::Vector{LayoutBox}, src::Vector{LayoutBox},
-        dx::Float64, dy::Float64
-    )
-    for b in src
-        push!(dst, LayoutBox(b.element, b.x + dx, b.y + dy, b.scale))
-    end
-    return nothing
-end
-
 function _translate_range!(
         boxes::Vector{LayoutBox},
         start::Int,

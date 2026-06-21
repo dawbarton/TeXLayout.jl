@@ -787,3 +787,10 @@
 - Converted `_layout_horiz_brace!` in `src/layout/extensible.jl` to emit body, primary note, and secondary note into the shared buffer and translate recorded ranges in place.
 - Removed the remaining `LayoutBox[]` scratch buffers and `_emit_shifted!` use from `extensible.jl`.
 - Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).
+
+## 2026-06-21T13:50+00:00 Matrix range-emission pass
+
+- Converted `src/layout/matrix.jl` to emit cells into the shared output buffer during measurement, record `cell_starts`/`cell_stops`, and translate each cell range after row and column positions are computed.
+- Removed per-cell scratch `LayoutBox` buffers from matrix/array layout and deleted the now-unused `_emit_shifted!` helper from `src/layout.jl`.
+- Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).
+- Full package validation passed (1168/1168). Final benchmark smoke: `layout/scripts_fraction` 51 allocs / 6432 bytes, `layout/radical_delimited` 33 allocs / 3248 bytes, `layout/accents_braces_arrows` 112 allocs / 12128 bytes, `layout/matrix_cases` 128 allocs / 11328 bytes, `layout_document/document_inline_display` 671 allocs / 49648 bytes.

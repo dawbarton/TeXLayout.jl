@@ -116,7 +116,9 @@ function shape(box::Box)::Vector{LayoutBox}
 end
 
 function shape!(out::Vector{LayoutBox}, box::ShapedBox, x::Float64, y::Float64)
-    _emit_shifted!(out, box.boxes, x, y)
+    for b in box.boxes
+        push!(out, LayoutBox(b.element, b.x + x, b.y + y, b.scale))
+    end
     return nothing
 end
 

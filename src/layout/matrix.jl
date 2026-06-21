@@ -62,21 +62,25 @@ function _layout_matrix!(
     # Scale factor for this environment (smallmatrix uses 0.9).
     cell_scale = scale * info.scale
 
-    # ── First pass: lay out each cell into a scratch buffer, record metrics ──
-    cell_boxes = [LayoutBox[] for _ in 1:nrow, _ in 1:ncol]
+    # ── First pass: lay out each cell into the shared buffer, record ranges ──
+    cell_starts = Matrix{Int}(undef, nrow, ncol)
+    cell_stops = Matrix{Int}(undef, nrow, ncol)
     cell_widths = zeros(Float64, nrow, ncol)
     cell_heights = zeros(Float64, nrow, ncol)   # max ink above baseline
     cell_depths = zeros(Float64, nrow, ncol)   # max ink below baseline (positive)
 
     for r in 1:nrow, c in 1:ncol
+        cell_starts[r, c] = lastindex(boxes) + 1
         ci = (r - 1) * ncol + c
-        ci > length(node.children) && continue
-        tmp = LayoutBox[]
-        w = _layout_node!(node.children[ci], ctx, cell_style, 0.0, 0.0, cell_scale, tmp)
-        cell_boxes[r, c] = tmp
+        if ci > length(node.children)
+            cell_stops[r, c] = lastindex(boxes)
+            continue
+        end
+        w = _layout_node!(node.children[ci], ctx, cell_style, 0.0, 0.0, cell_scale, boxes)
+        cell_stops[r, c] = lastindex(boxes)
         cell_widths[r, c] = w
-        cell_heights[r, c] = max(0.0, _boxes_top(tmp, upm))
-        cell_depths[r, c] = max(0.0, -_boxes_bottom(tmp, upm))
+        cell_heights[r, c] = max(0.0, _boxes_top(boxes, cell_starts[r, c], cell_stops[r, c], upm))
+        cell_depths[r, c] = max(0.0, -_boxes_bottom(boxes, cell_starts[r, c], cell_stops[r, c], upm))
     end
 
     # ── Compute per-column widths and per-row extents ──
@@ -124,12 +128,11 @@ function _layout_matrix!(
         )
     end
 
-    # ── Second pass: emit all cells with correct offsets ──
+    # ── Second pass: move all cells to their row/column positions ──
     for r in 1:nrow, c in 1:ncol
         ci = (r - 1) * ncol + c
         ci > length(node.children) && continue
-        tmp = cell_boxes[r, c]
-        isempty(tmp) && continue
+        cell_starts[r, c] <= cell_stops[r, c] || continue
 
         # Per-column alignment: :l = flush left, :r = flush right, :c = centred.
         offset = col_aligns[c] === :l ? 0.0 :
@@ -137,7 +140,7 @@ function _layout_matrix!(
             (col_widths[c] - cell_widths[r, c]) / 2
         x_cell = x0 + left_w + x_col[c] + offset
         y_cell = y_shift + row_y[r]
-        _emit_shifted!(boxes, tmp, x_cell, y_cell)
+        _translate_range!(boxes, cell_starts[r, c], cell_stops[r, c], x_cell, y_cell)
     end
 
     # ── Emit vertical rules from colspec ──
@@ -170,4 +173,3 @@ function _layout_matrix!(
 
     return left_w + content_w + right_w
 end
-
