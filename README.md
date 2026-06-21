@@ -36,6 +36,56 @@ Beyond single formulas, `layout_document` typesets mixed text-and-math input —
 styled text, inline `$…$` math, and display-math environments — into a measured
 `TeXBox` of positioned elements ready for the same renderers.
 
+## Relationship to MathTeXEngine.jl
+
+[MathTeXEngine.jl](https://github.com/MakieOrg/MathTeXEngine.jl) is Makie's
+current LaTeX engine, and TeXLayout.jl is intended as a drop-in replacement for
+it.  The two take different approaches:
+
+- **Fonts available.** MathTeXEngine renders in Computer Modern / New Computer
+  Modern. TeXLayout bundles eight math font families (New Computer Modern, the
+  TeX Gyre families, STIX Two, Fira Math, and Luciole) and can can use any other
+  OpenType Math font. A notable difference is that TeXLayout takes metrics
+  directly from the MATH table in the font (hence being usable with any OpenType
+  Math font).
+- **Integration.** TeXLayout plugs into Makie through the same
+  `generate_tex_elements` entry point MathTeXEngine uses, so loading both
+  packages switches Makie over without further changes (see *Makie
+  integration*).
+- **Scope and maturity.** MathTeXEngine is an established, widely used package.
+  TeXLayout is newer; it covers a broad LaTeX-math feature set plus mixed
+  text/math document layout, but has seen less production use.
+
+### LaTeX coverage
+
+Both engines handle the common core: fractions (`\frac`), radicals (`\sqrt`),
+sub/superscripts, auto-sized `\left…\right` delimiters, named operators
+(`\sin`, `\lim`, …), font switches (`\mathbf`, `\mathbb`, `\mathcal`, …), space
+commands, and a large symbol/accent set (including wide accents such as
+`\widehat`).  TeXLayout additionally supports a number of constructs that
+MathTeXEngine does not currently parse:
+
+- **Environments.** `\begin{matrix}`/`pmatrix`/`bmatrix`/`Bmatrix`/`vmatrix`/
+  `Vmatrix`/`smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
+  `l`/`c`/`r` alignment and single/double vertical rules. (Note that some
+  vertical rules do not render in Makie due to a bug in their implementation.)
+  In document mode also `align`, `aligned`, `gather`, and `equation`.
+- **Binomials and generalised fractions.** `\binom`, `\genfrac`, and the
+  display/text fraction variants `\dfrac` / `\tfrac`.
+- **Explicit style overrides.** `\displaystyle` / `\textstyle` /
+  `\scriptstyle` / `\scriptscriptstyle`, and `\limits` / `\nolimits` placement
+  control on operators.
+- **Over/under braces** (`\overbrace`, `\underbrace`) and the full style
+  cascade driven by the font's MATH table.
+- **Mixed text-and-math documents** via `layout_document` (styled text, inline
+  `$…$`, display math, line and paragraph breaks) — MathTeXEngine targets
+  single math formulas.
+
+Conversely, MathTeXEngine is the more battle-tested parser on the shared core,
+and some symbols without a single Unicode codepoint (certain negated relations)
+currently render as blank space in TeXLayout. This is not an exhaustive list;
+coverage on both sides continues to change.
+
 ## Key features
 
 - Full TeX style cascade (Display / Text / Script / ScriptScript, each with a cramped

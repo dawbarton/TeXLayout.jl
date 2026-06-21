@@ -1,8 +1,10 @@
 # Future Work: Matrix Vertical Spacing Helpers
 
-These notes record small layout features to implement later. They came up while
-reviewing `examples/eigen_demo.jl`, where a compact `bmatrix` looked vertically
-cramped.
+These notes record small layout features to implement later.
+
+## Possible bugs to evaluate
+
+- Does `\frac` display at the right size in displayed equations?
 
 ## `\strut` / phantom-style height support
 

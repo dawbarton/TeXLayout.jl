@@ -15,6 +15,8 @@ using LinearAlgebra
 using TeXLayout
 using LaTeXStrings
 
+set_default_font_family!(:luciole)
+
 # Transformation matrix — symmetric so the eigenvectors are
 # orthogonal and the ellipse axes line up with them.
 #   eigenvalues 2 (along [1, 1]) and 1/2 (along [1, -1])
@@ -45,7 +47,7 @@ hidedecorations!(ax)
 hidespines!(ax)
 
 lim = 2.4
-limits!(ax, -lim, lim + 2, -lim, lim)
+limits!(ax, -lim, lim + 2, -lim - 0.1, lim)
 
 # Dashed coordinate axes through the origin.
 axcol = (:gray40, 0.9)
@@ -113,6 +115,17 @@ text!(
             "\\\\" *
             raw"and $\Lambda$ is the diagonal matrix of \textbf{eigenvalues}"
     )
+)
+text!(
+    ax, 0.0, -1.0; offset = (20, -20), fontsize = 16, align = (:left, :top),
+    text = latexstring(
+        raw"Environments like \emph{align} are also supported:" *
+            raw"\begin{align}" *  # Lorenz equations
+            raw"\frac{\mathrm{d}x}{\mathrm{d}t} &= \sigma(y-x)\\ " *
+            raw"\frac{\mathrm{d}y}{\mathrm{d}t} &= x(\rho-z)-y\\ " *
+            raw"\frac{\mathrm{d}z}{\mathrm{d}t} &= xy-\beta z" *
+            raw"\end{align}" *
+            raw"As are things like $\underbrace{x^2 + y^2 - 2xy\cos(\mathbf{\theta})}_\text{underbraces}$ (and bold greek).")
 )
 
 out = isempty(ARGS) ? joinpath(@__DIR__, "eigen_demo.png") : ARGS[1]
