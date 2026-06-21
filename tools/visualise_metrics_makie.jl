@@ -18,7 +18,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using CairoMakie
-import Makie
+import CairoMakie.Makie
 using LaTeXStrings: LaTeXString
 import MathTeXEngine
 using TeXLayout

@@ -248,9 +248,10 @@ Apply to a braced argument; the variant propagates into sub/superscripts.
 Aliases: `\Bbb` = `\mathbb`, `\bold` = `\mathbf`, `\frak` = `\mathfrak`.
 
 Font switching maps Latin and Greek characters to their Unicode Mathematical
-Alphanumeric Symbols codepoints (U+1D400–U+1D7FF).  The `bold`, `italic`, and
-`bolditalic` slots in `FontFamily` are reserved for characters outside the Unicode
-math block and are not yet used.
+Alphanumeric Symbols codepoints (U+1D400–U+1D7FF).  Math-mode font switching does
+not use the `bold`, `italic`, or `bolditalic` `FontFamily` text slots; those slots
+are used by the document text layer for commands such as `\textbf`, `\textit`, and
+nested bold-italic text.
 
 ## Style overrides
 
@@ -304,6 +305,34 @@ The following commands insert explicit horizontal space:
 
 1 mu = 1/18 em.  Negative spaces are fully supported.
 
+## Document text mode
+
+The commands above apply to **math** input.  `layout_document` additionally accepts
+mixed text-and-math input, where the top-level mode is *text* and math is entered
+explicitly.  The following constructs are recognised only in this document context:
+
+| Construct | Effect |
+|:----------|:-------|
+| `\textbf{…}` | Bold text |
+| `\textit{…}` | Italic text |
+| `\emph{…}` | Emphasis — toggles italic relative to the surrounding text |
+| `\textrm{…}`, `\textnormal{…}` | Upright (regular) text |
+| `\textsf{…}` | Sans-serif (falls back to the regular slot in v1) |
+| `\texttt{…}` | Monospace (falls back to the regular slot in v1) |
+| `\text{…}`, `\mbox{…}` | Grouping scope that inherits the current text attributes |
+| `$…$`, `\(…\)` | Inline math, laid out in `Text` style on the current line |
+| `$$…$$`, `\[…\]` | Free-standing centred display-math block |
+| `\begin{align}…\end{align}` (and `aligned`, `gather`, `equation`) | Free-standing centred display-math block |
+| `\\` | Explicit line break |
+| blank line | Paragraph break with `parskip` vertical space |
+
+Styling nests correctly: `\textbf` inside `\textit` produces bold-italic, and `\emph`
+flips italic on or off depending on the surrounding state.  Ordinary runs of
+whitespace are collapsed to a single inter-word space.
+
+See [`layout_document`](05-api.md) and the [Getting Started](01-getting-started.md#Mixed-text-and-math)
+walkthrough for usage and the available `LayoutOptions`.
+
 ## Known limitations
 
 A small set of negated and variant relations currently produce **blank space** because
@@ -319,3 +348,13 @@ require two-glyph overlay rendering, similar to how TeX builds `\not\leq`.
 
 `\bigplus` also has no Unicode codepoint and currently produces blank space on all
 fonts.
+
+Matrix vertical spacing helpers are still limited.  `\strut`,
+`\phantom`/`\vphantom`/`\hphantom`, and effective row-spacing arguments such as
+`\\[0.2em]` are not yet implemented in layout.  The parser recognises and skips
+bracketed row-spacing arguments in matrix bodies, but the extra spacing is not
+applied.
+
+Leading, trailing, and repeated whitespace behavior in math and document text modes
+is also pending a review against LaTeX conventions before any compatibility changes
+are made.

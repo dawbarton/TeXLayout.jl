@@ -94,7 +94,7 @@
 
     @testset "GreekLetters" begin
         # KaTeX: \alpha\beta\gamma\omega renders four Greek glyphs.
-        # TeXLayout: each becomes NKCommand; NewCMMath-Regular does contain PS
+        # TeXLayout: each becomes NodeKind.Command; NewCMMath-Regular does contain PS
         # glyph names "alpha", "beta", "gamma", "omega" so this passes.
         expr = "\\alpha\\beta\\gamma\\omega"
         @test (parse_latex(expr); true)
@@ -103,7 +103,7 @@
 
     @testset "Functions" begin
         # KaTeX: renders \sin etc. as upright multi-letter operators.
-        # TeXLayout: each becomes NKOperator; characters are looked up via
+        # TeXLayout: each becomes NodeKind.Operator; characters are looked up via
         # the upright (codepoint) path and render as roman letters.
         expr = "\\sin\\cos\\tan\\ln\\log"
         @test (parse_latex(expr); true)
@@ -194,26 +194,26 @@ end
 
     @testset "superscript inside closing brace" begin
         # KaTeX error: "Expected group after '^'".
-        # TeXLayout: silently produces NKSuperscript with NKChar("}") as exponent.
+        # TeXLayout: silently produces NodeKind.Superscript with NodeKind.Char("}") as exponent.
         @test no_crash("{1^}")
     end
 
     @testset "subscript at end of input" begin
         # KaTeX error: "Expected group after '_'".
-        # TeXLayout: silently produces NKSubscript with an empty NKSpace argument.
+        # TeXLayout: silently produces NodeKind.Subscript with an empty NodeKind.Space argument.
         @test no_crash("1_")
     end
 
     @testset "superscript at end of input" begin
         # KaTeX error: "Expected group after '^'".
-        # TeXLayout: silently produces NKSuperscript with an empty NKSpace argument.
+        # TeXLayout: silently produces NodeKind.Superscript with an empty NodeKind.Space argument.
         @test no_crash("1^")
     end
 
     @testset "double superscript" begin
         # KaTeX error: "Double superscript".
         # TeXLayout: silently ignores the second '^'; the third character is
-        # emitted as a bare NKChar in the outer sequence.
+        # emitted as a bare NodeKind.Char in the outer sequence.
         @test no_crash("1^2^3")
     end
 
@@ -231,14 +231,14 @@ end
 
     @testset "unclosed sqrt optional argument" begin
         # KaTeX error: "Expected ']'".
-        # TeXLayout: silently uses an empty NKSpace as the body — no crash.
+        # TeXLayout: silently uses an empty NodeKind.Space as the body — no crash.
         @test no_crash("\\sqrt[3")
     end
 
     @testset "missing right delimiter" begin
         # KaTeX error: "Missing \\right".
-        # TeXLayout: \right and its delimiter are consumed as NKCommand and NKChar
-        # children of the NKDelimited node — no crash.
+        # TeXLayout: \right and its delimiter are consumed as NodeKind.Command and NodeKind.Char
+        # children of the NodeKind.Delimited node — no crash.
         @test no_crash("\\left(1+2)")
     end
 
@@ -247,49 +247,49 @@ end
 @testset "KaTeX nested and combined structures" begin
 
     @testset "sub/sup order independence" begin
-        # x^2_3 and x_3^2 must both produce an NKDecorated node with the same
+        # x^2_3 and x_3^2 must both produce a NodeKind.Decorated node with the same
         # sub and sup content regardless of the order ^ and _ appear in source.
         n1 = parse_latex("x^2_3")
         n2 = parse_latex("x_3^2")
-        d1 = n1.children[1]   # NKDecorated from top-level NKSequence
+        d1 = n1.children[1]   # NodeKind.Decorated from top-level NodeKind.Sequence
         d2 = n2.children[1]
-        @test d1.kind === NKDecorated
-        @test d2.kind === NKDecorated
+        @test d1.kind === NodeKind.Decorated
+        @test d2.kind === NodeKind.Decorated
         # children: [base, sub_node, sup_node]
         @test d1.children[2].value == d2.children[2].value   # subscript "3"
         @test d1.children[3].value == d2.children[3].value   # superscript "2"
     end
 
     @testset "nested superscripts" begin
-        # x^{y^z}: the exponent argument is itself an NKSuperscript.
+        # x^{y^z}: the exponent argument is itself a NodeKind.Superscript.
         node = parse_latex("x^{y^z}")
         outer = node.children[1]
-        @test outer.kind === NKSuperscript
+        @test outer.kind === NodeKind.Superscript
         inner = outer.children[2]
-        @test inner.kind === NKSuperscript
+        @test inner.kind === NodeKind.Superscript
         @test inner.children[1].value == "y"
         @test inner.children[2].value == "z"
     end
 
     @testset "sqrt containing frac" begin
-        # \sqrt{\frac{a}{b}}: the body of the radical is an NKFrac node.
+        # \sqrt{\frac{a}{b}}: the body of the radical is a NodeKind.Frac node.
         node = parse_latex("\\sqrt{\\frac{a}{b}}")
         sqrt_node = node.children[1]
-        @test sqrt_node.kind === NKSqrt
+        @test sqrt_node.kind === NodeKind.Sqrt
         frac_node = sqrt_node.children[1]
-        @test frac_node.kind === NKFrac
+        @test frac_node.kind === NodeKind.Frac
         @test frac_node.children[1].value == "a"
         @test frac_node.children[2].value == "b"
     end
 
-    @testset "left-right produces NKDelimited" begin
-        # \left( x \right): top-level child is NKDelimited.  The value field
+    @testset "left-right produces NodeKind.Delimited" begin
+        # \left( x \right): top-level child is NodeKind.Delimited.  The value field
         # encodes the delimiter glyph names; inner children contain only the
         # interior content (no \right command node).
         node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
-        @test delim.kind === NKDelimited
-        @test any(c -> c.kind === NKChar && c.value == "x", delim.children)
+        @test delim.kind === NodeKind.Delimited
+        @test any(c -> c.kind === NodeKind.Char && c.value == "x", delim.children)
         parts = split(delim.value, "\x00", limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"

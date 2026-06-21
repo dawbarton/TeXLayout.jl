@@ -49,7 +49,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test sub_y < 0.0   # below baseline
     end
 
-    @testset "NKDecorated: both sub and sup positioned correctly" begin
+    @testset "NodeKind.Decorated: both sub and sup positioned correctly" begin
         # x_i^2 should produce three glyphs: base at y=0, sup above baseline, sub below.
         boxes = layout(parse_latex("x_i^2"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -145,6 +145,25 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test body_x - rule.x ≈ rule.element.thickness / 2 atol = 1.0e-6
     end
 
+    @testset "Sqrt with degree places root index" begin
+        boxes = layout(parse_latex("\\sqrt[3]{x}"), family, Text)
+        glyphs = find_glyphs(boxes)
+        degree = only(filter(b -> b.element.glyph_name == "three", glyphs))
+        radical = only(filter(b -> startswith(b.element.glyph_name, "radical"), glyphs))
+        body = only(filter(b -> b.element.glyph_name == "u1D465", glyphs))
+
+        @test degree.scale ≈ mt.constants.script_script_percent_scale_down / 100 atol = 1.0e-6
+        @test radical.x < degree.x < body.x
+        @test body.x - radical.x ≈ radical.element.advance_width / FONT_UPM * radical.scale atol = 1.0e-6
+
+        degree_bottom = degree.y + degree.element.y_min / FONT_UPM * degree.scale
+        radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
+        radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
+        expected_bottom = mt.constants.radical_degree_bottom_raise_percent / 100 *
+            (radical_top - radical_bottom)
+        @test degree_bottom ≈ expected_bottom atol = 1.0e-6
+    end
+
     @testset "Nested sqrt: radicand starts at radical advance width" begin
         boxes = layout(
             parse_latex("\\sqrt{1 + \\sqrt{1 + \\sqrt{1 + \\sqrt{1 + x}}}}"),
@@ -190,7 +209,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Operator: \\sin x produces four glyphs" begin
-        # \sin → NKOperator("sin"): three upright glyphs; x → one italic glyph.
+        # \sin → NodeKind.Operator("sin"): three upright glyphs; x → one italic glyph.
         boxes = layout(parse_latex("\\sin x"), family, Display)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 4
@@ -357,10 +376,11 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes = layout(parse_latex("\\left( x \\right)"), family, Text)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 3
+        sorted = sort(glyphs; by = b -> b.x)
         # Left delimiter is placed at x=0 (the formula origin).
-        @test glyphs[1].x ≈ 0.0
+        @test sorted[1].x ≈ 0.0
         # Glyphs are ordered left to right.
-        @test glyphs[1].x < glyphs[2].x < glyphs[3].x
+        @test sorted[1].x < sorted[2].x < sorted[3].x
     end
 
     @testset "\\left( x \\right): delimiters centred on math axis" begin
@@ -368,10 +388,11 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes = layout(parse_latex("\\left( x \\right)"), family, Text)
         glyphs = find_glyphs(boxes)
         axis_em = mt.constants.axis_height / FONT_UPM
-        for i in [1, 3]   # left and right delimiter glyphs
-            g = glyphs[i].element
-            glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * glyphs[i].scale
-            delim_center = glyphs[i].y + glyph_center
+        sorted = sort(glyphs; by = b -> b.x)
+        for box in (first(sorted), last(sorted))   # left and right delimiter glyphs
+            g = box.element
+            glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * box.scale
+            delim_center = box.y + glyph_center
             @test delim_center ≈ axis_em  atol = 1.0e-6
         end
     end
@@ -385,7 +406,9 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The glyph height (y_max - y_min) of the left delimiter in the frac case
         # must be strictly greater than in the plain case.
         height(b) = b.element.y_max - b.element.y_min
-        @test height(glyphs_frac[1]) > height(glyphs_plain[1])
+        left_frac = sort(glyphs_frac; by = b -> b.x)[1]
+        left_plain = sort(glyphs_plain; by = b -> b.x)[1]
+        @test height(left_frac) > height(left_plain)
     end
 
     @testset "\\left. (null delimiter) places no glyph on the left" begin
@@ -432,7 +455,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         glyphs = find_glyphs(boxes)
         axis_em = mt.constants.axis_height / FONT_UPM
         # Isolate the left-delimiter glyphs (all at x=0 with the same advance width).
-        left_x = glyphs[1].x
+        left_x = minimum(b.x for b in glyphs)
         left_glyphs = filter(b -> b.x ≈ left_x, glyphs)
         top_em = maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in left_glyphs)
         bot_em = minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in left_glyphs)
@@ -571,7 +594,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     @testset "Limits: \\limsup and \\liminf are recognised operators" begin
-        # limsup and liminf should render as upright text (NKOperator).
+        # limsup and liminf should render as upright text (NodeKind.Operator).
         for cmd in ("\\limsup", "\\liminf")
             boxes = layout(parse_latex(cmd), family, Display)
             @test !isempty(find_glyphs(boxes))
@@ -633,34 +656,34 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test name_rm != name_it
     end
 
-    @testset "font_slot: math-mode glyphs carry :math" begin
-        # All math-mode glyphs must have font_slot = :math so the renderer queries
+    @testset "font_slot: math-mode glyphs carry FontSlot.Math" begin
+        # All math-mode glyphs must have font_slot = FontSlot.Math so the renderer queries
         # the math font.
         boxes = layout(parse_latex("x + \\alpha"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "font_slot: \\text glyphs carry :regular when family has regular font" begin
-        # When a regular font is configured, _upright_glyph should emit :regular.
+    @testset "font_slot: \\text glyphs carry FontSlot.Regular when family has regular font" begin
+        # When a regular font is configured, _upright_glyph should emit FontSlot.Regular.
         # Build a two-font family using the NewCM10-Regular companion for NewCMMath.
         reg_path = joinpath(dirname(FIXTURE_FONT_PATH), "NewCM10-Regular.otf")
         if isfile(reg_path)
             family_with_reg = FontFamily(FIXTURE_FONT_PATH, reg_path, nothing, nothing, nothing)
             boxes = layout(parse_latex(raw"\text{hi}"), family_with_reg, Text)
-            @test all(b.element.font_slot === :regular for b in find_glyphs(boxes))
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in find_glyphs(boxes))
         end
     end
 
-    @testset "font_slot: \\text glyphs fall back to :math when no regular font" begin
+    @testset "font_slot: \\text glyphs fall back to FontSlot.Math when no regular font" begin
         # Without a regular font, _upright_glyph falls back to the math font.
         boxes = layout(parse_latex(raw"\text{hi}"), family, Text)
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "FontSwitch: \\mathrm uses math font (font_slot :math)" begin
+    @testset "FontSwitch: \\mathrm uses math font (FontSlot.Math)" begin
         boxes = layout(parse_latex("\\mathrm{x}"), family, Text)
         @test !isempty(find_glyphs(boxes))
-        @test all(b.element.font_slot === :math for b in find_glyphs(boxes))
+        @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
     @testset "\\text{if } preserves trailing space" begin
@@ -1258,6 +1281,36 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test g_lcr[1].x <= g_ccc[1].x + 1.0e-6
     end
 
+    @testset "align inserts relation spacing after alignment marker" begin
+        boxes = layout(parse_latex("\\begin{align}x&=y\\end{align}"), family, Display)
+        equal = only(filter(b -> b.element isa Glyph && b.element.glyph_name == "equal", boxes))
+        relation_spaces = filter(
+            b -> b.element isa Space &&
+                isapprox(b.element.width, 5 / 18; atol = 1.0e-6) &&
+                isapprox(b.x + b.element.width, equal.x; atol = 1.0e-6),
+            boxes,
+        )
+        @test length(relation_spaces) == 1
+    end
+
+    @testset "align glues r/l pair without extra column spacing" begin
+        # The relation in an align pair must sit exactly where it would in a plain
+        # math list: only the relation atom's spacing, no inter-column colsep.
+        align_eq = only(
+            filter(
+                b -> b.element isa Glyph && b.element.glyph_name == "equal",
+                layout(parse_latex("\\begin{align}x&=y\\end{align}"), family, Display),
+            ),
+        )
+        plain_eq = only(
+            filter(
+                b -> b.element isa Glyph && b.element.glyph_name == "equal",
+                layout(parse_latex("x=y"), family, Display),
+            ),
+        )
+        @test isapprox(align_eq.x, plain_eq.x; atol = 1.0e-6)
+    end
+
     # ── Style overrides ────────────────────────────────────────────────────────
 
     @testset "\\dfrac inside subscript renders at full scale" begin
@@ -1338,7 +1391,10 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The arrow glyph(s) should straddle the math axis (some above, some below or at zero).
         axis_em = mt.constants.axis_height / mt.upm
         # At least one glyph in the arrow box should have its midpoint near the axis.
-        g = glyphs[1]
+        g = sort(
+            glyphs;
+            by = b -> abs(b.y + (b.element.y_min + b.element.y_max) / (2.0 * mt.upm) * b.scale - axis_em),
+        )[1]
         mid = g.y + (g.element.y_min + g.element.y_max) / (2.0 * mt.upm) * g.scale
         @test abs(mid - axis_em) < 0.5   # within half-em of axis (coarse sanity check)
     end

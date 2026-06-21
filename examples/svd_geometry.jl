@@ -1,3 +1,5 @@
+# !!!!!!! WORK IN PROGRESS !!!!!!!
+
 # Singular Value Decomposition — Geometry Visualiser
 #
 # Visualises the decomposition A = U Σ Vᵀ for the 2×2 matrix

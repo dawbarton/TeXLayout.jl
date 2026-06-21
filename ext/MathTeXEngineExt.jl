@@ -30,13 +30,32 @@ const _RuntimeKey = Tuple{
     String, Union{String, Nothing}, Union{String, Nothing},
     Union{String, Nothing}, Union{String, Nothing},
 }
+const _REPRESENTED_CHAR_BY_GLYPH_NAME = Dict(
+    "space" => ' ',
+    "hyphen" => '-',
+    "minus" => '-',
+    "period" => '.',
+    "comma" => ',',
+    "colon" => ':',
+    "semicolon" => ';',
+    "plus" => '+',
+    "equal" => '=',
+    "parenleft" => '(',
+    "parenright" => ')',
+    "bracketleft" => '[',
+    "bracketright" => ']',
+    "braceleft" => '{',
+    "braceright" => '}',
+    "slash" => '/',
+    "backslash" => '\\',
+    "Lambda" => 'Λ',
+)
 
 mutable struct _RuntimeBundle
-    math_font::FreeTypeAbstraction.FTFont
-    reg_font::FreeTypeAbstraction.FTFont
+    fonts::Dict{String, FreeTypeAbstraction.FTFont}
     mte_family::MathTeXEngine.FontFamily
-    math_glyph_indices::Dict{String, Culong}
-    reg_glyph_indices::Dict{String, Culong}
+    slot_paths::Dict{TeXLayout.FontSlot.T, Vector{String}}
+    glyph_indices::Dict{Tuple{String, String}, Culong}
 end
 
 const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
@@ -47,6 +66,16 @@ function _strip_math_delimiters(s::AbstractString)
     str = String(s)
     length(str) >= 2 && str[1] == '$' && str[end] == '$' && return str[2:(end - 1)]
     return str
+end
+
+# True when the whole string is a single inline-math span: it starts and ends with
+# a single `$` and contains no other `$`.  This is the canonical `L"…"` form (e.g.
+# "$x^2$").  Anything else — surrounding text, `$$…$$`/`\[…\]` display math, or
+# several `$…$` spans — is routed through the document layer instead.
+function _is_inline_math(s::AbstractString)::Bool
+    length(s) >= 2 || return false
+    (first(s) == '$' && last(s) == '$') || return false
+    return count(==('$'), s) == 2
 end
 
 # Return the single character encoded by `name`, or `nothing` if the string is
@@ -85,8 +114,10 @@ function _glyph_index_uncached(font, name::String)::Culong
     return Culong(0)
 end
 
-@inline function _glyph_index(cache::Dict{String, Culong}, font, name::String)::Culong
-    return get!(cache, name) do
+@inline function _glyph_index(
+        cache::Dict{Tuple{String, String}, Culong}, font, path::String, name::String
+    )::Culong
+    return get!(cache, (path, name)) do
         _glyph_index_uncached(font, name)
     end
 end
@@ -96,6 +127,8 @@ end
 # (spaces/newlines), which does not apply inside math mode.
 function _represented_char(name::String)::Char
     isempty(name) && return '?'
+    mapped = get(_REPRESENTED_CHAR_BY_GLYPH_NAME, name, nothing)
+    mapped !== nothing && return mapped
     ch = _single_char(name)
     ch !== nothing && return ch
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
@@ -133,23 +166,42 @@ end
 
 function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
     return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
-        math_font, _ = TeXLayout._load_font(tl_family.math)
-        reg_path = something(tl_family.regular, tl_family.math)
-        reg_font, _ = TeXLayout._load_font(reg_path)
+        slot_paths = Dict(
+            TeXLayout.FontSlot.Math => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Math),
+            TeXLayout.FontSlot.Regular => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Regular),
+            TeXLayout.FontSlot.Bold => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Bold),
+            TeXLayout.FontSlot.Italic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Italic),
+            TeXLayout.FontSlot.BoldItalic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.BoldItalic),
+        )
+        paths = unique!(reduce(vcat, values(slot_paths)))
+        fonts = Dict{String, FreeTypeAbstraction.FTFont}()
+        for path in paths
+            fonts[path], _ = TeXLayout._load_font(path)
+        end
         _RuntimeBundle(
-            math_font,
-            reg_font,
+            fonts,
             _mte_font_family(tl_family),
-            Dict{String, Culong}(),
-            Dict{String, Culong}(),
+            slot_paths,
+            Dict{Tuple{String, String}, Culong}(),
         )
     end
+end
+
+function _glyph_index_for_slot(
+        runtime::_RuntimeBundle, slot::TeXLayout.FontSlot.T, name::String
+    )::Union{Tuple{Culong, FreeTypeAbstraction.FTFont}, Nothing}
+    for path in runtime.slot_paths[slot]
+        font = runtime.fonts[path]
+        gid = _glyph_index(runtime.glyph_indices, font, path, name)
+        gid > 0 && return (gid, font)
+    end
+    return nothing
 end
 
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
-# `font_slot` field selects which one to use for glyph-index resolution.
+# `font_slot` field selects the fallback chain to use for glyph-index resolution.
 # TeXLayout rules are rectangle-anchored (`HRule.y` / `VRule.x` are the bottom /
 # left edges).  MathTeXEngine's `HLine` / `VLine` instead use centered line
 # positions, so the adapter must shift by half the rule thickness.
@@ -161,20 +213,11 @@ function _box_to_mte(
     el = box.element
 
     if el isa TeXLayout.Glyph
-        if el.font_slot === :regular
-            gid = _glyph_index(runtime.reg_glyph_indices, runtime.reg_font, el.glyph_name)
-            gid == 0 && return nothing
-            tc = MathTeXEngine.TeXChar(
-                gid, runtime.reg_font, runtime.mte_family, false,
-                _represented_char(el.glyph_name)
-            )
-            return (tc, pos, scale)
-        end
-
-        gid = _glyph_index(runtime.math_glyph_indices, runtime.math_font, el.glyph_name)
-        gid == 0 && return nothing
+        resolved = _glyph_index_for_slot(runtime, el.font_slot, el.glyph_name)
+        resolved === nothing && return nothing
+        gid, font = resolved
         tc = MathTeXEngine.TeXChar(
-            gid, runtime.math_font, runtime.mte_family, false,
+            gid, font, runtime.mte_family, false,
             _represented_char(el.glyph_name)
         )
         return (tc, pos, scale)
@@ -210,6 +253,14 @@ This is a new method (not an overwrite), so the extension is fully precompiled.
 Makie always passes a `LaTeXString` at this call site, so this method takes
 priority via normal dispatch specificity.
 
+Routing depends on the string's shape:
+
+  - A single inline-math span (`"\$…\$"`, the usual `L"…"` form) is laid out as one
+    formula in `Display` style — MathTeXEngine's traditional behaviour.
+  - Anything else — surrounding text, `\$\$…\$\$` / `\\[…\\]` display math, or several
+    `\$…\$` spans — is routed through [`TeXLayout.layout_document`](@ref), so mixed
+    text-and-math `LaTeXString`s render through the document layer.
+
 The `font_family` argument is accepted for API compatibility but is currently
 ignored; TeXLayout's `default_font_family()` is used instead.
 """
@@ -217,9 +268,16 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = Mat
     tl_family = TeXLayout.default_font_family()
     runtime = _runtime_bundle(tl_family)
 
-    input = _strip_math_delimiters(str)
-    node = TeXLayout.parse_latex(input)
-    boxes = TeXLayout.layout(node, tl_family, TeXLayout.Display)
+    boxes = if _is_inline_math(str)
+        node = TeXLayout.parse_latex(_strip_math_delimiters(str))
+        TeXLayout.layout(node, tl_family, TeXLayout.Display)
+    else
+        # Width/alignment cannot be passed through Makie's fixed call site, so the
+        # document path uses the session-wide default options
+        # (set via TeXLayout.set_default_layout_options!).
+        opts = TeXLayout.default_layout_options()
+        TeXLayout.layout_document(String(str), opts; family = tl_family).boxes
+    end
 
     result = Vector{_MTEElementTuple}()
     sizehint!(result, length(boxes))

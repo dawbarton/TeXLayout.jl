@@ -9,7 +9,7 @@
 A Julia-idiomatic OpenType-aware LaTeX math typesetter, designed for use
 with [Makie.jl](https://github.com/MakieOrg/Makie.jl).
 
-Example outputs:
+Full-sheet example outputs from the stress renderer:
 
 - [New Computer Modern Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_new_cm.png)
 - [TeX Gyre Bonum Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_bonum.png)
@@ -32,6 +32,60 @@ tokenize → parse_latex → layout → Vector{LayoutBox}
 Each `LayoutBox` carries a `TeXElement` (glyph, rule, or space), a 2-D position in em
 units relative to the formula baseline, and a scale factor.
 
+Beyond single formulas, `layout_document` typesets mixed text-and-math input —
+styled text, inline `$…$` math, and display-math environments — into a measured
+`TeXBox` of positioned elements ready for the same renderers.
+
+## Relationship to MathTeXEngine.jl
+
+[MathTeXEngine.jl](https://github.com/MakieOrg/MathTeXEngine.jl) is Makie's
+current LaTeX engine, and TeXLayout.jl is intended as a drop-in replacement for
+it.  The two take different approaches:
+
+- **Fonts available.** MathTeXEngine renders in Computer Modern / New Computer
+  Modern. TeXLayout bundles eight math font families (New Computer Modern, the
+  TeX Gyre families, STIX Two, Fira Math, and Luciole) and can can use any other
+  OpenType Math font. A notable difference is that TeXLayout takes metrics
+  directly from the MATH table in the font (hence being usable with any OpenType
+  Math font).
+- **Integration.** TeXLayout plugs into Makie through the same
+  `generate_tex_elements` entry point MathTeXEngine uses, so loading both
+  packages switches Makie over without further changes (see *Makie
+  integration*).
+- **Scope and maturity.** MathTeXEngine is an established, widely used package.
+  TeXLayout is newer; it covers a broad LaTeX-math feature set plus mixed
+  text/math document layout, but has seen less production use.
+
+### LaTeX coverage
+
+Both engines handle the common core: fractions (`\frac`), radicals (`\sqrt`),
+sub/superscripts, auto-sized `\left…\right` delimiters, named operators
+(`\sin`, `\lim`, …), font switches (`\mathbf`, `\mathbb`, `\mathcal`, …), space
+commands, and a large symbol/accent set (including wide accents such as
+`\widehat`).  TeXLayout additionally supports a number of constructs that
+MathTeXEngine does not currently parse:
+
+- **Environments.** `\begin{matrix}`/`pmatrix`/`bmatrix`/`Bmatrix`/`vmatrix`/
+  `Vmatrix`/`smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
+  `l`/`c`/`r` alignment and single/double vertical rules. (Note that some
+  vertical rules do not render in Makie due to a bug in their implementation.)
+  In document mode also `align`, `aligned`, `gather`, and `equation`.
+- **Binomials and generalised fractions.** `\binom`, `\genfrac`, and the
+  display/text fraction variants `\dfrac` / `\tfrac`.
+- **Explicit style overrides.** `\displaystyle` / `\textstyle` /
+  `\scriptstyle` / `\scriptscriptstyle`, and `\limits` / `\nolimits` placement
+  control on operators.
+- **Over/under braces** (`\overbrace`, `\underbrace`) and the full style
+  cascade driven by the font's MATH table.
+- **Mixed text-and-math documents** via `layout_document` (styled text, inline
+  `$…$`, display math, line and paragraph breaks) — MathTeXEngine targets
+  single math formulas.
+
+Conversely, MathTeXEngine is the more battle-tested parser on the shared core,
+and some symbols without a single Unicode codepoint (certain negated relations)
+currently render as blank space in TeXLayout. This is not an exhaustive list;
+coverage on both sides continues to change.
+
 ## Key features
 
 - Full TeX style cascade (Display / Text / Script / ScriptScript, each with a cramped
@@ -49,9 +103,15 @@ units relative to the formula baseline, and a scale factor.
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
+- Mixed text-and-math document layout (`layout_document`): styled text
+  (`\textbf`, `\textit`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
+  environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
+  (`\\`), and blank-line paragraph breaks, with configurable line and display
+  spacing.  A pluggable `TextShaper` interface (default `MetricShaper`) leaves a
+  seam for a future HarfBuzz shaper.
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
-  `NKCommand` leaf nodes that are silently skipped by the layout engine.
+  `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
 
 ## Makie integration
 
@@ -60,6 +120,14 @@ TeXLayout automatically activates a package extension (`MathTeXEngineExt`) that
 replaces MathTeXEngine's layout engine with TeXLayout's.  No other code changes
 are required — LaTeX strings passed to `text!` in CairoMakie or GLMakie are
 rendered using TeXLayout's OpenType-aware pipeline.
+
+The extension routes each `LaTeXString` by shape: a single inline-math span
+(`"$…$"`, the usual `L"…"` form) is laid out as one formula in Display style, as
+before; anything else — surrounding text, several `$…$` spans, `\(…\)` inline
+math, or `$$…$$` / `\[…\]` display math — goes through `layout_document`, so a
+single `text!` call can render mixed text and math.  Width and alignment for that
+document path are controlled session-wide with `set_default_layout_options!`
+(e.g. `set_default_layout_options!(width = 40.0, align = :center)`).
 
 ```julia
 using TeXLayout       # activates MathTeXEngineExt automatically
@@ -172,6 +240,32 @@ node  = parse_latex(raw"\sum_{k=0}^{n} k^2")  # → Node (AST)
 boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
 ```
 
+### Mixed text and math
+
+`layout_document` accepts a string mixing styled text, inline `$…$` math, and
+display-math environments, and returns a `TeXBox` — a flat `Vector{LayoutBox}`
+together with the laid-out `width`, `ascent`, and `descent`:
+
+```julia
+using TeXLayout
+
+doc = layout_document(raw"""
+The Gaussian integral is $\int_{-\infty}^\infty e^{-x^2}\,dx = \sqrt{\pi}$.
+We can \textbf{align} a derivation:
+\begin{align}
+  (a+b)^2 &= a^2 + 2ab + b^2 \\
+          &= a^2 + b^2 + 2ab
+\end{align}
+""")
+
+# doc.boxes is a Vector{LayoutBox}; doc.width / doc.ascent / doc.descent are em extents.
+```
+
+Layout is controlled with keyword arguments (forwarded to `LayoutOptions`):
+`align`, `width`, `line_height`, `lineskip`, `display_align`, `abovedisplayskip`,
+`belowdisplayskip`, `parskip`, and `shaper`.  For example, `layout_document(text;
+family = font_family(:stix_two), align = :center, width = 30.0)`.
+
 ## API reference
 
 The public API is intentionally small.  All other names (lexer tokens, parser node
@@ -189,6 +283,13 @@ exported.
 | `parse_latex` | function | Tokenise and parse a LaTeX math string into a `Node` AST |
 | `layout` | function | Lay out a `Node` into a `Vector{LayoutBox}` given a `FontFamily` and `TexStyle` |
 | `generate_tex_elements` | function | Convenience: `parse_latex` + `layout` in one call |
+| `layout_document` | function | Lay out mixed text/math input into a `TeXBox`; keyword options control spacing, alignment, width, and shaping |
+| `TeXBox` | struct | Document layout result: `.boxes`, `.width`, `.ascent`, `.descent` |
+| `LayoutOptions` | struct | Keyword-configurable options for `layout_document` |
+| `default_layout_options` | function | Return the session-wide default `LayoutOptions` used by `layout_document` and the Makie extension |
+| `set_default_layout_options!` | function | Override the session-wide default options (keyword form merges; positional `LayoutOptions` replaces) |
+| `TextShaper` | abstract type | Interface for text shaping; default implementation is `MetricShaper` |
+| `MetricShaper` | struct | Default metric-only text shaper (no contextual shaping) |
 | `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |
 | `TeXElement` | union type | Union of `Glyph`, `HRule`, `VRule`, `Space` |
 | `Glyph` | struct | A single rendered glyph, identified by PostScript name and font role |
@@ -201,6 +302,41 @@ exported.
 Early development (v0.1).  The following features are not yet implemented:
 
 - Type-piracy-free Makie integration (current approach is functional but uses a specialised method on types owned by other packages; see note above).
+
+## Developer tooling
+
+Common development commands are available through the root `justfile`:
+
+```sh
+just test
+just stress-generate
+just stress-pack
+just stress-compare
+just stress-all
+```
+
+The canonical image-regression tool is `tools/stress_test_suite.jl`.  It renders
+per-expression PNGs for every bundled font, grouped by font, suite, and test
+category; can optionally include CairoMakie integration cases with
+`--include-makie`; packs references as `stress_test_reference.tar` using Julia's
+`Tar` stdlib; and compares current output against a local or downloaded
+reference.  Full-sheet renders are still generated for visual inspection, but
+they are not part of the reference tarball.
+
+## Scope
+
+TeXLayout typesets individual formulas and fixed text runs (with explicit line
+breaks via `\\`).  Layout is single-pass: each call produces a measured,
+positioned result directly.  The following are **explicitly out of scope** and
+will not be implemented:
+
+- **Automatic line breaking** — wrapping or filling text/math to a target width.
+- **Justification and glue setting** — stretchable/shrinkable spacing and the
+  associated break-point optimisation.
+- **Iterative or incremental relayout** — multi-pass layout optimisation, or
+  re-flowing/caching previously laid-out content.
+- **Page and column breaking.**
+- **Microtypography** (protrusion, font expansion).
 
 ## Acknowledgements
 

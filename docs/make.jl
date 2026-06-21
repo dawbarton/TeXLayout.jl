@@ -69,6 +69,7 @@ makedocs(;
     ),
     pages = list_pages(),
     checkdocs = :exports,
+    checkdocs_ignored_modules = [TeXLayout.NodeKind, TeXLayout.TokenKind],
 )
 
 deploydocs(; repo = "github.com/dawbarton/TeXLayout.jl")

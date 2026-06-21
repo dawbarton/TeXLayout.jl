@@ -114,6 +114,85 @@ family = font_family(:pagella)
 boxes  = generate_tex_elements(raw"\alpha + \beta", family)
 ```
 
+## Mixed text and math
+
+`generate_tex_elements` handles a single formula.  For input that mixes prose with
+math — styled text, inline `$…$` math, and display-math environments — use
+`layout_document`, which returns a [`TeXBox`](@ref):
+
+```julia
+using TeXLayout
+
+doc = layout_document(raw"""
+The Gaussian integral is $\int_{-\infty}^\infty e^{-x^2}\,dx = \sqrt{\pi}$.
+
+Now a \textbf{displayed} derivation:
+\begin{align}
+  (a+b)^2 &= a^2 + 2ab + b^2 \\
+          &= a^2 + b^2 + 2ab
+\end{align}
+""")
+
+doc.boxes     # Vector{LayoutBox}, positioned across multiple lines
+doc.width     # total width in em
+doc.ascent    # height above the first baseline, in em
+doc.descent   # depth below the last baseline, in em
+```
+
+The recognised text-mode constructs are:
+
+- **Styled text** — `\textbf`, `\textit`, `\emph` (toggles italic), `\textrm`,
+  `\textnormal`, `\textsf`, `\texttt`, and `\text` / `\mbox` grouping.
+- **Inline math** — anything between `$…$` or `\(…\)` is laid out in `Text` style and
+  placed on the current line.
+- **Display math** — `$$…$$`, `\[…\]`, and top-level `\begin{align}`,
+  `\begin{aligned}`, `\begin{gather}`, and `\begin{equation}` environments become
+  free-standing, centred display blocks.
+- **Line and paragraph breaks** — `\\` forces a new line; a blank line starts a new
+  paragraph with `parskip` vertical space.
+
+Spacing and alignment are controlled with keyword arguments forwarded to
+[`LayoutOptions`](@ref):
+
+```julia
+doc = layout_document(text;
+                      family       = font_family(:stix_two),
+                      align        = :center,   # :left | :center | :right
+                      width        = 30.0,      # fixed line width in em (default: widest item)
+                      line_height  = 1.2,       # baseline-to-baseline in em
+                      display_align = :center)
+```
+
+### Width and alignment
+
+Both text lines and display blocks are positioned within a single reference width
+`W`:
+
+- If `width` is left unset (the default `nothing`), `W` is the width of the
+  **widest item** in the document — counting every text line *and* every display
+  block. If you pass `width = <em>`, that fixed value is used instead.
+- Each item is offset within `W` by its alignment: text lines follow `align`
+  (default `:left`), display blocks follow `display_align` (default `:center`).
+
+So by default there is no fixed page width: text is flush-left and equations are
+centred against the widest item. The centring reference is the widest item
+*overall* — it coincides with "the longest text line" only when no display block is
+wider than every text line.
+
+These options also have a session-wide default. `set_default_layout_options!(;
+kwargs...)` sets the defaults returned by `default_layout_options()`; per-call
+keyword arguments to `layout_document` are merged over them. This is the only way to
+control width and alignment for the [Makie integration](03-makie.md), whose call
+site cannot take per-render options:
+
+```julia
+set_default_layout_options!(width = 40.0, align = :center)
+```
+
+The `TeXBox.boxes` field is a `Vector{LayoutBox}` exactly like the output of
+`generate_tex_elements`, so the same rendering loop (see below) applies — the only
+difference is that boxes now span multiple baselines.
+
 ## Coordinates and units
 
 - The **origin** (`x = 0`, `y = 0`) is the **formula baseline** — the line on which
@@ -158,11 +237,7 @@ for box in boxes
 
     if el isa Glyph
         # Resolve the physical font file.
-        font_path = if el.font_slot === :math
-            family.math
-        else
-            something(family.regular, family.math)
-        end
+        font_path = TeXLayout._font_path_for_slot(family, el.font_slot)
         # Render the glyph named `el.glyph_name` from `font_path`
         # at pixel position (x, baseline_y - y) at size (box.scale * fontsize_px).
         render_glyph(el.glyph_name, font_path, x, y, box.scale * fontsize_px)
@@ -181,6 +256,6 @@ for box in boxes
 end
 ```
 
-`el.font_slot` is either `:math` (the math font, used for almost everything) or
-`:regular` (the companion text font, used for `\text{}`/`\mbox{}` content).  When
-`family.regular` is `nothing`, fall back to `family.math` for both slots.
+`el.font_slot` identifies the math or companion text slot used for glyph-index
+resolution.  Internal helper `TeXLayout._font_path_for_slot` applies the same
+fallback order as TeXLayout's own render/debug tools.

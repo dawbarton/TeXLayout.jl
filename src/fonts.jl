@@ -140,6 +140,25 @@ function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics
     )
 end
 
+# Metrics for the glyph at Unicode codepoint `cp` in font `path`, or `nothing`.
+# Factored out of glyph_metrics_by_codepoint so text-mode shaping can probe
+# arbitrary font paths (bold, italic, …) without constructing a FontFamily.
+function _codepoint_metrics(path::String, cp::UInt32)::Union{GlyphMetrics, Nothing}
+    face, hmtx = _load_font(path)
+    gid = Int(_FT.FT_Get_Char_Index(face, cp))
+    gid == 0 && return nothing
+    adv, lsb = hmtx[gid + 1]
+    _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
+    m = unsafe_load(face.glyph).metrics
+    return GlyphMetrics(
+        adv, lsb,
+        Int(m.horiBearingX),
+        Int(m.horiBearingY) - Int(m.height),
+        Int(m.horiBearingX) + Int(m.width),
+        Int(m.horiBearingY),
+    )
+end
+
 """
     glyph_metrics_by_codepoint(family, codepoint) -> Union{GlyphMetrics, Nothing}
 
@@ -147,20 +166,63 @@ Return metrics for the glyph mapped from a Unicode codepoint in the math font,
 or `nothing` if the codepoint has no glyph.
 """
 function glyph_metrics_by_codepoint(family::FontFamily, cp::UInt32)::Union{GlyphMetrics, Nothing}
-    face, hmtx = _load_font(family.math)
-    gid = Int(_FT.FT_Get_Char_Index(face, cp))
-    gid == 0 && return nothing
+    return _codepoint_metrics(family.math, cp)
+end
 
-    adv, lsb = hmtx[gid + 1]
+# Priority-ordered list of non-nothing font paths for a given style slot.
+# Falls back: requested slot → regular → math, de-duplicated.
+function _slot_fallback(family::FontFamily, slot::FontSlot.T)::Vector{String}
+    raw = if slot === FontSlot.BoldItalic
+        [family.bolditalic, family.bold, family.italic, family.regular, family.math]
+    elseif slot === FontSlot.Math
+        [family.math]
+    elseif slot === FontSlot.Bold
+        [family.bold, family.regular, family.math]
+    elseif slot === FontSlot.Italic
+        [family.italic, family.regular, family.math]
+    else  # FontSlot.Regular
+        [family.regular, family.math]
+    end
+    seen = Set{String}()
+    result = String[]
+    for p in raw
+        (p === nothing || p ∈ seen) && continue
+        push!(seen, p)
+        push!(result, p)
+    end
+    return result
+end
 
-    _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
-    m = unsafe_load(face.glyph).metrics
-    x_min = Int(m.horiBearingX)
-    y_max = Int(m.horiBearingY)
-    x_max = Int(m.horiBearingX) + Int(m.width)
-    y_min = Int(m.horiBearingY) - Int(m.height)
+"""First configured font path for `slot`, following TeXLayout's slot fallback rules."""
+_font_path_for_slot(family::FontFamily, slot::FontSlot.T)::String = first(_slot_fallback(family, slot))
 
-    return GlyphMetrics(adv, lsb, x_min, y_min, x_max, y_max)
+"""
+    glyph_metrics_slot(family, ch, slot) -> Union{Tuple{GlyphMetrics,String}, Nothing}
+
+Return `(metrics, font_path)` for character `ch` in the requested style slot,
+trying the slot's font first then falling back through regular → math. Returns
+`nothing` if the character is absent from all fallback fonts.
+"""
+function glyph_metrics_slot(
+        family::FontFamily, ch::Char, slot::FontSlot.T
+    )::Union{Tuple{GlyphMetrics, String}, Nothing}
+    for path in _slot_fallback(family, slot)
+        m = _codepoint_metrics(path, UInt32(ch))
+        m !== nothing && return (m, path)
+    end
+    return nothing
+end
+
+# Per-path UPM cache — avoids re-reading the file on every shape_span call.
+const _UPM_CACHE = Dict{String, Int}()
+
+"""Units-per-em of the font at `path` (cached)."""
+function _font_upm(path::String)::Float64
+    return Float64(
+        get!(_UPM_CACHE, path) do
+            _parse_upm(read(path))
+        end
+    )
 end
 
 # ── Unicode math-variant codepoint mapping ────────────────────────────────────

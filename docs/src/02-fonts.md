@@ -14,9 +14,10 @@ A `FontFamily` bundles file paths for up to five font roles:
 
 Only `math` is mandatory.  If `regular` is omitted, upright glyphs fall back to the
 math font's own codepoint map, which yields upright roman forms in well-constructed
-OpenType math fonts such as New Computer Modern.  The `italic`, `bold`, and
-`bolditalic` slots are reserved for future use (font switching commands like `\mathbf`
-currently map to Unicode math-variant codepoints rather than these companion files).
+OpenType math fonts such as New Computer Modern.  The document text layer uses
+`italic`, `bold`, and `bolditalic` for commands such as `\textit` and `\textbf`.
+Math-mode font switching commands like `\mathbf` still map to Unicode math-variant
+codepoints rather than these companion files.
 
 Fonts are cached by file path; calling `font_family` repeatedly with the same arguments
 is cheap.

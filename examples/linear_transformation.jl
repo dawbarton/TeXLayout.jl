@@ -1,3 +1,5 @@
+# !!!!!!! WORK IN PROGRESS !!!!!!!
+
 # Pedagogic Linear Transformation Visualiser
 #
 # Demonstrates the geometric meaning of eigendecomposition for a 2×2 symmetric

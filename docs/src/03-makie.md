@@ -20,9 +20,60 @@ built-in fallback.  No monkey-patching, no `__precompile__(false)`, and no chang
 any upstream package are needed.
 
 For repeated rendering with the same font family, the extension reuses a cached
-runtime bundle derived from the active `FontFamily`, and the underlying TeXLayout
-pipeline reuses cached font handles and parsed MATH tables.  In steady-state Makie
-workloads this avoids reparsing the OpenType font data on every formula.
+runtime bundle derived from the active `FontFamily`: loaded FreeType faces for each
+font-slot fallback path, the derived MathTeXEngine font family, and glyph-index
+lookups keyed by `(font path, glyph name)`.  The underlying TeXLayout pipeline also
+reuses parsed MATH tables.  In steady-state Makie workloads this avoids reparsing
+the OpenType font data on every formula.
+
+## Inline math vs. mixed text and math
+
+The extension inspects each `LaTeXString` and routes it one of two ways:
+
+- **A single inline-math span** — a string that starts and ends with a single `$`
+  and contains no other `$` (the usual `L"…"` form, e.g. `L"x^2"` → `"$x^2$"`) — is
+  laid out as one formula in **`Display`** style, exactly as MathTeXEngine would.
+  This is the common case for axis labels, legend entries, and annotations.
+- **Anything else** is routed through [`layout_document`](@ref): surrounding prose,
+  several `$…$` spans, `\(…\)` inline math, and `$$…$$` / `\[…\]` display math.  This
+  lets a single `text!` call render mixed text-and-math content.
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+
+fig = Figure()
+Label(fig[1, 1], L"x^2 + \frac{1}{2}"; fontsize = 40)                       # → math
+Label(fig[2, 1], latexstring("Energy \$E=mc^2\$ is famous."); fontsize = 30) # → document
+Label(fig[3, 1], latexstring("\$\$\\int_0^1 x^2\\,dx = \\tfrac13\$\$"); fontsize = 30) # → display
+save("mixed.png", fig)
+```
+
+!!! note
+    Because `L"…"` wraps its argument in `$…$`, a plain `L"x^2"` is a single inline
+    span and takes the math path.  To force the document path (e.g. for prose with
+    embedded math) construct the string so it is *not* a single `$…$` span — for
+    instance with surrounding text, or via `latexstring(...)`.
+
+### Document-layer options through Makie
+
+Makie's call site (`generate_tex_elements(::LaTeXString)`) has a fixed signature, so
+per-render [`LayoutOptions`](@ref) cannot be passed for the document path.  Instead,
+set them session-wide with [`set_default_layout_options!`](@ref) — the extension
+reads [`default_layout_options`](@ref) on every document-path render, just as it
+reads [`default_font_family`](@ref) for the font:
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+
+# Centre text and equations within a fixed 40 em column for all Makie renders.
+set_default_layout_options!(width = 40.0, align = :center, display_align = :center)
+
+Label(fig[1, 1], latexstring("A line of text and a display:\n\$\$x^2 + y^2 = r^2\$\$"))
+```
+
+The keyword form merges over the current default, so you can change just one field
+(e.g. `set_default_layout_options!(align = :center)`).  A single inline-math
+`L"…"` string is unaffected — it takes the Display-style math path regardless.
 
 ## Quick start
 
@@ -63,9 +114,11 @@ built from file paths can be passed to `set_default_font_family!`.  See
 
 ## Matching text and math fonts
 
-By default, Makie renders axis labels, tick marks, and legends using its own bundled
-fonts.  To achieve a visually consistent result, pass the companion text fonts from
-the chosen `FontFamily` to Makie via `set_theme!`:
+By default, Makie renders non-LaTeX axis labels, tick marks, and legends using its
+own bundled fonts.  The TeXLayout document path uses the companion text slots in the
+active `FontFamily` for commands such as `\textbf` and `\textit`; to make ordinary
+Makie text match that same family, pass those companion fonts to Makie via
+`set_theme!`:
 
 ```julia
 using TeXLayout, CairoMakie, LaTeXStrings

@@ -22,6 +22,9 @@ is read directly from the font's OpenType MATH table; nothing is hard-coded.
 - Array and matrix environments: `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double (`||`) vertical rules.
+- Mixed text-and-math document layout via `layout_document`: styled text, inline
+  `$…$` math, display-math environments (`align`, `aligned`, `gather`, `equation`),
+  line breaks (`\\`), and paragraph breaks, returned as a measured `TeXBox`.
 - Eight bundled font families downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert nodes
   that are silently skipped by the layout engine.

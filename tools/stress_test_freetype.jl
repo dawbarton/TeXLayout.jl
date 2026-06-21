@@ -105,13 +105,21 @@ function render_expr(
     hline!(canvas, em_y(0.0), 1, W, 0xd8)
     hline!(canvas, em_y(mt.constants.axis_height / upm), 1, W, 0xec)
 
+    face_cache = Dict{String, FTFont}(family.math => face_math)
+    face_regular !== nothing && (face_cache[TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Regular)] = face_regular)
+    function face_for(slot)
+        path = TeXLayout._font_path_for_slot(family, slot)
+        return get!(face_cache, path) do
+            FTFont(path)
+        end
+    end
+
     for box in boxes
         el = box.element
         if el isa Glyph
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_x(box.x); pen_cy = em_y(box.y)
-            face = (el.font_slot === :regular && face_regular !== nothing) ?
-                face_regular : face_math
+            face = face_for(el.font_slot)
             local bmp, ext
             try
                 bmp, ext = renderface(face, el.glyph_name, pixel_size)
@@ -151,17 +159,20 @@ function render_text!(
     )
     px = max(1, round(Int, scale * BASE_PX))
     H = size(canvas, 1)
+    # Common baseline for all glyphs, placing the cap-height band roughly centred
+    # within the strip (≈cap height is 0.7·px, so half is ≈px÷3).
+    baseline = H ÷ 2 + px ÷ 3
     x = x0
     for ch in text
         local bmp, ext
         try
-            bmp, ext = renderface(face, string(ch), px)
+            bmp, ext = renderface(face, ch, px)
         catch
             x += px ÷ 2; continue
         end
         bx_px = round(Int, ext.horizontal_bearing[1])
         by_px = round(Int, ext.horizontal_bearing[2])
-        top = H ÷ 2 - by_px ÷ 2 + 2
+        top = baseline - by_px
         left = x + bx_px
         for row in axes(bmp, 2), col in axes(bmp, 1)
             alpha = bmp[col, row]; alpha == 0x00 && continue

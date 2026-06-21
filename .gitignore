@@ -37,6 +37,10 @@ artifacts/
 *.png
 *.svg
 *.pdf
+flowchart.md
+
+# Benchmark output
+benchmark/latest.toml
 
 # macOS AppleDouble resource fork files
 ._*
