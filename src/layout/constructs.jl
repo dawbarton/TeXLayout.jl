@@ -45,14 +45,16 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     below_s = sub_style(style)
     below_scale = _scale_for_child(scale, style, below_s, mc)
 
-    tmp_above = LayoutBox[]
-    above_w = _layout_node!(above_node, ctx, above_s, 0.0, 0.0, above_scale, tmp_above)
+    above_start = lastindex(boxes) + 1
+    above_w = _layout_node!(above_node, ctx, above_s, 0.0, 0.0, above_scale, boxes)
+    above_stop = lastindex(boxes)
 
-    tmp_below = LayoutBox[]
+    below_start = lastindex(boxes) + 1
     below_w = 0.0
     if below_node !== nothing
-        below_w = _layout_node!(below_node, ctx, below_s, 0.0, 0.0, below_scale, tmp_below)
+        below_w = _layout_node!(below_node, ctx, below_s, 0.0, 0.0, below_scale, boxes)
     end
+    below_stop = lastindex(boxes)
 
     # Resolve the arrow glyph in horiz_constructions.
     cp = get(_XARROW_CODEPOINTS, cmd, 0x2192)
@@ -92,17 +94,17 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
 
     # Place the above label: bottom of ink at arrow_top + kern.
-    if !isempty(tmp_above)
+    if above_start <= above_stop
         Δabove = (total_w - above_w) / 2
-        label_y = arrow_top + _XARROW_KERN * scale - _boxes_bottom(tmp_above, upm)
-        _emit_shifted!(boxes, tmp_above, x0 + Δabove, label_y)
+        label_y = arrow_top + _XARROW_KERN * scale - _boxes_bottom(boxes, above_start, above_stop, upm)
+        _translate_range!(boxes, above_start, above_stop, x0 + Δabove, label_y)
     end
 
     # Place the below label: top of ink at arrow_bot − kern.
-    if !isempty(tmp_below)
+    if below_start <= below_stop
         Δbelow = (total_w - below_w) / 2
-        label_y = arrow_bot - _XARROW_KERN * scale - _boxes_top(tmp_below, upm)
-        _emit_shifted!(boxes, tmp_below, x0 + Δbelow, label_y)
+        label_y = arrow_bot - _XARROW_KERN * scale - _boxes_top(boxes, below_start, below_stop, upm)
+        _translate_range!(boxes, below_start, below_stop, x0 + Δbelow, label_y)
     end
 
     return total_w
@@ -147,23 +149,26 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     # Layout at y=0 to measure ink extents before applying shifts.
-    tmp_num = LayoutBox[];  tmp_den = LayoutBox[]
-    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
-    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
+    num_start = lastindex(boxes) + 1
+    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
+    num_stop = lastindex(boxes)
+    den_start = lastindex(boxes) + 1
+    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
+    den_stop = lastindex(boxes)
 
     # Clamp shifts so the minimum gap between content and rule is respected
     # (TeX Rule 15d/15e).  num_depth is how far the numerator ink extends below
     # its own baseline; den_height is how far the denominator ink extends above.
-    num_depth = max(0.0, -_boxes_bottom(tmp_num, upm))
-    den_height = max(0.0, _boxes_top(tmp_den, upm))
+    num_depth = max(0.0, -_boxes_bottom(boxes, num_start, num_stop, upm))
+    den_height = max(0.0, _boxes_top(boxes, den_start, den_stop, upm))
     num_shift = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
     den_shift = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
 
     frac_w = max(num_w, den_w)
     Δnum = (frac_w - num_w) / 2
     Δden = (frac_w - den_w) / 2
-    _emit_shifted!(boxes, tmp_num, x0 + Δnum, y0 + num_shift)
-    _emit_shifted!(boxes, tmp_den, x0 + Δden, y0 - den_shift)
+    _translate_range!(boxes, num_start, num_stop, x0 + Δnum, y0 + num_shift)
+    _translate_range!(boxes, den_start, den_stop, x0 + Δden, y0 - den_shift)
     push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
     return frac_w
 end
@@ -201,14 +206,16 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     # Lay out numerator and denominator at origin to measure ink extents.
-    tmp_num = LayoutBox[]
-    tmp_den = LayoutBox[]
-    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, tmp_num)
-    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, tmp_den)
+    num_start = lastindex(boxes) + 1
+    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
+    num_stop = lastindex(boxes)
+    den_start = lastindex(boxes) + 1
+    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
+    den_stop = lastindex(boxes)
 
     # Rule 15c: gap clamping with no rule (rule_thickness = 0).
-    num_depth = max(0.0, -_boxes_bottom(tmp_num, upm))
-    den_height = max(0.0, _boxes_top(tmp_den, upm))
+    num_depth = max(0.0, -_boxes_bottom(boxes, num_start, num_stop, upm))
+    den_height = max(0.0, _boxes_top(boxes, den_start, den_stop, upm))
     num_shift = max(num_shift, axis_h + num_gap + num_depth)
     den_shift = max(den_shift, den_height - axis_h + den_gap)
 
@@ -216,19 +223,20 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     # Compute the vertical extent of the fraction for delimiter sizing.
     # Both measured relative to y0 (i.e. the formula baseline).
-    inner_top = num_shift + _boxes_top(tmp_num, upm)
-    inner_bot = -den_shift + _boxes_bottom(tmp_den, upm)
+    inner_top = num_shift + _boxes_top(boxes, num_start, num_stop, upm)
+    inner_bot = -den_shift + _boxes_bottom(boxes, den_start, den_stop, upm)
     h_above = max(0.0, inner_top - axis_h)
     h_below = max(0.0, axis_h - inner_bot)
     required_du = 2.0 * max(h_above, h_below) / scale * upm
 
     # Place left delimiter, fraction content (centred), right delimiter.
     cursor = x0
-    !isempty(left_name) && (cursor += _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes))
+    left_w = !isempty(left_name) ? _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes) : 0.0
+    cursor += left_w
     Δnum = (inner_w - num_w) / 2
     Δden = (inner_w - den_w) / 2
-    _emit_shifted!(boxes, tmp_num, cursor + Δnum, y0 + num_shift)
-    _emit_shifted!(boxes, tmp_den, cursor + Δden, y0 - den_shift)
+    _translate_range!(boxes, num_start, num_stop, left_w + x0 + Δnum, y0 + num_shift)
+    _translate_range!(boxes, den_start, den_stop, left_w + x0 + Δden, y0 - den_shift)
     cursor += inner_w
     !isempty(right_name) && (cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes))
     return cursor - x0
@@ -238,12 +246,13 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     # \sqrt[degree]{body}: children are [body] or [degree, body].
     body_node = length(node.children) == 1 ? node.children[1] : node.children[2]
-    tmp = LayoutBox[]
     # Rule 11: body is built in the cramped style (prevents superscripts inside
     # the radicand from protruding above the rule bar).
-    body_w = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
-    body_top = _boxes_top(tmp, upm)
-    body_bot = _boxes_bottom(tmp, upm)
+    body_start = lastindex(boxes) + 1
+    body_w = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
+    body_stop = lastindex(boxes)
+    body_top = _boxes_top(boxes, body_start, body_stop, upm)
+    body_bot = _boxes_bottom(boxes, body_start, body_stop, upm)
 
     gap = is_display(style) ?
         mc.radical_display_style_vertical_gap / upm * scale :
@@ -278,7 +287,7 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     rule_overlap = rule_thickness / 2
     rule_x = body_x - rule_overlap
 
-    _emit_shifted!(boxes, tmp, body_x, y0)
+    _translate_range!(boxes, body_start, body_stop, body_x, y0)
     push!(
         boxes, LayoutBox(
             HRule(body_w + rule_overlap, rule_thickness),
@@ -312,18 +321,24 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     end
     push!(segments, current_seg)
 
-    # Lay out each segment at the origin into a scratch buffer to measure dimensions.
-    # x=0 is used so that box positions are relative; they are shifted when placed.
-    seg_boxes = [LayoutBox[] for _ in segments]
+    # Lay out each segment at the origin; record ranges for allocation-free
+    # measurement and later in-place positioning.
+    seg_starts = Vector{Int}(undef, length(segments))
+    seg_stops = Vector{Int}(undef, length(segments))
     seg_widths = zeros(Float64, length(segments))
     for (i, seg) in enumerate(segments)
-        seg_widths[i] = _layout_children!(seg, ctx, style, 0.0, y0, scale, seg_boxes[i])
+        seg_starts[i] = lastindex(boxes) + 1
+        seg_widths[i] = _layout_children!(seg, ctx, style, 0.0, y0, scale, boxes)
+        seg_stops[i] = lastindex(boxes)
     end
 
     # Measure the overall vertical extent across all segment boxes.
-    all_tmp = isempty(seg_boxes) ? LayoutBox[] : reduce(vcat, seg_boxes)
-    content_top = _boxes_top(all_tmp, upm)
-    content_bot = _boxes_bottom(all_tmp, upm)
+    content_top = 0.0
+    content_bot = 0.0
+    for i in eachindex(segments)
+        content_top = max(content_top, _boxes_top(boxes, seg_starts[i], seg_stops[i], upm))
+        content_bot = min(content_bot, _boxes_bottom(boxes, seg_starts[i], seg_stops[i], upm))
+    end
     # Ensure a sensible non-zero span when content has no glyph ink.
     content_top = max(content_top, y0 + mc.axis_height / upm * scale)
     content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
@@ -342,8 +357,8 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     cursor = x0
     left_w = _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes)
     cursor += left_w
-    for (i, (seg_b, seg_w)) in enumerate(zip(seg_boxes, seg_widths))
-        _emit_shifted!(boxes, seg_b, cursor, 0.0)
+    for (i, seg_w) in enumerate(seg_widths)
+        _translate_range!(boxes, seg_starts[i], seg_stops[i], cursor, 0.0)
         cursor += seg_w
         if i <= length(middles)
             mid_w = _layout_delim!(ctx, middles[i].value, required_du, cursor, y0, scale, boxes)
@@ -375,10 +390,11 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
     # Build base in cramped style (Rule 12: base is typeset cramped).
-    tmp = LayoutBox[]
-    base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, tmp)
-    base_top = _boxes_top(tmp, upm)   # body.height in em (measured at origin)
-    _emit_shifted!(boxes, tmp, x0, y0)
+    base_start = lastindex(boxes) + 1
+    base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
+    base_stop = lastindex(boxes)
+    base_top = _boxes_top(boxes, base_start, base_stop, upm)   # body.height in em (measured at origin)
+    _translate_range!(boxes, base_start, base_stop, x0, y0)
 
     # Look up the accent glyph.  Try the primary codepoint first; if the font
     # does not have a glyph there, try the combining-form fallback (e.g. Luciole
@@ -409,8 +425,8 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     # glyph with a known attachment point, align the attachment x of the accent
     # to the attachment x of the base.  Fall back to centering when attachment
     # data is unavailable.
-    base_attach_du = if length(tmp) == 1 && tmp[1].element isa Glyph
-        get(ctx.top_accent_attachments, (tmp[1].element::Glyph).glyph_name, nothing)
+    base_attach_du = if base_start == base_stop && boxes[base_start].element isa Glyph
+        get(ctx.top_accent_attachments, (boxes[base_start].element::Glyph).glyph_name, nothing)
     else
         nothing
     end
@@ -447,18 +463,20 @@ function _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
     is_over = node.value == "overline"
     child_style = is_over ? cramp_style(style) : style
 
-    tmp = LayoutBox[]
-    body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, tmp)
+    body_start = lastindex(boxes) + 1
+    body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, boxes)
+    body_stop = lastindex(boxes)
+    body_top = _boxes_top(boxes, body_start, body_stop, upm)
+    body_bot = _boxes_bottom(boxes, body_start, body_stop, upm)
 
     rule_t = (is_over ? mc.overbar_rule_thickness : mc.underbar_rule_thickness) / upm * scale
     gap = (is_over ? mc.overbar_vertical_gap : mc.underbar_vertical_gap) / upm * scale
-    _emit_shifted!(boxes, tmp, x0, y0)
+    _translate_range!(boxes, body_start, body_stop, x0, y0)
 
     # Rule bottom at body_top + gap (over) or body_bot − gap − rule_t (under).
     rule_y = is_over ?
-        y0 + _boxes_top(tmp, upm) + gap :
-        y0 + _boxes_bottom(tmp, upm) - gap - rule_t
+        y0 + body_top + gap :
+        y0 + body_bot - gap - rule_t
     push!(boxes, LayoutBox(HRule(body_w, rule_t), x0, rule_y, scale))
     return body_w
 end
-

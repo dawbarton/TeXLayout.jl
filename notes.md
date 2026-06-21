@@ -772,3 +772,12 @@
 - Updated `compose.measure` to use the same range-extent helpers for consistency.
 - Focused `test_layout.jl` + `test_snapshots.jl` run passed after the conversion.
 - Follow-up: constructs that currently emit delimiters or radicals before measured children (`sqrt`, `genfrac`, `delimited`, matrix delimiters) need explicit range reordering if converted without changing serialized emission order.
+
+## 2026-06-21T13:39+00:00 Math flat layout constructs range-emission pass
+
+- Relaxed the append-order requirement per user direction and converted `src/layout/constructs.jl` to the clearer emit/measure/translate flow for fractions, genfracs, radicals, delimiters, arrows, accents, and over/under rules.
+- Removed all `LayoutBox[]` scratch buffers and `_emit_shifted!` use from `constructs.jl`; child ranges are emitted into the shared output buffer and translated in place.
+- Updated layout tests that previously assumed glyph append order to select semantic glyphs by position or axis proximity.
+- Changed snapshot serialization to sort rounded box records before hashing, so snapshots guard element geometry and metrics without treating append order as semantic.
+- Validation: focused `test_layout.jl` + `test_snapshots.jl` passed (1168/1168).
+- Benchmark smoke after this pass: `layout/scripts_fraction` 51 allocs / 6432 bytes, `layout/radical_delimited` 33 allocs / 3248 bytes, `layout/accents_braces_arrows` 116 allocs / 12800 bytes, `layout/matrix_cases` 139 allocs / 12816 bytes.

@@ -357,10 +357,11 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes = layout(parse_latex("\\left( x \\right)"), family, Text)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 3
+        sorted = sort(glyphs; by = b -> b.x)
         # Left delimiter is placed at x=0 (the formula origin).
-        @test glyphs[1].x ≈ 0.0
+        @test sorted[1].x ≈ 0.0
         # Glyphs are ordered left to right.
-        @test glyphs[1].x < glyphs[2].x < glyphs[3].x
+        @test sorted[1].x < sorted[2].x < sorted[3].x
     end
 
     @testset "\\left( x \\right): delimiters centred on math axis" begin
@@ -368,10 +369,11 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes = layout(parse_latex("\\left( x \\right)"), family, Text)
         glyphs = find_glyphs(boxes)
         axis_em = mt.constants.axis_height / FONT_UPM
-        for i in [1, 3]   # left and right delimiter glyphs
-            g = glyphs[i].element
-            glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * glyphs[i].scale
-            delim_center = glyphs[i].y + glyph_center
+        sorted = sort(glyphs; by = b -> b.x)
+        for box in (first(sorted), last(sorted))   # left and right delimiter glyphs
+            g = box.element
+            glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * box.scale
+            delim_center = box.y + glyph_center
             @test delim_center ≈ axis_em  atol = 1.0e-6
         end
     end
@@ -385,7 +387,9 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The glyph height (y_max - y_min) of the left delimiter in the frac case
         # must be strictly greater than in the plain case.
         height(b) = b.element.y_max - b.element.y_min
-        @test height(glyphs_frac[1]) > height(glyphs_plain[1])
+        left_frac = sort(glyphs_frac; by = b -> b.x)[1]
+        left_plain = sort(glyphs_plain; by = b -> b.x)[1]
+        @test height(left_frac) > height(left_plain)
     end
 
     @testset "\\left. (null delimiter) places no glyph on the left" begin
@@ -432,7 +436,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         glyphs = find_glyphs(boxes)
         axis_em = mt.constants.axis_height / FONT_UPM
         # Isolate the left-delimiter glyphs (all at x=0 with the same advance width).
-        left_x = glyphs[1].x
+        left_x = minimum(b.x for b in glyphs)
         left_glyphs = filter(b -> b.x ≈ left_x, glyphs)
         top_em = maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in left_glyphs)
         bot_em = minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in left_glyphs)
@@ -1338,7 +1342,10 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The arrow glyph(s) should straddle the math axis (some above, some below or at zero).
         axis_em = mt.constants.axis_height / mt.upm
         # At least one glyph in the arrow box should have its midpoint near the axis.
-        g = glyphs[1]
+        g = sort(
+            glyphs;
+            by = b -> abs(b.y + (b.element.y_min + b.element.y_max) / (2.0 * mt.upm) * b.scale - axis_em),
+        )[1]
         mid = g.y + (g.element.y_min + g.element.y_max) / (2.0 * mt.upm) * g.scale
         @test abs(mid - axis_em) < 0.5   # within half-em of axis (coarse sanity check)
     end

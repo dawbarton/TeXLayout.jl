@@ -1,48 +1,54 @@
 using SHA
 
 const SNAPSHOT_MATH_CASES = [
-    ("simple_atom", raw"x+y=z", "0786a3175929982d6fd21cdf8b30cee84ff6664875a4fceedafd3b737eb40dcb"),
-    ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "3d1d5fa752c26f2b349f1005241df8ada027d6be1aaa8920ab53def795a35489"),
-    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "e694695e4fd0a60b774b9df0e6427af0ec2d2f9aaefc8cfa7c7a7ea0e3e09819"),
-    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "93802cbb987572ab134833680f3adf05cf66aa703859a6818ff9f0fc9f99b3dc"),
-    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "a9bf70fe11b5ba491303efbaa12175e039de894f6262c294900ea6f414845960"),
-    ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "25f9e59f21d05c3f51882a661e098af95d1b56158332ee83585a5f179e5c9f23"),
+    ("simple_atom", raw"x+y=z", "c406b97f98f6af05b1c4ebd3799146c83cbb0d3954eb459706ac6e10e213c3f4"),
+    ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "8590527a7489dd33a2f7c5ae9db6cdf8c42ccc64dd8f89b0b5e4268cf1f88aca"),
+    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "413d86661ebf097751806d50b9f63148fd8758d5b880d113fe41b15cf7880716"),
+    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "d9e0cafba1bfb7f18ec3a45d3e2d576b8b20639919ad8c41953afbf705633f8b"),
+    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "e5733c68ddfc5dd66a8ca3e69387c56e7d26062f05fe985cb889d1c8901828be"),
+    ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "e1950914fa964ae4c7f30c182137d7750da18a2de46ed0be1aa5440b0828b075"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "874737326a8b891ceb5444b850e957f559c231a3ef63bf5c0bcc75fda17db819"),
-    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "9148e17818c1b28e8120e6dae5b1107d54a8aa4305d4db5f1dd7fbcfabc1edde"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "5e6ade456231082d5d8db443cee91aba7df9667e0ef41c3d11dfdb61f6faca38"),
+    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "38e695096188a456a72c1e4fa4d8ef2f8f036e7bc275b2f23b1b9fcea504516f"),
 ]
 
 _snapshot_float(x) = string(round(Float64(x); digits = 10))
 _snapshot_hash(s::AbstractString) = bytes2hex(sha256(codeunits(s)))
 
-function _snapshot_boxes(boxes)
+function _snapshot_box_line(box)
     io = IOBuffer()
-    for box in boxes
-        el = box.element
-        print(io, nameof(typeof(el)), "|")
-        if el isa Glyph
-            print(
-                io,
-                el.glyph_name, "|", TeXLayout._font_slot_symbol(el.font_slot), "|",
-                el.advance_width, "|", el.left_side_bearing, "|",
-                el.x_min, "|", el.y_min, "|", el.x_max, "|", el.y_max,
-            )
-        elseif el isa HRule
-            print(io, _snapshot_float(el.width), "|", _snapshot_float(el.thickness))
-        elseif el isa VRule
-            print(io, _snapshot_float(el.height), "|", _snapshot_float(el.thickness))
-        elseif el isa Space
-            print(io, _snapshot_float(el.width))
-        end
+    el = box.element
+    print(io, nameof(typeof(el)), "|")
+    if el isa Glyph
         print(
             io,
-            "|", _snapshot_float(box.x),
-            "|", _snapshot_float(box.y),
-            "|", _snapshot_float(box.scale),
-            "\n",
+            el.glyph_name, "|", TeXLayout._font_slot_symbol(el.font_slot), "|",
+            el.advance_width, "|", el.left_side_bearing, "|",
+            el.x_min, "|", el.y_min, "|", el.x_max, "|", el.y_max,
         )
+    elseif el isa HRule
+        print(io, _snapshot_float(el.width), "|", _snapshot_float(el.thickness))
+    elseif el isa VRule
+        print(io, _snapshot_float(el.height), "|", _snapshot_float(el.thickness))
+    elseif el isa Space
+        print(io, _snapshot_float(el.width))
+    end
+    print(
+        io,
+        "|", _snapshot_float(box.x),
+        "|", _snapshot_float(box.y),
+        "|", _snapshot_float(box.scale),
+    )
+    return String(take!(io))
+end
+
+function _snapshot_boxes(boxes)
+    lines = sort!([_snapshot_box_line(box) for box in boxes])
+    io = IOBuffer()
+    for line in lines
+        println(io, line)
     end
     return String(take!(io))
 end
