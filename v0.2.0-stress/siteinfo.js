@@ -1,0 +1,2 @@
+var DOCUMENTER_CURRENT_VERSION = "v0.2.0-stress";
+var DOCUMENTER_IS_DEV_VERSION = false;
