@@ -313,26 +313,6 @@ exported.
 | `VRule` | struct | A vertical rule (array column separator) |
 | `Space` | struct | Explicit horizontal white space |
 
-## Developer tooling
-
-Common development commands are available through the root `justfile`:
-
-```sh
-just test
-just stress-generate
-just stress-pack
-just stress-compare
-just stress-all
-```
-
-The canonical image-regression tool is `tools/stress_test_suite.jl`.  It renders
-per-expression PNGs for every bundled font, grouped by font, suite, and test
-category; can optionally include CairoMakie integration cases with
-`--include-makie`; packs references as `stress_test_reference.tar` using Julia's
-`Tar` stdlib; and compares current output against a local or downloaded
-reference.  Full-sheet renders are still generated for visual inspection, but
-they are not part of the reference tarball.
-
 ## Scope
 
 TeXLayout typesets individual formulas and fixed text runs (with explicit line
