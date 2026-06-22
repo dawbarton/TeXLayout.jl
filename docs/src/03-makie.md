@@ -73,7 +73,15 @@ Label(fig[1, 1], latexstring("A line of text and a display:\n\$\$x^2 + y^2 = r^2
 
 The keyword form merges over the current default, so you can change just one field
 (e.g. `set_default_layout_options!(align = :center)`).  A single inline-math
-`L"…"` string is unaffected — it takes the Display-style math path regardless.
+`L"…"` string still takes the Display-style math path, but math-internal
+`\text{…}` / `\mbox{…}` fragments in that formula use the default shaper.  To opt
+into HarfBuzz shaping for document text and math-internal text, load `HarfBuzz_jll`
+and set:
+
+```julia
+using TeXLayout, HarfBuzz_jll
+set_default_layout_options!(shaper = HarfBuzzShaper())
+```
 
 ## Quick start
 

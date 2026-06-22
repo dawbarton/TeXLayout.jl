@@ -339,6 +339,16 @@ struct Glyph <: TeXElement
     x_min::Int; y_min::Int; x_max::Int; y_max::Int
 end
 
+struct GlyphID <: TeXElement
+    glyph_id::UInt32
+    font_path::String
+    font_slot::FontSlot.T
+    represented_char::Char
+    advance_width::Int
+    left_side_bearing::Int
+    x_min::Int; y_min::Int; x_max::Int; y_max::Int
+end
+
 struct HRule <: TeXElement
     width::Float64      # em units
     thickness::Float64  # em units
@@ -361,11 +371,11 @@ struct LayoutBox
 end
 ```
 
-The `Glyph` metric fields (`advance_width`, `left_side_bearing`, and the bounding-box
-fields) are in **design units** — the raw integer values from the font's hmtx and glyph
-tables, with no scaling applied.  To convert to em units, use `du * scale / upm`.  The
-`x`, `y` positions in `LayoutBox` are already in em units (origin at the formula
-baseline; x right, y up).
+The `Glyph` and `GlyphID` metric fields (`advance_width`, `left_side_bearing`, and
+the bounding-box fields) are in **design units** — the raw integer values from the
+font's hmtx and glyph tables, with no scaling applied.  To convert to em units, use
+`du * scale / upm`.  The `x`, `y` positions in `LayoutBox` are already in em units
+(origin at the formula baseline; x right, y up).
 
 `font_slot` tells the renderer which physical font file to open for glyph-index
 resolution:
@@ -377,6 +387,11 @@ resolution:
 Renderer/debug code should use internal helper `_font_path_for_slot(family, slot)`
 when resolving a `Glyph.font_slot` to a physical font path, so fallback behaviour
 stays consistent across tools.
+
+`GlyphID` is already renderer-resolved: use `glyph_id` directly from `font_path`.
+It is emitted by shaping backends such as `HarfBuzzShaper`, where glyph IDs may
+refer to ligature or substituted glyphs that do not have a stable Unicode scalar or
+PostScript name.
 
 ### Range emission and measurement
 
@@ -673,8 +688,13 @@ added.
 `TextShaper` is the abstract interface for turning a `TextSpan` into positioned
 glyphs; `shape_span(shaper, span, family, scale)` is the entry point.  The default
 `MetricShaper` does metric-only shaping (one glyph per character, advances from the
-font's `hmtx` table) with no contextual substitution or kerning.  This is the seam a
-future `HarfBuzzShaper` (in an `ext/HarfBuzzExt.jl` extension) would plug into.
+font's `hmtx` table) with no contextual substitution or kerning.  `HarfBuzzShaper`
+is implemented in the optional `ext/HarfBuzzExt.jl` extension and emits `GlyphID`
+elements with final glyph IDs and exact font paths.  Document text spans always go
+through `LayoutOptions.shaper`; math `\text{…}` / `\mbox{…}` nodes use the same
+interface only when a non-default shaper is explicitly passed to `layout` or
+`generate_tex_elements`, preserving the legacy `MetricShaper`/`Space` output by
+default.
 
 ### Internal box tree (`src/boxes.jl`)
 
@@ -919,6 +939,8 @@ The extension converts TeXLayout output to MathTeXEngine's expected tuple format
 2. Convert each `LayoutBox` element to an MTE tuple `(element, Point2f, scale)`:
    - `Glyph` → `MathTeXEngine.TeXChar`; glyph indices are resolved through the
      glyph's `FontSlot` fallback paths and cached by `(font path, glyph name)`.
+   - `GlyphID` → `MathTeXEngine.TeXChar`; the glyph ID and exact font path are
+     used directly, bypassing name lookup.
    - `HRule` → `MathTeXEngine.HLine` with the corresponding width and thickness.
    - `VRule` → `MathTeXEngine.VLine` with the corresponding height and thickness.
    - `Space` → skipped (carries no renderable geometry).

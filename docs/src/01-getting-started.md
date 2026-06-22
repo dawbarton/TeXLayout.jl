@@ -36,17 +36,19 @@ Each element of `boxes` is a `LayoutBox` with four fields:
 | `.y` | `Float64` | Vertical position in em units (baseline origin, up is positive) |
 | `.scale` | `Float64` | Font-size multiplier relative to the requested display size |
 
-`TeXElement` is a union of four concrete types:
+`TeXElement` is an abstract base for the concrete render primitives:
 
 | Type | Key fields | Description |
 |:-----|:-----------|:------------|
-| `Glyph` | `.glyph_name`, `.font_slot`, `.advance`, `.left_side_bearing`, `.x_min`, `.y_min`, `.x_max`, `.y_max` | A single rendered glyph |
+| `Glyph` | `.glyph_name`, `.font_slot`, `.advance_width`, `.left_side_bearing`, `.x_min`, `.y_min`, `.x_max`, `.y_max` | A single rendered glyph identified by PostScript name |
+| `GlyphID` | `.glyph_id`, `.font_path`, `.font_slot`, `.represented_char`, `.advance_width`, `.left_side_bearing`, `.x_min`, `.y_min`, `.x_max`, `.y_max` | A single rendered glyph identified by exact font path and glyph ID |
 | `HRule` | `.width`, `.thickness` | A horizontal rule (fraction bar, radical overline, …) |
 | `VRule` | `.height`, `.thickness` | A vertical rule (array column separator) |
 | `Space` | `.width` | Explicit horizontal white space |
 
-All metric fields in `Glyph`, `HRule`, `VRule`, and `Space` are in **em units** (already
-scaled by `.scale`).
+`Glyph` and `GlyphID` metric fields are raw **design units** from the font; convert
+them to em units with `du / upm * box.scale`. `HRule`, `VRule`, and `Space`
+dimensions are already stored in em units.
 
 ### Inspecting the result
 
@@ -55,6 +57,10 @@ for box in boxes
     el = box.element
     if el isa Glyph
         println("Glyph '$(el.glyph_name)'  font=$(el.font_slot)  ",
+                "x=$(round(box.x, digits=4))  y=$(round(box.y, digits=4))  ",
+                "scale=$(box.scale)")
+    elseif el isa GlyphID
+        println("GlyphID $(el.glyph_id)  font=$(el.font_path)  ",
                 "x=$(round(box.x, digits=4))  y=$(round(box.y, digits=4))  ",
                 "scale=$(box.scale)")
     elseif el isa HRule
@@ -241,6 +247,10 @@ for box in boxes
         # Render the glyph named `el.glyph_name` from `font_path`
         # at pixel position (x, baseline_y - y) at size (box.scale * fontsize_px).
         render_glyph(el.glyph_name, font_path, x, y, box.scale * fontsize_px)
+
+    elseif el isa GlyphID
+        # Render the final glyph ID from the exact font file chosen by the shaper.
+        render_glyph_id(el.glyph_id, el.font_path, x, y, box.scale * fontsize_px)
 
     elseif el isa HRule
         # Draw a filled rectangle of width `el.width * fontsize_px`

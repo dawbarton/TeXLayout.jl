@@ -198,6 +198,13 @@ function _glyph_index_for_slot(
     return nothing
 end
 
+function _font_for_path(runtime::_RuntimeBundle, path::String)::FreeTypeAbstraction.FTFont
+    return get!(runtime.fonts, path) do
+        font, _ = TeXLayout._load_font(path)
+        font
+    end
+end
+
 # Convert a single LayoutBox to an MTE (element, position, scale) tuple, or
 # nothing if the box cannot be represented (e.g. missing glyph, bare Space).
 # `math_font` and `reg_font` are loaded FreeType face handles; the Glyph's
@@ -219,6 +226,13 @@ function _box_to_mte(
         tc = MathTeXEngine.TeXChar(
             gid, font, runtime.mte_family, false,
             _represented_char(el.glyph_name)
+        )
+        return (tc, pos, scale)
+    elseif el isa TeXLayout.GlyphID
+        font = _font_for_path(runtime, el.font_path)
+        tc = MathTeXEngine.TeXChar(
+            Culong(el.glyph_id), font, runtime.mte_family, false,
+            el.represented_char,
         )
         return (tc, pos, scale)
     elseif el isa TeXLayout.HRule
@@ -267,15 +281,15 @@ ignored; TeXLayout's `default_font_family()` is used instead.
 function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = MathTeXEngine.FontFamily())
     tl_family = TeXLayout.default_font_family()
     runtime = _runtime_bundle(tl_family)
+    opts = TeXLayout.default_layout_options()
 
     boxes = if _is_inline_math(str)
         node = TeXLayout.parse_latex(_strip_math_delimiters(str))
-        TeXLayout.layout(node, tl_family, TeXLayout.Display)
+        TeXLayout.layout(node, tl_family, TeXLayout.Display; shaper = opts.shaper)
     else
         # Width/alignment cannot be passed through Makie's fixed call site, so the
         # document path uses the session-wide default options
         # (set via TeXLayout.set_default_layout_options!).
-        opts = TeXLayout.default_layout_options()
         TeXLayout.layout_document(String(str), opts; family = tl_family).boxes
     end
 

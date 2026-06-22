@@ -1020,3 +1020,14 @@
 - Added public/developer limitations for future `\textsf`/`\texttt` slots,
   matrix vertical spacing helpers, and whitespace convention review.
 - Verified the docs build with `julia --project=docs docs/make.jl`.
+
+## 2026-06-22T16:56+00:00 HarfBuzz extension implementation and docs
+
+- Implemented optional `HarfBuzzShaper` support through `ext/HarfBuzzExt.jl`,
+  emitting `GlyphID` elements with exact font paths and final glyph IDs.
+- Kept `MetricShaper` as the default and independently testable path; document
+  layout and math `\text{}`/`\mbox{}` can opt into HarfBuzz with
+  `shaper = HarfBuzzShaper()` after loading `HarfBuzz_jll`.
+- Updated README, Documenter pages, `AGENTS.md`, `future.md`, and changelog
+  coverage for `GlyphID`, optional HarfBuzz shaping, Makie conversion, and stress
+  test behavior.
