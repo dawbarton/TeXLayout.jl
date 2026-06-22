@@ -111,11 +111,12 @@ coverage on both sides continues to change.
   (`\textbf`, `\textit`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
   environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
   (`\\`), and blank-line paragraph breaks, with configurable line and display
-  spacing.  A pluggable `TextShaper` interface (default `MetricShaper`) leaves a
-  seam for the optional `HarfBuzzShaper` extension when `HarfBuzz_jll` is loaded.
+  spacing.
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
+- Optional HarfBuzz-based text shaping (e.g., ligatures, character-pair spacing)
+  when `HarfBuzz_jll` is loaded.
 
 ## Makie integration
 
