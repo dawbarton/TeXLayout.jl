@@ -20,6 +20,10 @@ Full-sheet example outputs from the stress renderer:
 - STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_text_freetype.png)
 - Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_text_freetype.png)
 
+Since a picture is worth a thousand words...
+
+![CairoMakie output with TeXLayout](https://raw.githubusercontent.com/dawbarton/TeXLayout.jl/refs/heads/main/examples/eigen_demo.png)
+
 ## Overview
 
 TeXLayout.jl converts LaTeX math strings into a flat list of positioned glyph elements
