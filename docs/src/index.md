@@ -25,6 +25,8 @@ is read directly from the font's OpenType MATH table; nothing is hard-coded.
 - Mixed text-and-math document layout via `layout_document`: styled text, inline
   `$…$` math, display-math environments (`align`, `aligned`, `gather`, `equation`),
   line breaks (`\\`), and paragraph breaks, returned as a measured `TeXBox`.
+- Pluggable text shaping: `MetricShaper` by default, with optional
+  `HarfBuzzShaper` support when `HarfBuzz_jll` is loaded.
 - Eight bundled font families downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert nodes
   that are silently skipped by the layout engine.
@@ -39,7 +41,7 @@ boxes = generate_tex_elements(raw"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}
 # boxes is a Vector{LayoutBox}
 ```
 
-Each `LayoutBox` carries a `TeXElement` (a `Glyph`, `HRule`, `VRule`, or `Space`), a
+Each `LayoutBox` carries a `TeXElement` (a `Glyph`, `GlyphID`, `HRule`, `VRule`, or `Space`), a
 2-D position in em units relative to the formula baseline (`x` right, `y` up), and a
 `scale` factor.  See [Getting Started](01-getting-started.md) for a full walkthrough.
 

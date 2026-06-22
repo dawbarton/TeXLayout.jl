@@ -119,6 +119,7 @@ set_default_layout_options!(; kwargs...) =
 # Space and HRule widths are already in em (pre-scaled by the layout engine).
 _advance_em(b::LayoutBox, upm::Float64) =
     b.element isa Glyph ? b.element.advance_width / upm * b.scale :
+    b.element isa GlyphID ? b.element.advance_width / _font_upm(b.element.font_path) * b.scale :
     b.element isa Space ? b.element.width :
     b.element isa HRule ? b.element.width :
     0.0
@@ -256,8 +257,13 @@ end
 
 # ── Per-run and per-line layout ───────────────────────────────────────────────
 
-function hlayout_math(node::Node, family::FontFamily, style::TexStyle)::TeXBox
-    boxes = layout(node, family, style)
+function hlayout_math(
+        node::Node,
+        family::FontFamily,
+        style::TexStyle;
+        shaper::TextShaper = MetricShaper(),
+    )::TeXBox
+    boxes = layout(node, family, style; shaper)
     upm = Float64(load_math_table(family.math).upm)
     return measure(boxes, upm)
 end
@@ -267,7 +273,7 @@ function hlayout_run(run::Run, family::FontFamily, opts::LayoutOptions, base_sca
         parts = [shape_span(opts.shaper, span, family, base_scale) for span in run.spans]
         return hconcat(parts)
     else   # MathRun
-        return hlayout_math(run.node, family, run.style)
+        return hlayout_math(run.node, family, run.style; shaper = opts.shaper)
     end
 end
 
@@ -344,7 +350,11 @@ function layout_document(
             !isempty(items) && (pending_skip = max(pending_skip, opts.parskip))
         else   # DisplayBlock
             skip = (isempty(items) ? 0.0 : pending_skip + opts.abovedisplayskip)
-            push_item!(hlayout_math(blk.node, family, Display), opts.display_align, skip)
+            push_item!(
+                hlayout_math(blk.node, family, Display; shaper = opts.shaper),
+                opts.display_align,
+                skip,
+            )
             pending_skip = opts.belowdisplayskip
         end
     end

@@ -36,10 +36,11 @@ TeXLayout.jl/
 │   │   ├── matrix.jl
 │   │   └── scripts.jl
 │   ├── boxes.jl            # Internal measured box tree + shape pass for composition
-│   ├── shaping.jl          # TextShaper interface, MetricShaper, per-span glyph shaping
+│   ├── shaping.jl          # TextShaper interface, MetricShaper, HarfBuzzShaper seam
 │   ├── document.jl         # Document AST (Block/Line/Run/TextSpan/TextAttrs) + parse_document
 │   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
 ├── ext/
+│   ├── HarfBuzzExt.jl      # Optional HarfBuzz_jll-backed TextShaper implementation
 │   └── MathTeXEngineExt.jl # Makie/MathTeXEngine extension + cached runtime conversion bundle
 ├── test/
 │   ├── runtests.jl         # Top-level testset; includes all test files
@@ -103,7 +104,7 @@ All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activa
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
 | `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [:font_symbol] [out.png]` |
 | `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [:font_symbol] [png\|pdf\|svg] [out]` |
-| `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
+| `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. Most cases use `MetricShaper`; a small final section opts into `HarfBuzzShaper`. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
 | `stress_test_suite.jl` | Unified stress suite: generate per-case PNGs for all bundled fonts, optionally include CairoMakie integration checks, pack a reference tarball, and compare current output against a local or downloaded reference. | `julia tools/stress_test_suite.jl all` |
 | `stress_test_all.jl` | Compatibility wrapper for the unified suite. Old font-list invocations still work, and explicit suite commands pass through. | `julia tools/stress_test_all.jl [all\|generate\|pack\|compare]` |
 | `prepare_font_artifacts.jl` | Download fonts from CTAN/GitHub, build artifact tarballs, and draft `Artifacts.toml` stanzas.  Run when adding fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
@@ -213,7 +214,7 @@ Three functions with different portability:
   path for all math symbols and letters.  Returns `nothing` on miss.
 - `glyph_metrics_upright(family, ch)` — upright (roman) form; uses the `regular`
   font slot if present, else falls back to the math font's codepoint map.  Used
-  by `NodeKind.Operator` and `\text{}`/`\mbox{}` rendering.
+  by `NodeKind.Operator` and default `MetricShaper` `\text{}`/`\mbox{}` rendering.
 
 Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
 
@@ -221,18 +222,22 @@ Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
   Positions are in em units (design units / UPM × scale); x right, y up, origin at
   formula baseline.
-- Element subtypes: `Glyph` (PS name + metrics), `HRule` (width + thickness in em),
-  `VRule` (height + thickness in em), `Space` (width in em).
+- Element subtypes: `Glyph` (PS name + metrics), `GlyphID` (exact font path +
+  final glyph ID + metrics), `HRule` (width + thickness in em), `VRule` (height +
+  thickness in em), `Space` (width in em).
 - `Glyph.font_slot` — tells the renderer which font file to use for glyph-index
   resolution.  Math-mode glyphs carry `FontSlot.Math`; document text glyphs may
   carry `FontSlot.Regular`, `FontSlot.Bold`, `FontSlot.Italic`, or
   `FontSlot.BoldItalic`, each falling back through the configured `FontFamily`
   slots when the requested companion font is absent.
+- `GlyphID.font_path` — bypasses slot/name lookup for shaped text.  Renderers should
+  render `glyph_id` directly from this exact font file.
 - `_LayoutCtx` carries: `family`, `mc` (all MATH constants), `upm`,
   `vert_constructions` / `horiz_constructions` (extensible glyph tables),
   `top_accent_attachments`, `italic_corrections`, `min_connector_overlap`,
   `mode` (`LayoutMode.Math` or `LayoutMode.Text`), `font_variant` (`:default`
-  or a `\mathXX` symbol).
+  or a `\mathXX` symbol), and `text_shaper` for optional shaping of math
+  `\text{}` / `\mbox{}` fragments.
 
 ## Architectural invariants
 
@@ -333,8 +338,9 @@ at the end of that file.
   converted by the same `_box_to_mte` adapter.
   The extension also maintains a per-font runtime cache so repeated Makie renders
   reuse loaded FreeType faces for every configured font-slot fallback path, the
-  derived `MathTeXEngine.FontFamily`, and `(font path, glyph name)` → glyph-index
-  lookup tables.
+  derived `MathTeXEngine.FontFamily`, and glyph lookup tables.  Name-based `Glyph`
+  values are resolved by `(font path, glyph name)`; shaped `GlyphID` values render
+  directly from their exact font path and glyph ID.
   **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
   (`HRule.y` = bottom edge, `VRule.x` = left edge), while
   `MathTeXEngine.HLine` / `VLine` use line-centre positions.  The adapter in
@@ -359,9 +365,12 @@ at the end of that file.
 - **Whitespace convention review pending** — leading, trailing, and repeated
   whitespace handling in math and document text modes should be reviewed against
   LaTeX conventions before changing parser behavior.  See `future.md`.
-- **HarfBuzz shaper not yet implemented** — the `TextShaper` interface and extension seam
-  are in place (`ext/HarfBuzzExt.jl` is documented in `text-spec.md` but not yet built).
-  Users opt in with `shaper = HarfBuzzShaper()` once the extension is available.
+- **HarfBuzz shaper scope** — `ext/HarfBuzzExt.jl` implements optional HarfBuzz
+  shaping for document text spans and, when explicitly requested, math
+  `\text{}` / `\mbox{}` fragments.  It does not do full paragraph bidi reordering,
+  expose user-configurable HarfBuzz features/language/script settings, or shape
+  ordinary math glyphs/operators.  `MetricShaper` remains the default and must stay
+  independently testable without `HarfBuzz_jll`.
 - **Makie extension ignores caller-specified font family** — the overridden
   `generate_tex_elements` accepts a `font_family` argument (for API compatibility
   with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
@@ -383,6 +392,12 @@ fresh `[Unreleased]` section is opened above it.
 ## Test suite
 
 Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
+
+`Pkg.test()` includes `HarfBuzz_jll` from `[extras]`, so the `HarfBuzzExt`
+extension loads and HarfBuzz-specific assertions run.  A direct
+`julia --project=. test/runtests.jl` does not load that weak dependency and should
+continue to pass with the HarfBuzz tests skipped; use it to verify the core
+`MetricShaper` path stays independent.
 
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with

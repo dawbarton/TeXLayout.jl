@@ -10,6 +10,18 @@ These notes record small layout features to implement later.
 
 - It's a bit of a mess in terms of the high-level logic around generation/comparison/etc.
 
+## HarfBuzz shaping follow-ups
+
+- Add optional controls for HarfBuzz features, language, script, and direction if
+  users need them beyond the current `hb_buffer_guess_segment_properties` path.
+- Evaluate paragraph-level bidirectional text support.  HarfBuzz shapes runs but
+  does not perform full bidi paragraph reordering.
+- Broaden fallback tests for mixed-script text and combining-mark clusters.  The
+  current implementation segments by grapheme clusters and shapes adjacent clusters
+  that choose the same fallback font together.
+- Consider whether visual/debug tools other than the text stress renderer should
+  render `GlyphID` elements directly.
+
 ## `\strut` / phantom-style height support
 
 - Implement `\strut` as an invisible zero-width box with TeX-like height and

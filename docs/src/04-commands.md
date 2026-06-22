@@ -223,10 +223,14 @@ Each letter in the spec is `l` (left-aligned), `c` (centred), or `r` (right-alig
 
 ## Text mode
 
-`\text{…}`, `\mbox{…}` — switch to upright (regular-font) glyph rendering for the
-enclosed content.  Spaces are preserved as explicit `Space` elements using the font's
-word-space advance.  The entire text fragment is classified as an ordinary atom for
-inter-atom spacing purposes.
+`\text{…}`, `\mbox{…}` — switch to upright (regular-font) text rendering for the
+enclosed content.  With the default `MetricShaper`, spaces are preserved as explicit
+`Space` elements using the font's word-space advance.  The entire text fragment is
+classified as an ordinary atom for inter-atom spacing purposes.
+
+When `HarfBuzz_jll` is loaded and `HarfBuzzShaper()` is passed as the active shaper,
+text fragments are shaped as text runs and may emit `GlyphID` elements instead of
+one name-based `Glyph` per character.
 
 ## Font switching
 

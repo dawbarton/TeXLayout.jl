@@ -33,8 +33,8 @@ that a renderer (e.g. CairoMakie or GLMakie) can consume directly.  The pipeline
 tokenize → parse_latex → layout → Vector{LayoutBox}
 ```
 
-Each `LayoutBox` carries a `TeXElement` (glyph, rule, or space), a 2-D position in em
-units relative to the formula baseline, and a scale factor.
+Each `LayoutBox` carries a `TeXElement` (glyph, glyph ID, rule, or space), a 2-D
+position in em units relative to the formula baseline, and a scale factor.
 
 Beyond single formulas, `layout_document` typesets mixed text-and-math input —
 styled text, inline `$…$` math, and display-math environments — into a measured
@@ -112,7 +112,7 @@ coverage on both sides continues to change.
   environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
   (`\\`), and blank-line paragraph breaks, with configurable line and display
   spacing.  A pluggable `TextShaper` interface (default `MetricShaper`) leaves a
-  seam for a future HarfBuzz shaper.
+  seam for the optional `HarfBuzzShaper` extension when `HarfBuzz_jll` is loaded.
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
@@ -198,7 +198,7 @@ using TeXLayout
 boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}")
 
 # boxes is a Vector{LayoutBox}; each box carries:
-#   .element  — a Glyph, HRule, VRule, or Space value
+#   .element  — a Glyph, GlyphID, HRule, VRule, or Space value
 #   .x, .y    — baseline-relative position in em units
 #   .scale    — font-size multiplier (1.0 for Display/Text, 0.7 for Script, …)
 ```
@@ -242,6 +242,16 @@ using TeXLayout
 
 node  = parse_latex(raw"\sum_{k=0}^{n} k^2")  # → Node (AST)
 boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
+```
+
+Pass `shaper = HarfBuzzShaper()` to `layout` or `generate_tex_elements` to shape
+text inside math `\text{…}` / `\mbox{…}` nodes when `HarfBuzz_jll` is loaded.
+For mixed text/math documents, pass the same shaper to `layout_document`:
+
+```julia
+using TeXLayout, HarfBuzz_jll
+
+doc = layout_document("office \$x + \\text{affine}\$"; shaper = HarfBuzzShaper())
 ```
 
 ### Mixed text and math
@@ -294,9 +304,11 @@ exported.
 | `set_default_layout_options!` | function | Override the session-wide default options (keyword form merges; positional `LayoutOptions` replaces) |
 | `TextShaper` | abstract type | Interface for text shaping; default implementation is `MetricShaper` |
 | `MetricShaper` | struct | Default metric-only text shaper (no contextual shaping) |
+| `HarfBuzzShaper` | struct | Optional HarfBuzz-backed text shaper, active when `HarfBuzz_jll` is loaded |
 | `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |
-| `TeXElement` | union type | Union of `Glyph`, `HRule`, `VRule`, `Space` |
+| `TeXElement` | abstract type | Base for `Glyph`, `GlyphID`, `HRule`, `VRule`, and `Space` |
 | `Glyph` | struct | A single rendered glyph, identified by PostScript name and font role |
+| `GlyphID` | struct | A single rendered glyph, identified by exact font path and glyph ID |
 | `HRule` | struct | A horizontal rule (fraction bar, radical bar, …) |
 | `VRule` | struct | A vertical rule (array column separator) |
 | `Space` | struct | Explicit horizontal white space |

@@ -14,6 +14,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using HarfBuzz_jll
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, N0f8
@@ -173,6 +174,23 @@ const TEXT_STRESS_SECTIONS = [
             kwargs = (;),
         ),
     ],
+    "7. HARFBUZZ TEXT SHAPING" => TextCase[
+        (
+            name = "harfbuzz prose ligatures",
+            source = raw"office affinity efficient AVATAR text shaped by HarfBuzz.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
+            name = "harfbuzz styled spans",
+            source = raw"Regular office, \textit{italic office}, and \textbf{bold office}.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
+            name = "harfbuzz math text command",
+            source = raw"Inline math with text: $x + \text{office affine}$ beside prose.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+    ],
 ]
 
 # ── Canvas helpers ────────────────────────────────────────────────────────────
@@ -221,6 +239,12 @@ end
 
 function _face_for!(cache::Dict{String, FTFont}, paths, slot)
     path = get(paths, slot, paths[TeXLayout.FontSlot.Math])
+    return get!(cache, path) do
+        FTFont(path)
+    end
+end
+
+function _face_for_path!(cache::Dict{String, FTFont}, path::String)
     return get!(cache, path) do
         FTFont(path)
     end
@@ -354,6 +378,25 @@ function render_document(case::TextCase, family::FontFamily, paths)::Matrix{UInt
                 bmp, ext = renderface(face, el.glyph_name, px_size)
             catch err
                 @warn "renderface failed for $(el.glyph_name): $err"
+                continue
+            end
+            left = pen_cx + round(Int, ext.horizontal_bearing[1])
+            top = pen_cy - round(Int, ext.horizontal_bearing[2])
+            for row in axes(bmp, 2), col in axes(bmp, 1)
+                alpha = bmp[col, row]
+                alpha == 0x00 && continue
+                composite!(canvas, top + row - 1, left + col - 1, alpha)
+            end
+        elseif el isa GlyphID
+            face = _face_for_path!(face_cache, el.font_path)
+            px_size = max(1, round(Int, box.scale * scale_px))
+            pen_cx = em_x(box.x)
+            pen_cy = em_y(box.y)
+            local bmp, ext
+            try
+                bmp, ext = renderface(face, Int(el.glyph_id), px_size)
+            catch err
+                @warn "renderface failed for glyph id $(el.glyph_id): $err"
                 continue
             end
             left = pen_cx + round(Int, ext.horizontal_bearing[1])
