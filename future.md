@@ -1,10 +1,14 @@
-# Future Work: Matrix Vertical Spacing Helpers
+# Future Work
 
 These notes record small layout features to implement later.
 
 ## Possible bugs to evaluate
 
 - Does `\frac` display at the right size in displayed equations?
+
+## Revisit stress test code
+
+- It's a bit of a mess in terms of the high-level logic around generation/comparison/etc.
 
 ## `\strut` / phantom-style height support
 
