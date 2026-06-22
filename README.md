@@ -7,18 +7,18 @@
 [![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
 
 A Julia-idiomatic OpenType-aware LaTeX math typesetter, designed for use
-with [Makie.jl](https://github.com/MakieOrg/Makie.jl).
+with [Makie.jl](https://github.com/MakieOrg/Makie.jl). Full documentation available via the link above.
 
 Full-sheet example outputs from the stress renderer:
 
-- [New Computer Modern Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_new_cm.png)
-- [TeX Gyre Bonum Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_bonum.png)
-- [TeX Gyre Pagella Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_pagella.png)
-- [TeX Gyre Schola Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_schola.png)
-- [TeX Gyre Termes Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_termes.png)
-- [Luciole Math](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_luciole.png)
-- [STIX Two Math v2.0.2](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_stix_two.png)
-- [Fira Math + Fira Sans v0.3.4](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress/stress_test_output_fira_math.png)
+- New Computer Modern [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/new_cm_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/new_cm_text_freetype.png)
+- TeX Gyre Bonum [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/bonum_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/bonum_text_freetype.png)
+- TeX Gyre Pagella [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/pagella_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/pagella_text_freetype.png)
+- TeX Gyre Schola [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/schola_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/schola_text_freetype.png)
+- TeX Gyre Termes [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/termes_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/termes_text_freetype.png)
+- Luciole [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/luciole_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/luciole_text_freetype.png)
+- STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_text_freetype.png)
+- Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_text_freetype.png)
 
 ## Overview
 
@@ -296,12 +296,6 @@ exported.
 | `HRule` | struct | A horizontal rule (fraction bar, radical bar, …) |
 | `VRule` | struct | A vertical rule (array column separator) |
 | `Space` | struct | Explicit horizontal white space |
-
-## Status
-
-Early development (v0.1).  The following features are not yet implemented:
-
-- Type-piracy-free Makie integration (current approach is functional but uses a specialised method on types owned by other packages; see note above).
 
 ## Developer tooling
 

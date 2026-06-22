@@ -28,8 +28,6 @@ module TextStress
 end
 
 const REFERENCE_ASSET = "stress_test_reference.tar"
-const DEFAULT_REFERENCE_BASE =
-    "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-stress"
 
 const ALL_FONTS = [
     :new_cm, :pagella, :luciole, :stix_two,
@@ -241,11 +239,11 @@ function _render_sheets!(root::String, font::Symbol; include_makie::Bool)
     face_math = FTFont(family.math)
     face_regular = family.regular !== nothing ? FTFont(family.regular) : nothing
     _write_png(
-        joinpath(sheet_dir, "math_freetype.png"),
+        joinpath(sheet_dir, "$(string(font))_math_freetype.png"),
         MathStress._build_sheet(family, mt, face_math, face_regular, font_name),
     )
     _write_png(
-        joinpath(sheet_dir, "text_freetype.png"),
+        joinpath(sheet_dir, "$(string(font))_text_freetype.png"),
         TextStress.build_sheet(family, font_name),
     )
 
@@ -500,7 +498,7 @@ function main(args = ARGS)
         reference = _option(
             rest,
             "--reference",
-            "$(DEFAULT_REFERENCE_BASE)/$(REFERENCE_ASSET)",
+            "$(REFERENCE_ASSET)",
         )
         compare_outputs(
             current = out,
