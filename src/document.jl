@@ -117,7 +117,8 @@ const _TEXT_FONT_SWITCH_CMDS = Set{String}(
 )
 
 # Environments that the document layer treats as free-standing display blocks.
-const _DISPLAY_ENVS = Set{String}(["align", "aligned", "gather", "equation"])
+# Shared with the layout layer (see `_DISPLAY_MATH_ENVS` in parser_tables.jl).
+const _DISPLAY_ENVS = _DISPLAY_MATH_ENVS
 const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
 
 # Compute new TextAttrs by applying a font-switch command to the current attrs.
@@ -222,7 +223,7 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\begin"
             _advance!(p)
-            env_name = _read_brace_word!(p)
+            env_name = _canonical_env_name(_read_brace_word!(p))
             if env_name ∈ _DISPLAY_ENVS
                 _end_paragraph!(builder)
                 node = parse_environment!(p, env_name)
