@@ -1055,3 +1055,70 @@
 - **Deferred**: `multline` still a sentinel — does NOT fit the grid model (no `&`,
   per-row L/center/R alignment measured against target line width). Needs a separate
   width-aware path in compose.jl, scoped as future work.
+
+## 2026-06-23T23:12+00:00 Document whitespace trimming + `%` comments
+
+- Implemented LaTeX-style whitespace conventions in document text mode and `%`
+  line comments in the lexer.
+- Lexer (`src/lexer.jl`): new `%` branch. Discards to end of line; if the line
+  ends in `%` it also drops the newline + next line's leading indent (the
+  whitespace-suppression idiom), *unless* the following line is blank — then the
+  newline(s) are left for the normal collapser so the paragraph break survives.
+  Escaped `\%` still lexes as a `Command` and never reaches the branch.
+- Document parser (`src/document.jl`): deferred-space model. Added
+  `pending_space`/`at_line_start` to `_DocBuilder` with `_commit_space!` (commit
+  a deferred inter-word space unless at a line start) and `_begin_line_boundary!`
+  (drop trailing deferred space + suppress next leading whitespace), wired into
+  `_end_line!`. Top-level spaces are deferred; spaces inside `{…}` groups stay
+  significant. Result: leading/trailing whitespace at line/block boundaries is
+  trimmed, but single newlines→space, indentation collapse, blank-line→paragraph,
+  and spaces around inline math are unchanged.
+- Tests: +5 lexer cases, +20 document cases (1244→1269 pass). Snapshots unchanged.
+- Docs: CHANGELOG `[Unreleased]` (Added comment support, Changed whitespace),
+  `future.md` whitespace item updated (math-mode review still open), AGENTS.md
+  limitation note rewritten to describe the implemented behaviour.
+- Open: pure math-mode (`parse_latex`) repeated/leading/trailing whitespace not
+  yet reviewed; `\text{…}` internal whitespace currently verbatim-significant.
+
+## 2026-06-23T23:25+00:00 Math-mode whitespace consistency + ~ / control space
+
+- Reviewed pure math-mode (`parse_latex`) and `\text{}` whitespace against LaTeX
+  and made everything consistent. Three genuine bugs found and fixed.
+- `x^ 2` / `\frac 1 2`: a space after `^`/`_` or before a command argument was
+  captured as an empty script/arg, pushing the real argument to the baseline.
+  Fixed by skipping ignorable leading whitespace in `_parse_argument!`. `x^ 2`
+  now lays out identically to `x^2`.
+- `~`, `\ `, `\space`, `\nobreakspace` were dropped entirely in math mode (and
+  `\ ` inside `\text{}` too). KaTeX renders them as the U+00A0 glyph = TeX
+  `fontdimen2` interword space. Now they emit `space_node(_NORMAL_SPACE_EM)`
+  with `_NORMAL_SPACE_EM = 6/18` em (= 1/3 em). `\ `/`\space`/`\nobreakspace`
+  added to `_SPACE_WIDTHS`; `~` (a Space token, value "~") handled via new
+  `_is_ignorable_space` helper so the four math space-skipping loops skip
+  ordinary whitespace but let `~` reach `_parse_primary!`.
+- Confirmed already-correct + consistent (added tests): math ignores
+  leading/trailing/repeated ordinary whitespace and blank lines; `\text{}`
+  collapses runs and preserves internal/leading/trailing spaces like document
+  `{…}` groups.
+- No snapshot churn — no existing snapshot/stress input used `~`/`\ `/`x^ 2`.
+- Tests: +19 (`test_parser.jl` "Math-mode whitespace conventions"); 1269→1288.
+- Docs: CHANGELOG (Changed: explicit spaces; Fixed: `x^ 2`/arg space),
+  future.md item marked done, AGENTS.md whitespace note extended to math mode.
+
+## 2026-06-23T23:33+00:00 Non-breaking space (~) consistency in document mode
+
+- Follow-up to the math-mode whitespace pass: checked whether `~` is handled
+  correctly in document text mode too. It rendered as a space for common cases
+  (`Fig.~3` → "Fig. 3") but was treated as ordinary trimmable/collapsible
+  whitespace, so a `~` at a line/paragraph boundary was dropped (`~x` → "x",
+  `x~` → "x"). Inconsistent with math mode, where `~` is now significant.
+- Fix: added `pending_nbsp` to `_DocBuilder`. The Space branch flags a `~` token
+  as a non-breaking pending space; `_commit_space!` emits it even at a line start
+  (ordinary leading space is suppressed), and `_end_line!` commits a trailing
+  pending nbsp before flushing so it survives. A run still collapses to a single
+  space. Now `~x`→" x", `x~`→"x ", `a~b`/`a ~ b`/`Fig.~3`→single space, and `~`
+  survives an explicit `\\` break.
+- Note: the document layer does no soft line-wrapping yet (lines break only on
+  `\\` and blank-line paragraph breaks), so the *non-breaking* property has no
+  visible effect on wrapping today — this fix is about `~` never vanishing and
+  being consistent with math mode.
+- Tests: +8 in test_text.jl; 1288→1296. Docs: CHANGELOG + AGENTS.md updated.

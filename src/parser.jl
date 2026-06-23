@@ -56,6 +56,12 @@ end
 # Look ahead `n` tokens without consuming; clamps to the EOF sentinel.
 @inline _peek(p::_Parser, n::Int = 1) = p.tokens[min(p.pos + n, lastindex(p.tokens))]
 
+# A Space token the math parser may skip: ordinary whitespace (space/tab/
+# newline runs), which is insignificant in math mode.  The non-breaking space
+# `~` is also lexed as a Space token but is significant, so it is excluded here
+# and instead emitted as a normal interword space by `_parse_primary!`.
+@inline _is_ignorable_space(tok::Token) = tok.kind === TokenKind.Space && tok.value != "~"
+
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
 function _parse_delim_name!(p::_Parser)::String
@@ -72,7 +78,7 @@ function _parse_delimited_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
         k = _current(p).kind
-        k === TokenKind.Space && (_advance!(p); continue)
+        _is_ignorable_space(_current(p)) && (_advance!(p); continue)
         (k === TokenKind.EOF || k === TokenKind.RBrace) && break
         k === TokenKind.Command && _current(p).value == "\\right" && break
         if k === TokenKind.Command && _current(p).value == "\\middle"
@@ -91,6 +97,11 @@ end
 # unwrapped.  This differs from _parse_group! which preserves the NodeKind.Group
 # wrapper for explicit braces that appear in a sequence.
 function _parse_argument!(p::_Parser)::Node
+    # Ignorable whitespace before an argument is skipped, so `x^ 2` and `\frac 1 2`
+    # bind to the following token rather than capturing the space.
+    while _is_ignorable_space(_current(p))
+        _advance!(p)
+    end
     if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_sequence_children!(p)
@@ -117,7 +128,7 @@ function _parse_sequence_children!(p::_Parser)::Vector{Node}
     while true
         k = _current(p).kind
         (k === TokenKind.EOF || k === TokenKind.RBrace) && break
-        k === TokenKind.Space && (_advance!(p); continue)
+        _is_ignorable_space(_current(p)) && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return children
@@ -155,8 +166,9 @@ end
 
 # Parse a single "atom": a primary optionally decorated with ^ and/or _.
 function _parse_atom!(p::_Parser)::Node
-    # Space tokens in math mode are ignored at the atom level.
-    while _current(p).kind === TokenKind.Space
+    # Ordinary whitespace is ignored at the atom level; `~` falls through to
+    # _parse_primary! and becomes a normal interword space.
+    while _is_ignorable_space(_current(p))
         _advance!(p)
     end
 
@@ -216,7 +228,9 @@ function _parse_primary!(p::_Parser)::Node
 
     elseif tok.kind === TokenKind.Space
         _advance!(p)
-        return space_node(0.0)   # ~ and explicit spaces are zero-width in math
+        # `~` is a non-breaking interword space; ordinary whitespace reaching
+        # here (e.g. an empty script argument) contributes nothing.
+        return space_node(tok.value == "~" ? _NORMAL_SPACE_EM : 0.0)
 
     elseif tok.kind === TokenKind.EOF
         # Do not advance past the sentinel — leave it in place so every caller
@@ -522,7 +536,7 @@ function _parse_math_until!(p::_Parser, isstop)::Node
     while true
         tok = _current(p)
         (tok.kind === TokenKind.EOF || isstop(tok)) && break
-        tok.kind === TokenKind.Space && (_advance!(p); continue)
+        _is_ignorable_space(tok) && (_advance!(p); continue)
         push!(children, _parse_atom!(p))
     end
     return Node(NodeKind.Sequence, children)

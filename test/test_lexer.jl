@@ -135,4 +135,44 @@
         @test [t.value for t in char_toks] == ["α", "β"]
     end
 
+    @testset "Comment: line ending in % joins next line with no token" begin
+        # `%` discards the rest of the line, the newline, and the next line's
+        # leading indent — the classic whitespace-suppression idiom.
+        toks = tokenize("foo%comment\n  bar")
+        vals = [t.value for t in toks if t.kind === TokenKind.Char]
+        @test vals == ["f", "o", "o", "b", "a", "r"]
+        @test all(t.kind !== TokenKind.Space for t in toks)
+    end
+
+    @testset "Comment: space before % survives" begin
+        toks = tokenize("foo %c\nbar")
+        kinds = [t.kind for t in toks if t.kind !== TokenKind.EOF]
+        # f o o <space> b a r — the comment removes only the newline + indent.
+        @test count(==(TokenKind.Space), kinds) == 1
+        @test [t.value for t in toks if t.kind === TokenKind.Char] ==
+            ["f", "o", "o", "b", "a", "r"]
+    end
+
+    @testset "Comment before a blank line keeps the paragraph break" begin
+        # The newline(s) must survive so the document parser sees a blank line.
+        toks = tokenize("a%\n\nb")
+        spaces = [t for t in toks if t.kind === TokenKind.Space]
+        @test length(spaces) == 1
+        @test occursin("\n\n", spaces[1].value)
+    end
+
+    @testset "Comment running to end of input emits no token" begin
+        toks = tokenize("end%comment to EOF")
+        @test [t.value for t in toks if t.kind === TokenKind.Char] ==
+            ["e", "n", "d"]
+        @test all(t.kind !== TokenKind.Space for t in toks)
+    end
+
+    @testset "Escaped percent is a command, not a comment" begin
+        toks = tokenize("a\\%b")
+        @test toks[1].kind === TokenKind.Char && toks[1].value == "a"
+        @test toks[2].kind === TokenKind.Command && toks[2].value == "\\%"
+        @test toks[3].kind === TokenKind.Char && toks[3].value == "b"
+    end
+
 end

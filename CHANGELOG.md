@@ -13,8 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Starred display environments (`align*`, `gather*`, `equation*`, …) are now
   accepted as aliases of their unstarred forms (equation numbering is not
   rendered, so the star has no visual effect).
+- LaTeX-style `%` line comments are now recognised by the lexer in both math and
+  document text modes. A `%` discards the rest of the line; a line ending in `%`
+  also drops the following line break and the next line's leading indent (the
+  usual whitespace-suppression idiom), while a comment immediately before a blank
+  line still leaves the paragraph break intact. Escaped `\%` is unaffected.
+
+### Changed
+- Document text mode now trims whitespace at line and block boundaries to match
+  LaTeX conventions: leading whitespace at the start of a paragraph or line and
+  trailing whitespace before a display block or line break are dropped, instead
+  of surviving as stray spaces on the adjacent text span. Single newlines still
+  collapse to one inter-word space, indentation on continuation lines still
+  collapses, blank lines still start a new paragraph, and spaces inside `{…}`
+  groups and around inline math remain significant.
+- `~`, `\ ` (control space), `\space`, and `\nobreakspace` now produce a normal
+  interword space (1/3 em, matching TeX's `fontdimen2`) in math mode and inside
+  `\text{…}`. Previously they were dropped, producing no space at all.
+- In document text mode `~` is now a significant non-breaking space: it renders
+  as a single inter-word space and is no longer dropped when it falls at the
+  start or end of a line or paragraph (it still collapses with adjacent ordinary
+  whitespace into one space). Soft line-breaking is not yet implemented, so the
+  non-breaking property has no visible effect on wrapping today.
 
 ### Fixed
+- A space immediately after `^` or `_` (e.g. `x^ 2`) and inside a command
+  argument (e.g. `\frac 1 2`) is now ignored, so the following token becomes the
+  script/argument. Previously the space was captured as an empty script and the
+  intended argument was typeset separately on the baseline.
 - Fractions, scripts, and large operators inside display alignment environments
   (`align`, `aligned`, `gather`, `gathered`, `split`, `equation`) now render at
   full display size. Previously these cells were typeset in Text style — like

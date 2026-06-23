@@ -65,6 +65,33 @@ mutable struct _DocBuilder
     cur_spans::Vector{TextSpan}
     buf::IOBuffer
     attrs::TextAttrs
+    pending_space::Bool    # a top-level inter-word space awaiting content
+    pending_nbsp::Bool     # the pending space contains a `~` (non-breaking)
+    at_line_start::Bool    # suppress leading whitespace at this position
+end
+
+# Commit a deferred top-level inter-word space (honouring leading-whitespace
+# suppression) before writing content.  Call at the start of every top-level
+# content-producing branch.  Inside a group `pending_space` is already false, so
+# this is a harmless no-op there.  A non-breaking (`~`) space is significant and
+# is emitted even at a line start, where ordinary whitespace would be dropped.
+function _commit_space!(b::_DocBuilder)
+    if b.pending_space
+        (b.pending_nbsp || !b.at_line_start) && write(b.buf, " ")
+        b.pending_space = false
+        b.pending_nbsp = false
+    end
+    b.at_line_start = false
+    return
+end
+
+# A line / block boundary: drop any trailing deferred space and suppress the
+# leading whitespace of whatever comes next.
+function _begin_line_boundary!(b::_DocBuilder)
+    b.pending_space = false
+    b.pending_nbsp = false
+    b.at_line_start = true
+    return
 end
 
 function _flush_span!(b::_DocBuilder)
@@ -81,9 +108,12 @@ function _flush_text_run!(b::_DocBuilder)
 end
 
 function _end_line!(b::_DocBuilder)
+    b.pending_nbsp && _commit_space!(b)   # keep a trailing non-breaking space
     _flush_text_run!(b)
     push!(b.cur_lines, Line(copy(b.cur_runs)))
-    return empty!(b.cur_runs)
+    empty!(b.cur_runs)
+    _begin_line_boundary!(b)
+    return
 end
 
 function _end_paragraph!(b::_DocBuilder)
@@ -171,16 +201,26 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
         in_group && tok.kind === TokenKind.RBrace && break
 
         if tok.kind === TokenKind.Char
+            in_group || _commit_space!(builder)
             write(builder.buf, tok.value)
             _advance!(p)
 
         elseif tok.kind === TokenKind.Space
-            if !in_group && occursin(_BLANK_LINE_RE, tok.value)
+            if in_group
+                write(builder.buf, " ")              # significant inside {…}
+            elseif tok.value == "~"
+                # Non-breaking space: a significant inter-word space that must not
+                # be dropped at a line/block boundary.  It still collapses with
+                # adjacent ordinary whitespace into a single space.
+                builder.pending_space = true
+                builder.pending_nbsp = true
+            elseif occursin(_BLANK_LINE_RE, tok.value)
                 _advance!(p)
                 _push_paragraph_break!(builder)
                 continue
+            else
+                builder.pending_space = true         # defer; commit when content follows
             end
-            write(builder.buf, " ")
             _advance!(p)
 
         elseif tok.kind === TokenKind.MathShift
@@ -194,6 +234,7 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
                 push!(builder.blocks, DisplayBlock(node, :displaymath))
             else
                 # $…$ inline math.
+                in_group || _commit_space!(builder)
                 _advance!(p)   # consume opening $
                 _flush_text_run!(builder)
                 node = _parse_math_until_shift!(p)
@@ -211,6 +252,7 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\("
             # \(…\) inline math.
+            in_group || _commit_space!(builder)
             _advance!(p)   # consume \(
             _flush_text_run!(builder)
             node = _parse_math_until_command!(p, "\\)")
@@ -229,26 +271,31 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
                 node = parse_environment!(p, env_name)
                 push!(builder.blocks, DisplayBlock(node, Symbol(env_name)))
             else
+                in_group || _commit_space!(builder)
                 _flush_text_run!(builder)
                 node = parse_environment!(p, env_name)
                 push!(builder.cur_runs, MathRun(node, Text))
             end
 
         elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_FONT_SWITCH_CMDS
+            in_group || _commit_space!(builder)
             cmd = _advance!(p).value
             _parse_text_group!(p, builder, _apply_font_switch(cmd, builder.attrs))
 
         elseif tok.kind === TokenKind.Command && (tok.value == "\\text" || tok.value == "\\mbox")
+            in_group || _commit_space!(builder)
             _advance!(p)
             _parse_text_group!(p, builder, builder.attrs)   # no attr change
 
         elseif tok.kind === TokenKind.LBrace
+            in_group || _commit_space!(builder)
             _parse_text_group!(p, builder, builder.attrs)   # bare grouping
 
         elseif tok.kind === TokenKind.Sup || tok.kind === TokenKind.Sub ||
                 tok.kind === TokenKind.Ampersand || tok.kind === TokenKind.RBrace
             # These have no scripting/alignment meaning in text mode; render the
             # literal character (^, _, &, }) instead of silently dropping it.
+            in_group || _commit_space!(builder)
             write(builder.buf, tok.value)
             _advance!(p)
 
@@ -272,7 +319,7 @@ delimiters. Line breaks within a paragraph are created with `\\\\`.
 """
 function parse_document(input::AbstractString)::Document
     p = _Parser(tokenize(input), 1)
-    builder = _DocBuilder(Block[], Line[], Run[], TextSpan[], IOBuffer(), TextAttrs())
+    builder = _DocBuilder(Block[], Line[], Run[], TextSpan[], IOBuffer(), TextAttrs(), false, false, true)
     _parse_text_body!(p, builder, false)
     _end_paragraph!(builder)
     while !isempty(builder.blocks) && builder.blocks[end] isa ParagraphBreakBlock

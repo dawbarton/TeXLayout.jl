@@ -61,6 +61,29 @@ function tokenize(input::AbstractString)::Vector{Token}
             push!(tokens, Token(TokenKind.Ampersand, "&", i));  i = next
         elseif c == '~'
             push!(tokens, Token(TokenKind.Space, "~", i));  i = next
+        elseif c == '%'
+            # LaTeX comment: discard the rest of the line.  TeX also removes the
+            # line's end-of-line character — so a line ending in `%` joins the
+            # next line with no intervening space (the usual whitespace-
+            # suppression idiom) — and the next line's leading spaces.  But if
+            # the following line is blank, the paragraph break must survive, so
+            # in that case the newline(s) are left for the normal whitespace
+            # collapser.  Escaped `\%` is lexed above as a Command and never
+            # reaches here.
+            eol = next
+            while eol <= n && s[eol] != '\n'
+                eol = nextind(s, eol)
+            end
+            if eol > n
+                i = eol   # comment runs to end of input
+            else
+                # Peek past the newline: is the next line blank (only spaces/tabs)?
+                m = nextind(s, eol)
+                while m <= n && (s[m] == ' ' || s[m] == '\t')
+                    m = nextind(s, m)
+                end
+                i = (m <= n && s[m] == '\n') ? eol : m   # keep break, else join lines
+            end
         elseif isspace(c)
             # Collapse the entire whitespace run into one TokenKind.Space token.
             # The parser decides whether spaces are significant (text mode) or not (math mode).
