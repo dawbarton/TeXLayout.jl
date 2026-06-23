@@ -37,10 +37,13 @@ artifacts/
 *.png
 *.svg
 *.pdf
-flowchart.md
 
 # Benchmark output
 benchmark/latest.toml
 
 # macOS AppleDouble resource fork files
 ._*
+
+# Stress test tooling
+stress_outputs/
+stress_test_reference*.tar
