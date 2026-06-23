@@ -355,6 +355,19 @@ at the end of that file.
   machinery and its column-separation model.  Cells after `&` do insert the
   ordinary atom needed for TeX-style spacing before leading relations such as
   `=`, but the environment is not a full amsmath alignment template.
+- **Display alignment environments use Display style for cells** — the
+  environments in `_DISPLAY_MATH_ENVS` (`align`, `aligned`, `split`, `gather`,
+  `gathered`, `equation`) typeset each cell in Display style, so fractions,
+  scripts, and large operators keep their full display size.  Genuine array
+  environments (`matrix`/`array`/`cases`) stay in Text style and `smallmatrix`
+  in script-scaled Text style, matching TeX.  Starred forms (`align*`, …) are
+  accepted as aliases via `_canonical_env_name` (a trailing `*` is stripped);
+  equation numbering is not rendered.
+- **`multline` not yet implemented** — it does not fit the grid/column model:
+  it has no `&` alignment points and needs per-row alignment (first line flush
+  left, last line flush right, middle lines centred) measured against the target
+  line width.  Adding it requires a width-aware layout path rather than the
+  matrix machinery; `split`/`gathered` were aliasable but `multline` is not.
 - **`\textsf` / `\texttt` mapped to `:regular` slot** — no dedicated sans-serif or
   monospace font is wired to those slot names in v1; they render identically to `\textrm`.
 - **Matrix vertical spacing helpers not yet implemented** — `\strut`,

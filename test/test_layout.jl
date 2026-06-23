@@ -1207,6 +1207,47 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test any(s < 0.9 for s in scales)
     end
 
+    @testset "Display alignment envs use Display style for cells" begin
+        # align/gather/split/gathered are display environments: a \frac keeps its
+        # full display size, unlike a matrix cell (which uses Text style).
+        for env in ("align", "aligned", "split", "gather", "gathered", "equation")
+            boxes = layout(
+                parse_latex("\\begin{$env}\\frac{1}{2}\\end{$env}"),
+                family, Display
+            )
+            scales = unique(round.(b.scale for b in find_glyphs(boxes); digits = 4))
+            @test all(s ≈ 1.0 for s in scales)   # no script-size shrink
+        end
+        # A genuine array environment must still shrink the fraction (Text style).
+        mat_scales = unique(
+            round.(
+                b.scale for b in find_glyphs(
+                        layout(parse_latex(raw"\begin{matrix}\frac{1}{2}\end{matrix}"), family, Display)
+                    );
+                digits = 4,
+            )
+        )
+        @test any(s < 0.9 for s in mat_scales)
+    end
+
+    @testset "Starred display envs alias the unstarred form" begin
+        # Locate the first NodeKind.Matrix node in a tree (depth-first), or nothing.
+        function find_matrix(n)
+            n.kind == NodeKind.Matrix && return n
+            for c in n.children
+                m = find_matrix(c)
+                m === nothing || return m
+            end
+            return nothing
+        end
+        for env in ("align", "gather", "equation")
+            mu = find_matrix(parse_latex("\\begin{$env} a \\end{$env}"))
+            ms = find_matrix(parse_latex("\\begin{$env*} a \\end{$env*}"))
+            @test mu !== nothing && ms !== nothing
+            @test mu.value == ms.value   # identical encoded matrix payload
+        end
+    end
+
     @testset "array{lcr}: per-column alignment" begin
         # Left col should have its cell flush-left; right col flush-right; centre col centred.
         # Use wide characters so column widths differ enough to detect misalignment.

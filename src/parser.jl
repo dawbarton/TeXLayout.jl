@@ -247,6 +247,11 @@ function _read_brace_word!(p::_Parser)::String
     return String(buf)
 end
 
+# Strip a trailing '*' so starred display environments (align*, gather*, …)
+# share the layout of their unstarred form.  Equation numbering is not rendered,
+# so the star has no visual effect here.
+_canonical_env_name(name::AbstractString) = endswith(name, "*") ? String(chop(name)) : String(name)
+
 # Parse the body of a matrix environment up to the matching \end{env_name}.
 # Returns a NodeKind.Matrix node with encoded _MatrixPayload and a flat
 # row-major list of NodeKind.Group children (one per cell).
@@ -324,7 +329,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
         end
     end
 
-    if env_name ∈ ("align", "aligned")
+    if env_name ∈ ("align", "aligned", "split")
         for r in 1:nrow, c in 2:2:ncol
             idx = (r - 1) * ncol + c
             cell = cells[idx]
@@ -334,10 +339,10 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
 
     # Derive colspec from env alignment if not explicitly provided.
     if isempty(colspec)
-        if env_name ∈ ("align", "aligned")
+        if env_name ∈ ("align", "aligned", "split")
             # alternating right/left pairs across observed column count
             colspec = String(collect(Iterators.take(Iterators.cycle("rl"), ncol)))
-        elseif env_name == "gather"
+        elseif env_name ∈ ("gather", "gathered")
             colspec = repeat("c", ncol)
         else
             info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
@@ -484,7 +489,7 @@ function _parse_command!(p::_Parser)::Node
         return Node(NodeKind.HorizBrace, cmd, [body])
 
     elseif cmd == "\\begin"
-        env_name = _read_brace_word!(p)
+        env_name = _canonical_env_name(_read_brace_word!(p))
         if haskey(_MATRIX_ENVS, env_name)
             # Environments in _COLSPEC_ENVS require an explicit column-spec argument.
             colspec = env_name ∈ _COLSPEC_ENVS ? _read_brace_word!(p) : ""
@@ -576,6 +581,7 @@ positioned immediately after the `{env_name}` token that follows `\\begin`.
 Called by the document parser after it has consumed `\\begin{env_name}`.
 """
 function parse_environment!(p::_Parser, env_name::String)::Node
+    env_name = _canonical_env_name(env_name)
     if haskey(_MATRIX_ENVS, env_name)
         colspec = env_name ∈ _COLSPEC_ENVS ? _read_brace_word!(p) : ""
         return _parse_matrix_body!(p, env_name, colspec)

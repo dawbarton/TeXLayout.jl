@@ -56,8 +56,15 @@ function _layout_matrix!(
     upm = ctx.upm
     mc = ctx.mc
 
-    # Cells are typeset in Text style (following TeX's rule for array environments).
-    cell_style = is_cramped(style) ? CrampedText : Text
+    # Display alignment environments (align/gather/split/…) typeset each cell in
+    # Display style, so fractions, scripts and big operators keep their full
+    # display size.  Genuine array environments (matrix/array/cases) typeset
+    # cells in Text style, following TeX's rule for array entries.
+    cell_style = if env_name ∈ _DISPLAY_MATH_ENVS
+        is_cramped(style) ? CrampedDisplay : Display
+    else
+        is_cramped(style) ? CrampedText : Text
+    end
 
     # Scale factor for this environment (smallmatrix uses 0.9).
     cell_scale = scale * info.scale
@@ -107,7 +114,7 @@ function _layout_matrix!(
     # so the spacing around a leading relation comes solely from the math-list
     # relation atom (see the empty-group insertion in the parser). Space is only
     # added between successive pairs, and the grid carries no outer margin.
-    tight_pairs = env_name ∈ ("align", "aligned")
+    tight_pairs = env_name ∈ ("align", "aligned", "split")
     # Gap inserted to the left of column c (c = 2..ncol).
     col_gap(c) = tight_pairs && iseven(c) ? 0.0 : 2 * _MATRIX_COLSEP * cell_scale
     outer_margin = tight_pairs ? 0.0 : _MATRIX_COLSEP * cell_scale

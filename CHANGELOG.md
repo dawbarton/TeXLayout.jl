@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `split` and `gathered` math environments, laid out like `aligned` and `gather`
+  respectively.
+- Starred display environments (`align*`, `gather*`, `equation*`, …) are now
+  accepted as aliases of their unstarred forms (equation numbering is not
+  rendered, so the star has no visual effect).
+
+### Fixed
+- Fractions, scripts, and large operators inside display alignment environments
+  (`align`, `aligned`, `gather`, `gathered`, `split`, `equation`) now render at
+  full display size. Previously these cells were typeset in Text style — like
+  `matrix`/`array` cells — which incorrectly shrank fractions to script size.
+  Genuine array environments (`matrix`, `array`, `cases`, `smallmatrix`) continue
+  to use Text style, matching standard LaTeX.
+
 ## [v0.2.1] - 2026-06-22
 
 ### Added
