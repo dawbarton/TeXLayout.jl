@@ -110,6 +110,76 @@
         end
     end
 
+    @testset "GlyphID render primitive" begin
+        upm = TeXLayout._font_upm(FIXTURE_FONT_PATH)
+        g = GlyphID(
+            42, FIXTURE_FONT_PATH, TeXLayout.FontSlot.Regular, 'A',
+            500, 10, -20, -100, 480, 700,
+        )
+        lb = LayoutBox(g, 0.25, -0.1, 2.0)
+
+        @test g.glyph_id === UInt32(42)
+        @test g.font_path == FIXTURE_FONT_PATH
+        @test g.font_slot === TeXLayout.FontSlot.Regular
+
+        measured = TeXLayout.measure([lb], upm)
+        @test measured.width ≈ 0.25 + 500 / upm * 2.0
+        @test measured.ascent ≈ -0.1 + 700 / upm * 2.0
+        @test measured.descent ≈ -(-0.1 + -100 / upm * 2.0)
+    end
+
+    @testset "HarfBuzzShaper extension" begin
+        if Base.find_package("HarfBuzz_jll") === nothing
+            @info "Skipping HarfBuzzShaper tests; HarfBuzz_jll is not in this environment"
+        else
+            @eval using HarfBuzz_jll
+
+            shaper = TeXLayout.HarfBuzzShaper()
+            full_family = font_family(:new_cm)
+            span = TeXLayout.TextSpan(
+                "office",
+                TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0),
+            )
+            box = TeXLayout.shape_span(shaper, span, full_family, 1.0)
+
+            @test box isa TeXLayout.TeXBox
+            @test box.width > 0.0
+            @test box.ascent > 0.0
+            @test all(b.element isa GlyphID for b in box.boxes)
+            @test all(b.element.font_path == full_family.regular for b in box.boxes)
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in box.boxes)
+
+            metric_box = TeXLayout.shape_span(TeXLayout.MetricShaper(), span, full_family, 1.0)
+            @test all(b.element isa Glyph for b in metric_box.boxes)
+
+            math_default = TeXLayout.layout(
+                parse_latex(raw"x+\text{office}"),
+                full_family,
+                TeXLayout.Text,
+            )
+            @test any(b.element isa Glyph for b in math_default)
+            @test !any(b.element isa GlyphID for b in math_default)
+
+            math_hb = TeXLayout.layout(
+                parse_latex(raw"x+\text{office}"),
+                full_family,
+                TeXLayout.Text;
+                shaper = shaper,
+            )
+            text_glyphs = filter(b -> b.element isa GlyphID, math_hb)
+            @test !isempty(text_glyphs)
+            @test all(b.element.font_path == full_family.regular for b in text_glyphs)
+
+            double = TeXLayout.shape_span(
+                shaper,
+                TeXLayout.TextSpan("office", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 2.0)),
+                full_family,
+                1.0,
+            )
+            @test double.width ≈ 2 * box.width
+        end
+    end
+
     # ── Parser additions ──────────────────────────────────────────────────────
 
     @testset "Parser additions" begin

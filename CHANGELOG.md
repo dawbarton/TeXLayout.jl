@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `split` and `gathered` math environments, laid out like `aligned` and `gather`
+  respectively.
+- Starred display environments (`align*`, `gather*`, `equation*`, …) are now
+  accepted as aliases of their unstarred forms (equation numbering is not
+  rendered, so the star has no visual effect).
+
+### Fixed
+- Fractions, scripts, and large operators inside display alignment environments
+  (`align`, `aligned`, `gather`, `gathered`, `split`, `equation`) now render at
+  full display size. Previously these cells were typeset in Text style — like
+  `matrix`/`array` cells — which incorrectly shrank fractions to script size.
+  Genuine array environments (`matrix`, `array`, `cases`, `smallmatrix`) continue
+  to use Text style, matching standard LaTeX.
+
+## [v0.2.1] - 2026-06-22
+
+### Added
+- `GlyphID` render primitive for glyphs that are already resolved to an exact
+  font path and glyph ID, used by shaped text and supported by the Makie adapter.
+- Optional `HarfBuzzShaper` extension backed by `HarfBuzz_jll`; users can opt in
+  with `shaper = HarfBuzzShaper()` for `layout_document`, `layout`, or
+  `generate_tex_elements` after loading `HarfBuzz_jll`.
+- HarfBuzz coverage in unit tests and a small HarfBuzz section in the text stress
+  renderer, while leaving `MetricShaper` as the default stress-test workload.
+
+### Changed
+- Math `\text{…}` / `\mbox{…}` fragments can now use the active text shaper when
+  a non-default shaper is passed; the default `MetricShaper` path preserves the
+  legacy per-character/`Space` output.
+- The MathTeXEngine/Makie extension now renders `GlyphID` values directly by glyph
+  ID and exact font path instead of resolving through glyph names.
+
 ## [v0.2.0] - 2026-06-22
 
 ### Added

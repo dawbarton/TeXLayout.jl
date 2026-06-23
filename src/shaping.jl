@@ -1,8 +1,8 @@
 # Text shaping: interface + metrics-only implementation.
 #
 # The TextShaper interface is the seam that keeps HarfBuzz out of core.
-# A future ext/HarfBuzzExt.jl can define HarfBuzzShaper <: TextShaper and add
-# a shape_span method without touching any other file.
+# ext/HarfBuzzExt.jl adds the HarfBuzzShaper shape_span method when HarfBuzz_jll
+# is loaded.
 
 """
 Abstract interface for shaping text spans in document layout.
@@ -19,7 +19,7 @@ Shape one uniform-attribute text span into a measured layout fragment.
 
 Contract (must be honoured by every shaper, including future extensions):
   - returned boxes are in em units, baseline at y = 0, first glyph at x = 0;
-  - each emitted Glyph carries the `TextSpan`'s resolved text font slot;
+  - each emitted glyph element carries the `TextSpan`'s resolved text font slot;
   - width = total advance, ascent/descent = max ink extents (≥ 0);
   - missing glyphs are skipped (advance = 0).
 """
@@ -33,6 +33,14 @@ metrics. It does not perform HarfBuzz shaping, ligature substitution, kerning, o
 script-specific text layout.
 """
 struct MetricShaper <: TextShaper end
+
+"""
+HarfBuzz-backed `TextShaper`.
+
+The implementation lives in the optional `HarfBuzzExt` package extension and is
+loaded when `HarfBuzz_jll` is available in the same Julia session.
+"""
+struct HarfBuzzShaper <: TextShaper end
 
 function shape_span(::MetricShaper, span, family::FontFamily, base_scale::Float64)
     slot = span.attrs.slot

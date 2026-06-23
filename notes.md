@@ -1020,3 +1020,38 @@
 - Added public/developer limitations for future `\textsf`/`\texttt` slots,
   matrix vertical spacing helpers, and whitespace convention review.
 - Verified the docs build with `julia --project=docs docs/make.jl`.
+
+## 2026-06-22T16:56+00:00 HarfBuzz extension implementation and docs
+
+- Implemented optional `HarfBuzzShaper` support through `ext/HarfBuzzExt.jl`,
+  emitting `GlyphID` elements with exact font paths and final glyph IDs.
+- Kept `MetricShaper` as the default and independently testable path; document
+  layout and math `\text{}`/`\mbox{}` can opt into HarfBuzz with
+  `shaper = HarfBuzzShaper()` after loading `HarfBuzz_jll`.
+- Updated README, Documenter pages, `AGENTS.md`, `future.md`, and changelog
+  coverage for `GlyphID`, optional HarfBuzz shaping, Makie conversion, and stress
+  test behavior.
+
+## 2026-06-23T22:23+00:00 Display style for alignment environments + split/gathered/starred forms
+
+- **Problem**: `\frac` (and scripts, big ops) inside `align`/`gather`/etc. rendered
+  at Text-style (script) size, not full display size. Root cause: `_layout_matrix!`
+  forced `cell_style = Text` for *all* matrix-family environments (`matrix.jl:60`),
+  but the amsmath display-alignment environments set each line in display style.
+- **Fix (step 1+2 of the agreed plan)**:
+  - Added `_DISPLAY_MATH_ENVS` (parser_tables.jl) = {align, aligned, split, gather,
+    gathered, equation}. `_layout_matrix!` now uses Display/CrampedDisplay cells for
+    these, Text for genuine arrays (matrix/array/cases) — so fractions keep full size.
+  - Added `split` (≈ aligned) and `gathered` (≈ gather) as new envs in `_MATRIX_ENVS`
+    + parser colspec/ordinary-atom branches. `split` also joins the `tight_pairs` set.
+  - Starred forms (`align*`, `gather*`, …) now alias the unstarred via
+    `_canonical_env_name` (strips trailing `*`) applied at all three env read sites
+    (parser `\begin`, `parse_environment!`, document layer). Equation numbers aren't
+    rendered, so the star has no visual effect.
+  - document.jl `_DISPLAY_ENVS` now points at the shared `_DISPLAY_MATH_ENVS`.
+- **Tests**: +2 snapshot cases (align_fraction, gathered_script) lock the display
+  sizing; +2 layout testsets (display-env cell style; starred-alias payload equality).
+  Full suite 1244 pass. Runic-formatted.
+- **Deferred**: `multline` still a sentinel — does NOT fit the grid model (no `&`,
+  per-row L/center/R alignment measured against target line width). Needs a separate
+  width-aware path in compose.jl, scoped as future work.

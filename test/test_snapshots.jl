@@ -7,6 +7,10 @@ const SNAPSHOT_MATH_CASES = [
     ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "d9e0cafba1bfb7f18ec3a45d3e2d576b8b20639919ad8c41953afbf705633f8b"),
     ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "e5733c68ddfc5dd66a8ca3e69387c56e7d26062f05fe985cb889d1c8901828be"),
     ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "e1950914fa964ae4c7f30c182137d7750da18a2de46ed0be1aa5440b0828b075"),
+    # Display alignment environments typeset cells in Display style: fractions and
+    # scripts keep full display size (contrast with the text-sized matrix cells above).
+    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "aa578c377988691ecc2fa19c38bb2458c9b6805ddf58bc33016c4be598309a70"),
+    ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "f54bd6a7425b58b1e466221d5e924f33bb7844ff2bdcac07ca38a9b1cde4c4a2"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [

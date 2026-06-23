@@ -27,6 +27,40 @@ struct Glyph <: TeXElement
     x_min::Int; y_min::Int; x_max::Int; y_max::Int
 end
 
+"""
+A single glyph whose renderer-facing identity is already resolved to a glyph ID.
+
+`GlyphID` is useful for shaping backends that receive final glyph indices from a
+font engine (for example HarfBuzz).  Unlike [`Glyph`](@ref), it carries the exact
+font file that produced the glyph, so renderers do not need to repeat
+name-to-index or slot-fallback resolution.
+"""
+struct GlyphID <: TeXElement
+    glyph_id::UInt32
+    font_path::String
+    font_slot::FontSlot.T
+    represented_char::Char
+    advance_width::Int
+    left_side_bearing::Int
+    x_min::Int; y_min::Int; x_max::Int; y_max::Int
+end
+
+GlyphID(
+    glyph_id::Integer,
+    font_path::String,
+    font_slot::FontSlot.T,
+    represented_char::Char,
+    advance_width::Int,
+    left_side_bearing::Int,
+    x_min::Int,
+    y_min::Int,
+    x_max::Int,
+    y_max::Int,
+) = GlyphID(
+    UInt32(glyph_id), font_path, font_slot, represented_char,
+    advance_width, left_side_bearing, x_min, y_min, x_max, y_max,
+)
+
 """A horizontal rule (fraction bar, radical bar, overline, …)."""
 struct HRule <: TeXElement
     width::Float64      # em units
@@ -78,6 +112,7 @@ struct _LayoutCtx
     min_connector_overlap::Int
     mode::LayoutMode.T
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
+    text_shaper
 end
 
 # Return a copy of `ctx` with `font_variant` replaced.  Used by NodeKind.FontSwitch so
@@ -85,7 +120,7 @@ end
 @inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    ctx.mode, variant,
+    ctx.mode, variant, ctx.text_shaper,
 )
 
 # Propagate a font-size multiplier (from \large, \tiny, etc.) through a style
@@ -110,7 +145,7 @@ end
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    LayoutMode.Text, ctx.font_variant,
+    LayoutMode.Text, ctx.font_variant, ctx.text_shaper,
 )
 
 # Return the TeX atom class for a given AST node.
@@ -337,6 +372,8 @@ function _boxes_top(boxes::Vector{LayoutBox}, start::Int, stop::Int, upm::Float6
         el = b.element
         if el isa Glyph
             top = max(top, b.y + el.y_max / upm * b.scale)
+        elseif el isa GlyphID
+            top = max(top, b.y + el.y_max / _font_upm(el.font_path) * b.scale)
         elseif el isa HRule
             top = max(top, b.y + el.thickness)
         end
@@ -357,6 +394,8 @@ function _boxes_bottom(boxes::Vector{LayoutBox}, start::Int, stop::Int, upm::Flo
         el = b.element
         if el isa Glyph
             bot = min(bot, b.y + el.y_min / upm * b.scale)
+        elseif el isa GlyphID
+            bot = min(bot, b.y + el.y_min / _font_upm(el.font_path) * b.scale)
         elseif el isa HRule
             bot = min(bot, b.y)
         end
@@ -655,18 +694,23 @@ end
 # ── Public API ────────────────────────────────────────────────────────────────
 
 """
-    layout(node, family, style) -> Vector{LayoutBox}
+    layout(node, family, style; shaper = MetricShaper()) -> Vector{LayoutBox}
 
 Lay out `node` in the given style, using font metrics from `family`.
 Returns a flat list of positioned elements.
 """
-function layout(node::Node, family::FontFamily, style::TexStyle)::Vector{LayoutBox}
+function layout(
+        node::Node,
+        family::FontFamily,
+        style::TexStyle;
+        shaper = MetricShaper(),
+    )::Vector{LayoutBox}
     mt = load_math_table(family.math)
     ctx = _LayoutCtx(
         family, mt.constants, Float64(mt.upm), mt.vert_constructions,
         mt.horiz_constructions, mt.top_accent_attachments,
         mt.italic_corrections,
-        mt.min_connector_overlap, LayoutMode.Math, :default
+        mt.min_connector_overlap, LayoutMode.Math, :default, shaper
     )
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
@@ -685,7 +729,9 @@ Returns the same flat `(element, x, y, scale)` representation consumed by
 function generate_tex_elements(
         input::AbstractString,
         family::FontFamily = default_font_family(),
+        ;
+        shaper = MetricShaper(),
     )::Vector{LayoutBox}
     node = parse_latex(input)
-    return layout(node, family, Display)
+    return layout(node, family, Display; shaper)
 end

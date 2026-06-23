@@ -148,8 +148,20 @@ const _MATRIX_ENVS = Dict{String, _MatrixEnvInfo}(
     # Display-math environments (document layer treats these as DisplayBlocks).
     "align" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
     "aligned" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "split" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
     "gather" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "gathered" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
     "equation" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+)
+
+# Display alignment/math environments.  Their cells are typeset in Display style
+# (TeX/amsmath sets each line of these environments in display style), and the
+# document layer turns the whole environment into a free-standing DisplayBlock.
+# Contrast with matrix/array/cases, whose cells are typeset in Text style.
+const _DISPLAY_MATH_ENVS = Set{String}(
+    [
+        "align", "aligned", "split", "gather", "gathered", "equation",
+    ]
 )
 
 # Mapping from style-switch commands to the target TeX style name (Display/Text/Script/ScriptScript).

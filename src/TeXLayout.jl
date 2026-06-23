@@ -50,11 +50,11 @@ export TexStyle
 # Pipeline
 export parse_latex, layout
 # Layout output types
-export LayoutBox, TeXElement, Glyph, HRule, VRule, Space
+export LayoutBox, TeXElement, Glyph, GlyphID, HRule, VRule, Space
 # Makie integration
 export generate_tex_elements
 # Text-layer API (layout_document and its option/shaper types)
-export layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper
+export layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper, HarfBuzzShaper
 export default_layout_options, set_default_layout_options!
 
 end

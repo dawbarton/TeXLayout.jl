@@ -45,6 +45,7 @@ default_layout_options
 set_default_layout_options!
 TextShaper
 MetricShaper
+HarfBuzzShaper
 ```
 
 ## Font API
@@ -95,7 +96,7 @@ LayoutBox
 ### Element union
 
 `TeXElement` is the abstract base type for all renderable primitives.  Dispatch on
-the four concrete subtypes below to handle each kind of element.
+the concrete subtypes below to handle each kind of element.
 
 ```@docs
 TeXElement
@@ -105,6 +106,7 @@ TeXElement
 
 ```@docs
 Glyph
+GlyphID
 HRule
 VRule
 Space

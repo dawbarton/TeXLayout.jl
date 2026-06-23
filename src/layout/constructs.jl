@@ -401,10 +401,50 @@ function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
     return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 end
 
+function _text_node_contents(node)::Union{String, Nothing}
+    io = IOBuffer()
+
+    function append_text!(n)::Bool
+        if n.kind === NodeKind.Char
+            write(io, n.value)
+        elseif n.kind === NodeKind.Space
+            write(io, " ")
+        elseif n.kind === NodeKind.Sequence || n.kind === NodeKind.Group
+            for child in n.children
+                append_text!(child) || return false
+            end
+        elseif n.kind === NodeKind.Text && !isempty(n.children)
+            append_text!(n.children[1]) || return false
+        else
+            return false
+        end
+        return true
+    end
+
+    append_text!(node) || return nothing
+    return String(take!(io))
+end
+
+function _emit_texbox!(boxes::Vector{LayoutBox}, box, x0::Float64, y0::Float64)
+    for b in box.boxes
+        push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
+    end
+    return nothing
+end
+
 function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
-    # Render the body in text mode: upright (regular-font) glyphs, no math-italic
-    # remapping, no inter-atom spacing (guarded in _layout_children! by mode check).
     isempty(node.children) && return 0.0
+
+    text = ctx.text_shaper isa MetricShaper ? nothing : _text_node_contents(node.children[1])
+    if text !== nothing
+        slot = ctx.family.regular === nothing ? FontSlot.Math : FontSlot.Regular
+        shaped = shape_span(ctx.text_shaper, TextSpan(text, TextAttrs(slot, 1.0)), ctx.family, scale)
+        _emit_texbox!(boxes, shaped, x0, y0)
+        return shaped.width
+    end
+
+    # Default MetricShaper and unusual content inside \text{...} recurse in text
+    # mode as before, preserving Space elements and lenient command handling.
     return _layout_node!(node.children[1], _with_text_mode(ctx), style, x0, y0, scale, boxes)
 end
 
