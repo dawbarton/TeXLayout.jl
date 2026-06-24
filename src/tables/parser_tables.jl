@@ -1,5 +1,11 @@
 # Parser command and environment tables.
 
+# Normal interword space.  TeX's fontdimen2 (~3.333 pt at 10 pt) is 1/3 em,
+# i.e. 6 mu in the 18-mu-per-em convention used throughout this table.  This is
+# the width KaTeX renders for the U+00A0 glyph produced by `~`, `\ `, `\space`,
+# and `\nobreakspace`.
+const _NORMAL_SPACE_EM = 6 / 18
+
 # Explicit horizontal spacing commands mapped to their width in em units.
 # Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
 const _SPACE_WIDTHS = Dict{String, Float64}(
@@ -16,6 +22,9 @@ const _SPACE_WIDTHS = Dict{String, Float64}(
     "\\enspace" => 0.5,
     "\\quad" => 1.0,
     "\\qquad" => 2.0,
+    "\\ " => _NORMAL_SPACE_EM,   # control space
+    "\\space" => _NORMAL_SPACE_EM,
+    "\\nobreakspace" => _NORMAL_SPACE_EM,
 )
 
 # Mapping from delimiter token text to OpenType PostScript glyph name.

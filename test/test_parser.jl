@@ -643,4 +643,59 @@
         @test node.value == "\\xleftarrow"
     end
 
+    @testset "Math-mode whitespace conventions" begin
+        @testset "Leading, trailing, and repeated whitespace is ignored" begin
+            tree = parse_latex("  x  +  y  ")
+            @test [c.kind for c in tree.children] ==
+                [NodeKind.Char, NodeKind.Char, NodeKind.Char]
+            @test [c.value for c in tree.children] == ["x", "+", "y"]
+        end
+
+        @testset "A blank line is treated as ordinary (ignored) whitespace" begin
+            tree = parse_latex("x\n\ny")
+            @test [c.value for c in tree.children] == ["x", "y"]
+        end
+
+        @testset "Space after ^ is ignored: x^ 2 binds 2 as the script" begin
+            tree = parse_latex("x^ 2")
+            @test length(tree.children) == 1
+            sup = tree.children[1]
+            @test sup.kind === NodeKind.Superscript
+            @test sup.children[2].kind === NodeKind.Char
+            @test sup.children[2].value == "2"
+        end
+
+        @testset "Space in a command argument is ignored: \\frac 1 2" begin
+            tree = parse_latex("\\frac 1 2")
+            frac = tree.children[1]
+            @test frac.kind === NodeKind.Frac
+            @test frac.children[1].value == "1"
+            @test frac.children[2].value == "2"
+        end
+
+        @testset "~ is a non-breaking interword space, not ignorable" begin
+            tree = parse_latex("a~b")
+            @test [c.kind for c in tree.children] ==
+                [NodeKind.Char, NodeKind.Space, NodeKind.Char]
+            @test tree.children[2].width ≈ TeXLayout._NORMAL_SPACE_EM
+        end
+
+        @testset "Control space \\ , \\space, \\nobreakspace are normal interword spaces" begin
+            for s in ("a\\ b", "a\\nobreakspace b", "a\\space b")
+                tree = parse_latex(s)
+                spaces = filter(c -> c.kind === NodeKind.Space, tree.children)
+                @test length(spaces) == 1
+                @test spaces[1].width ≈ TeXLayout._NORMAL_SPACE_EM
+            end
+        end
+
+        @testset "~ produces a space between adjacent \\text{} groups" begin
+            tree = parse_latex("\\text{x}~\\text{y}")
+            @test any(
+                c -> c.kind === NodeKind.Space && c.width ≈ TeXLayout._NORMAL_SPACE_EM,
+                tree.children,
+            )
+        end
+    end
+
 end

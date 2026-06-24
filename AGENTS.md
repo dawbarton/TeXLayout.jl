@@ -375,9 +375,29 @@ at the end of that file.
   such as `\\[0.2em]` are future work.  The parser currently recognises and skips
   bracketed row-spacing arguments in matrix bodies, but layout does not apply
   them.  See `future.md` for the current focused backlog.
-- **Whitespace convention review pending** — leading, trailing, and repeated
-  whitespace handling in math and document text modes should be reviewed against
-  LaTeX conventions before changing parser behavior.  See `future.md`.
+- **Whitespace conventions** — document text mode follows LaTeX: single newlines
+  collapse to one space, continuation-line indentation collapses, blank lines
+  start a new paragraph, and leading/trailing whitespace at line and block
+  boundaries is trimmed (a deferred-space model in `document.jl`:
+  `pending_space`/`at_line_start` on `_DocBuilder`).  Spaces inside `{…}` groups
+  and around inline math stay significant.  `%` line comments are handled in the
+  lexer: a `%` discards to end of line and, when the line ends in `%`, also drops
+  the newline and the next line's leading indent, unless the following line is
+  blank (the paragraph break is preserved).  Escaped `\%` is a literal.
+  Math mode (`parse_latex`) ignores leading, trailing, and repeated ordinary
+  whitespace, including a space after `^`/`_` or before a command argument
+  (`x^ 2`, `\frac 1 2`).  The explicit interword spaces `~`, `\ `, `\space`, and
+  `\nobreakspace` are *not* ignorable: they emit a normal interword space
+  (`_NORMAL_SPACE_EM = 6/18` em, TeX's `fontdimen2`) in math mode and inside
+  `\text{…}`.  The parser distinguishes them from ignorable whitespace via
+  `_is_ignorable_space` (a `~` Space token is significant; a pure-whitespace
+  Space token is not).  `\text{…}` collapses whitespace runs and keeps internal
+  spaces, matching document `{…}` groups.  In document text mode `~` is a
+  significant non-breaking space (`_DocBuilder.pending_nbsp`): it renders as one
+  inter-word space, collapses with adjacent ordinary whitespace, and — unlike
+  ordinary whitespace — is never dropped at a line/paragraph boundary.  Soft
+  line-breaking is not implemented, so its non-breaking property is not yet
+  observable in wrapping.
 - **HarfBuzz shaper scope** — `ext/HarfBuzzExt.jl` implements optional HarfBuzz
   shaping for document text spans and, when explicitly requested, math
   `\text{}` / `\mbox{}` fragments.  It does not do full paragraph bidi reordering,

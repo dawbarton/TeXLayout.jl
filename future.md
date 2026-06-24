@@ -74,6 +74,11 @@ These notes record small layout features to implement later.
 
 ## Leading and trailing whitespace conventions
 
-- Review parser behavior for leading, trailing, and repeated whitespace in math
-  and document text modes, and decide whether it should match LaTeX conventions
-  more closely or preserve the current TeXLayout behavior.
+- Done. Document text mode trims leading/trailing whitespace at line/paragraph
+  and block boundaries (deferred-space model in `src/document.jl`); `%` line
+  comments are honoured by the lexer.
+- Done. Math mode ignores leading/trailing/repeated ordinary whitespace and a
+  space after `^`/`_` or before a command argument (`x^ 2`, `\frac 1 2`).  `~`,
+  `\ `, `\space`, and `\nobreakspace` produce a normal interword space (1/3 em)
+  in both math mode and `\text{…}`.  `\text{…}` collapses whitespace runs and
+  keeps internal spaces, matching document `{…}` groups and LaTeX.
