@@ -302,12 +302,16 @@ The following commands insert explicit horizontal space:
 | `\enspace` | 0.5 em |
 | `\quad` | 1 em |
 | `\qquad` | 2 em |
+| `~`, `\ ` (control space), `\space`, `\nobreakspace` | 6/18 em (normal interword space) |
 | `\kern{dim}` | explicit dimension (em or mu units) |
 | `\mkern{dim}` | explicit math kern (mu units) |
 | `\hskip{dim}` | same as `\kern` |
 | `\mskip{dim}` | same as `\mkern` |
 
-1 mu = 1/18 em.  Negative spaces are fully supported.
+1 mu = 1/18 em.  Negative spaces are fully supported.  Ordinary whitespace
+(spaces, tabs, newlines) is insignificant in math mode, including after `^`/`_` or
+a command name (`x^ 2` and `\frac 1 2` bind the following token).  A `%` starts a
+comment that runs to the end of the line.
 
 ## Document text mode
 
@@ -331,8 +335,12 @@ explicitly.  The following constructs are recognised only in this document conte
 | blank line | Paragraph break with `parskip` vertical space |
 
 Styling nests correctly: `\textbf` inside `\textit` produces bold-italic, and `\emph`
-flips italic on or off depending on the surrounding state.  Ordinary runs of
-whitespace are collapsed to a single inter-word space.
+flips italic on or off depending on the surrounding state.
+
+Whitespace follows LaTeX: runs collapse to a single inter-word space, a blank line
+starts a new paragraph, and leading/trailing whitespace at a line or block boundary
+is trimmed.  `~` is a non-breaking space that is never trimmed, and `%` starts a
+line comment (a line ending in `%` joins the next line with no space).
 
 See [`layout_document`](05-api.md) and the [Getting Started](01-getting-started.md#Mixed-text-and-math)
 walkthrough for usage and the available `LayoutOptions`.
@@ -359,6 +367,6 @@ Matrix vertical spacing helpers are still limited.  `\strut`,
 bracketed row-spacing arguments in matrix bodies, but the extra spacing is not
 applied.
 
-Leading, trailing, and repeated whitespace behavior in math and document text modes
-is also pending a review against LaTeX conventions before any compatibility changes
-are made.
+Soft line-breaking within a paragraph is not yet implemented, so the non-breaking
+property of `~` has no visible effect on wrapping in document mode (it still renders
+as a single, untrimmed space).
