@@ -489,12 +489,12 @@ const STRESS_SECTIONS = [
     "36. MATRIX EDGE CASES" => _D(
         [
             raw"\begin{matrix} a & b \\ c & d \end{matrix}",
-            raw"M = \frac{1}{2}\begin{matrix} 1 & -1 \\" *
-                raw" -1 & 1 \end{matrix}",
-            raw"\left(\begin{smallmatrix} a & b \\" *
-                raw" c & d \end{smallmatrix}\right)" *
-                raw" + \left(\begin{smallmatrix} e & f \\" *
-                raw" g & h \end{smallmatrix}\right)",
+            raw"M = \frac{1}{2}\begin{matrix} 1 & -1" *
+                raw" \\ -1 & 1 \end{matrix}",
+            raw"\left(\begin{smallmatrix} a & b" *
+                raw" \\ c & d \end{smallmatrix}\right)" *
+                raw" + \left(\begin{smallmatrix} e & f" *
+                raw" \\ g & h \end{smallmatrix}\right)",
         ]
     ),
 
