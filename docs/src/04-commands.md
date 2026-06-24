@@ -221,6 +221,40 @@ The `array` environment takes a mandatory column-spec argument:
 Each letter in the spec is `l` (left-aligned), `c` (centred), or `r` (right-aligned).
 `|` inserts a single vertical rule between columns; `||` inserts a double rule.
 
+### Alignment and display-math environments
+
+The amsmath alignment and display environments are also recognised.  They parse
+like the matrix family — cells separated by `&`, rows terminated by `\\` — and in a
+[document](#Document-text-mode) they become free-standing, centred display blocks.
+
+| Environment | Layout |
+|:------------|:-------|
+| `align`, `aligned` | Columns alternate right/left around each `&` alignment point, with no gap inside a pair |
+| `split` | Like `aligned` — a single alignment point |
+| `gather`, `gathered` | Each row centred; no `&` alignment |
+| `equation` | A single centred row |
+
+Unlike `matrix` / `array` / `cases`, whose cells are set in **Text** style, the cells
+of these environments are set in **Display** style, so fractions, scripts, and large
+operators keep their full display size — matching amsmath.  At each `&` the engine
+also inserts the empty ordinary atom TeX uses for relation spacing, so a leading
+relation such as `=` is spaced correctly.
+
+```latex
+\begin{align}
+  (a+b)^2 &= a^2 + 2ab + b^2 \\
+          &= a^2 + b^2 + 2ab
+\end{align}
+```
+
+Starred forms (`align*`, `gather*`, `equation*`, …) are accepted as aliases of their
+unstarred environments; equation numbering is not rendered, so the star has no visual
+effect.
+
+`multline` is **not** yet supported: it needs per-row alignment (first line flush
+left, last flush right) measured against a target line width rather than the shared
+column grid used here.
+
 ## Text mode
 
 `\text{…}`, `\mbox{…}` — switch to upright (regular-font) text rendering for the
@@ -330,7 +364,7 @@ explicitly.  The following constructs are recognised only in this document conte
 | `\text{…}`, `\mbox{…}` | Grouping scope that inherits the current text attributes |
 | `$…$`, `\(…\)` | Inline math, laid out in `Text` style on the current line |
 | `$$…$$`, `\[…\]` | Free-standing centred display-math block |
-| `\begin{align}…\end{align}` (and `aligned`, `gather`, `equation`) | Free-standing centred display-math block |
+| `\begin{align}…\end{align}` (and `aligned`, `split`, `gather`, `gathered`, `equation`, plus starred forms) | Free-standing centred display-math block |
 | `\\` | Explicit line break |
 | blank line | Paragraph break with `parskip` vertical space |
 

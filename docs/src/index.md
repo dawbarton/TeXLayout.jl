@@ -23,8 +23,9 @@ is read directly from the font's OpenType MATH table; nothing is hard-coded.
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double (`||`) vertical rules.
 - Mixed text-and-math document layout via `layout_document`: styled text, inline
-  `$…$` math, display-math environments (`align`, `aligned`, `gather`, `equation`),
-  line breaks (`\\`), and paragraph breaks, returned as a measured `TeXBox`.
+  `$…$` math, display-math environments (`align`, `aligned`, `split`, `gather`,
+  `gathered`, `equation`, and their starred forms), line breaks (`\\`), and
+  paragraph breaks, returned as a measured `TeXBox`.
 - Pluggable text shaping: `MetricShaper` by default, with optional
   `HarfBuzzShaper` support when `HarfBuzz_jll` is loaded.
 - Eight bundled font families downloaded lazily via Julia Artifacts on first use.
