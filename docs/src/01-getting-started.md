@@ -151,9 +151,12 @@ The recognised text-mode constructs are:
   `\textnormal`, `\textsf`, `\texttt`, and `\text` / `\mbox` grouping.
 - **Inline math** — anything between `$…$` or `\(…\)` is laid out in `Text` style and
   placed on the current line.
-- **Display math** — `$$…$$`, `\[…\]`, and top-level `\begin{align}`,
-  `\begin{aligned}`, `\begin{gather}`, and `\begin{equation}` environments become
-  free-standing, centred display blocks.
+- **Display math** — `$$…$$`, `\[…\]`, and top-level `align`, `aligned`, `split`,
+  `gather`, `gathered`, and `equation` environments (and their starred forms) become
+  free-standing, centred display blocks.  Their cells are set in Display style, so
+  fractions and large operators keep full size.  See the
+  [command reference](04-commands.md#Alignment-and-display-math-environments) for the
+  alignment rules.
 - **Line and paragraph breaks** — `\\` forces a new line; a blank line starts a new
   paragraph with `parskip` vertical space.
 
