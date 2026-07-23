@@ -6,13 +6,6 @@
 
 # ── Data types ────────────────────────────────────────────────────────────────
 
-"""Font attributes for a run of text. `size` is an em multiplier (1.0 = body)."""
-struct TextAttrs
-    slot::FontSlot.T
-    size::Float64
-end
-TextAttrs() = TextAttrs(FontSlot.Regular, 1.0)
-
 """A maximal run of characters sharing one set of TextAttrs."""
 struct TextSpan
     text::String
@@ -133,46 +126,10 @@ end
 
 # ── Font-switch helpers ───────────────────────────────────────────────────────
 
-# Commands that change the text font slot and are followed by a braced group.
-const _TEXT_FONT_SWITCH_CMDS = Set{String}(
-    [
-        "\\textbf",
-        "\\textit",
-        "\\textrm",
-        "\\textnormal",
-        "\\emph",
-        "\\textsf",
-        "\\texttt",
-    ]
-)
-
 # Environments that the document layer treats as free-standing display blocks.
 # Shared with the layout layer (see `_DISPLAY_MATH_ENVS` in parser_tables.jl).
 const _DISPLAY_ENVS = _DISPLAY_MATH_ENVS
 const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
-
-# Compute new TextAttrs by applying a font-switch command to the current attrs.
-function _apply_font_switch(cmd::String, attrs::TextAttrs)::TextAttrs
-    slot = attrs.slot
-    bold = slot === FontSlot.Bold || slot === FontSlot.BoldItalic
-    italic = slot === FontSlot.Italic || slot === FontSlot.BoldItalic
-
-    if cmd == "\\textbf"
-        bold = true
-    elseif cmd == "\\textit"
-        italic = true
-    elseif cmd == "\\emph"
-        italic = !italic   # toggle
-    elseif cmd == "\\textrm" || cmd == "\\textnormal" || cmd == "\\textsf" || cmd == "\\texttt"
-        bold = false
-        italic = false
-    end
-
-    new_slot = bold && italic ? FontSlot.BoldItalic :
-        bold ? FontSlot.Bold :
-        italic ? FontSlot.Italic : FontSlot.Regular
-    return TextAttrs(new_slot, attrs.size)
-end
 
 # ── Recursive text-mode parser ────────────────────────────────────────────────
 
@@ -277,10 +234,10 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
                 push!(builder.cur_runs, MathRun(node, Text))
             end
 
-        elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_FONT_SWITCH_CMDS
+        elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_STYLE_COMMANDS
             in_group || _commit_space!(builder)
             cmd = _advance!(p).value
-            _parse_text_group!(p, builder, _apply_font_switch(cmd, builder.attrs))
+            _parse_text_group!(p, builder, _apply_text_style(cmd, builder.attrs))
 
         elseif tok.kind === TokenKind.Command && (tok.value == "\\text" || tok.value == "\\mbox")
             in_group || _commit_space!(builder)

@@ -186,6 +186,11 @@ const TEXT_STRESS_SECTIONS = [
             kwargs = (shaper = HarfBuzzShaper(),),
         ),
         (
+            name = "harfbuzz small capitals",
+            source = raw"Termes-style \textsc{Small Capitals} with a full-height Initial.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
             name = "harfbuzz math text command",
             source = raw"Inline math with text: $x + \text{office affine}$ beside prose.",
             kwargs = (shaper = HarfBuzzShaper(),),

@@ -108,7 +108,7 @@ coverage on both sides continues to change.
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
 - Mixed text-and-math document layout (`layout_document`): styled text
-  (`\textbf`, `\textit`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
+  (`\textbf`, `\textit`, `\textsc`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
   environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
   (`\\`), and blank-line paragraph breaks, with configurable line and display
   spacing.
@@ -254,6 +254,20 @@ using TeXLayout, HarfBuzz_jll
 
 doc = layout_document("office \$x + \\text{affine}\$"; shaper = HarfBuzzShaper())
 ```
+
+OpenType-dependent styles use the same shaping path. For example, genuine small
+capitals (rather than scaled uppercase glyphs) are available with `\textsc`:
+
+```julia
+doc = layout_document(
+    raw"Mixed \textsc{Small Capitals}";
+    shaper = HarfBuzzShaper(),
+)
+```
+
+`MetricShaper` cannot apply GSUB substitutions and reports an explicit error for
+`\textsc`; use `HarfBuzzShaper` with a font that provides the OpenType `smcp`
+feature.
 
 ### Mixed text and math
 

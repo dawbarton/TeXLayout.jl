@@ -18,6 +18,7 @@ TeXLayout.jl/
 │   ├── TeXLayout.jl        # Module entry point; exports and include order
 │   ├── math_table.jl       # OpenType MATH table parser + per-font MathTable cache
 │   ├── enums.jl            # Internal namespaced enums (EnumX): FontSlot, LayoutMode, Alignment, NodeKind, TokenKind
+│   ├── text_styles.jl      # Shared TextAttrs/TextFeatures and nested text-command semantics
 │   ├── fonts.jl            # FontFamily, GlyphMetrics, artifact-backed font lookup, font cache
 │   ├── style.jl            # TexStyle enum (D/T/S/SS × cramped), style transition helpers
 │   ├── lexer.jl            # Tokeniser: LaTeX string → Vector{Token}
@@ -37,7 +38,7 @@ TeXLayout.jl/
 │   │   └── scripts.jl
 │   ├── boxes.jl            # Internal measured box tree + shape pass for composition
 │   ├── shaping.jl          # TextShaper interface, MetricShaper, HarfBuzzShaper seam
-│   ├── document.jl         # Document AST (Block/Line/Run/TextSpan/TextAttrs) + parse_document
+│   ├── document.jl         # Document AST (Block/Line/Run/TextSpan) + parse_document
 │   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
 ├── ext/
 │   ├── HarfBuzzExt.jl      # Optional HarfBuzz_jll-backed TextShaper implementation
@@ -194,6 +195,10 @@ caches the Makie-facing runtime bundle by effective `FontFamily`.
     `\dfrac`/`\tfrac` the body is the single `NodeKind.Frac` node.  Both reset
     style *and* scale absolutely, so `\dfrac` inside a subscript renders at full
     display size.
+  - `NodeKind.Text` — children are `[body]`; `value` is empty for `\text` /
+    `\mbox`, or contains the full nested text-style command such as `"\textsc"`.
+    Math-internal text and document text share attribute transitions from
+    `text_styles.jl`.
   - `NodeKind.Operator` — `value` is the bare operator name (e.g. `"sin"`).
     Operators in `_LIMITS_OPERATORS` automatically use limits placement in
     Display style.
@@ -402,8 +407,11 @@ at the end of that file.
   shaping for document text spans and, when explicitly requested, math
   `\text{}` / `\mbox{}` fragments.  It does not do full paragraph bidi reordering,
   expose user-configurable HarfBuzz features/language/script settings, or shape
-  ordinary math glyphs/operators.  `MetricShaper` remains the default and must stay
-  independently testable without `HarfBuzz_jll`.
+  ordinary math glyphs/operators. Semantic features live in `TextFeatures`;
+  `\textsc` maps to OpenType `smcp` only inside the HarfBuzz extension.
+  `MetricShaper` must reject unsupported feature-bearing spans rather than
+  synthesizing approximations, and must stay independently testable without
+  `HarfBuzz_jll`.
 - **Makie extension ignores caller-specified font family** — the overridden
   `generate_tex_elements` accepts a `font_family` argument (for API compatibility
   with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.

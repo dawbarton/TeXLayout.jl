@@ -401,28 +401,53 @@ function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
     return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 end
 
-function _text_node_contents(node)::Union{String, Nothing}
+function _text_node_spans(node, base_attrs::TextAttrs)::Union{Vector{TextSpan}, Nothing}
+    spans = TextSpan[]
     io = IOBuffer()
+    active_attrs = base_attrs
 
-    function append_text!(n)::Bool
+    function flush!()
+        text = String(take!(io))
+        isempty(text) || push!(spans, TextSpan(text, active_attrs))
+        return nothing
+    end
+
+    function select_attrs!(attrs::TextAttrs)
+        attrs == active_attrs && return nothing
+        flush!()
+        active_attrs = attrs
+        return nothing
+    end
+
+    function append_text!(n, attrs::TextAttrs)::Bool
         if n.kind === NodeKind.Char
+            select_attrs!(attrs)
             write(io, n.value)
         elseif n.kind === NodeKind.Space
+            select_attrs!(attrs)
             write(io, " ")
         elseif n.kind === NodeKind.Sequence || n.kind === NodeKind.Group
             for child in n.children
-                append_text!(child) || return false
+                append_text!(child, attrs) || return false
             end
         elseif n.kind === NodeKind.Text && !isempty(n.children)
-            append_text!(n.children[1]) || return false
+            nested_attrs = if isempty(n.value)
+                attrs
+            elseif n.value ∈ _TEXT_STYLE_COMMANDS
+                _apply_text_style(n.value, attrs)
+            else
+                return false
+            end
+            append_text!(n.children[1], nested_attrs) || return false
         else
             return false
         end
         return true
     end
 
-    append_text!(node) || return nothing
-    return String(take!(io))
+    append_text!(node, base_attrs) || return nothing
+    flush!()
+    return spans
 end
 
 function _emit_texbox!(boxes::Vector{LayoutBox}, box, x0::Float64, y0::Float64)
@@ -435,10 +460,12 @@ end
 function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
     isempty(node.children) && return 0.0
 
-    text = ctx.text_shaper isa MetricShaper ? nothing : _text_node_contents(node.children[1])
-    if text !== nothing
-        slot = ctx.family.regular === nothing ? FontSlot.Math : FontSlot.Regular
-        shaped = shape_span(ctx.text_shaper, TextSpan(text, TextAttrs(slot, 1.0)), ctx.family, scale)
+    slot = ctx.family.regular === nothing ? FontSlot.Math : FontSlot.Regular
+    base_attrs = TextAttrs(slot, 1.0)
+    spans = _text_node_spans(node, base_attrs)
+    has_styles = spans !== nothing && any(span -> span.attrs != base_attrs, spans)
+    if spans !== nothing && (!(ctx.text_shaper isa MetricShaper) || has_styles)
+        shaped = hconcat([shape_span(ctx.text_shaper, span, ctx.family, scale) for span in spans])
         _emit_texbox!(boxes, shaped, x0, y0)
         return shaped.width
     end

@@ -334,5 +334,6 @@ constants are noted for quick lookup.
 | `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
 | Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
 | `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
+| Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |
 | `default_font_family()` / `set_default_font_family!()` | — | Session-wide default; lazy artifact download; Makie extension picks up changes automatically |
 | Explicit spacing (`\,` `\;` `\quad` `\kern` …) | `NodeKind.Space` | Width in `node.width` (em); negative spaces supported; 1 mu = 1/18 em |

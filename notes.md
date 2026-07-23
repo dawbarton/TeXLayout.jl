@@ -1122,3 +1122,56 @@
   visible effect on wrapping today — this fix is about `~` never vanishing and
   being consistent with math mode.
 - Tests: +8 in test_text.jl; 1288→1296. Docs: CHANGELOG + AGENTS.md updated.
+
+## 2026-07-07T09:30+00:00 HarfBuzz_jll 100.14002 compatibility check
+
+- Pulled latest `main` from GitHub (`25f77da..4a720a4`); upstream change was a
+  CI workflow tweak, and remote PR branch
+  `dependabot/julia/all-julia-packages-f1aa886992` became available.
+- Checked out PR #22, which only widens `Project.toml` compat from
+  `HarfBuzz_jll = "8.5.1"` to `"8.5.1, 100.14002"`.
+- Local focused probe with `HarfBuzz_jll v100.14002.1+0` passed: `TeXLayout`
+  and `HarfBuzzExt` precompiled, `HarfBuzzShaper` shaped `"office"` into
+  `GlyphID` boxes with positive dimensions.
+- The installed artifact's `harfbuzz.pc` and `hb-version.h` identify the
+  bundled upstream HarfBuzz library as `14.2.1`; the unusual JLL package version
+  is not the upstream library's semantic version string.
+- Full `Pkg.test()` resolved `HarfBuzz_jll v100.14002.1+0` and passed
+  1308/1308 tests. `nm -D` confirmed the new `libharfbuzz.so` still exports all
+  symbols called directly from `ext/HarfBuzzExt.jl`.
+
+## 2026-07-23T09:14+00:00 Small-caps capability check
+
+- Fast-forwarded `main` from `e993ddf` to `26ec77d`; the four upstream commits
+  only update the TagBot workflow. Existing local `notes.md` and
+  `.backup-ignore` changes were preserved.
+- `\textsc` is not registered in either the document text-style parser or the
+  math-internal `\text{...}` path. A focused Termes probe parsed it as an
+  unknown command and emitted ordinary lowercase glyphs in `FontSlot.Regular`.
+- The bundled TeX Gyre Termes regular face contains `.sc` glyphs and `smcp` /
+  `c2sc` OpenType feature tags, so true small caps are blocked by TeXLayout's
+  text-attribute/shaper API rather than by the font.
+- Proper support would carry a small-caps attribute through `TextAttrs`, enable
+  `smcp` (and likely `c2sc`) in `HarfBuzzShaper`, and define a documented
+  `MetricShaper` fallback or limitation.
+
+## 2026-07-23T09:33+00:00 Maintainable `\textsc` implementation
+
+- Added `src/text_styles.jl` as the shared semantic layer for document text and
+  math-internal `\text{...}` styles. `TextAttrs(slot, size)` remains compatible;
+  a nested `TextFeatures` value now records small caps independently of font
+  slot selection.
+- `\textsc` composes with regular/bold/italic slots and restores attributes at
+  group boundaries. Math AST `NodeKind.Text.value` stores nested text commands,
+  which are flattened into styled `TextSpan`s before shaping.
+- HarfBuzz maps small caps to `smcp` only: lowercase letters become designed
+  small capitals while source uppercase letters remain full-height capitals,
+  matching LaTeX `\textsc` semantics. `c2sc` would incorrectly force source
+  capitals down to small-cap height.
+- `MetricShaper` explicitly rejects feature-bearing spans rather than using
+  synthetic scaled capitals. Users opt into genuine substitutions with
+  `HarfBuzzShaper()`; Makie uses it via `set_default_layout_options!`.
+- Final formatted runs passed 1317/1317 without HarfBuzz and 1336/1336 through
+  `Pkg.test()` with HarfBuzz. The Documenter build passed, and a real CairoMakie
+  Termes render confirmed a full-height initial followed by genuine small-cap
+  glyphs.

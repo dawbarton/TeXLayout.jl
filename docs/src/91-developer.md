@@ -166,7 +166,7 @@ space_node(w)                     # NodeKind.Space with given width in em
 | `NodeKind.OverUnder` | `[body]` | `"overline"` or `"underline"` | `\overline`/`\underline` |
 | `NodeKind.Command` | — | full token including `\` | unrecognised command or atom-producing symbol |
 | `NodeKind.Space` | — | `""` | explicit horizontal space; width carried in `.width` field (em) |
-| `NodeKind.Text` | `[body NodeKind.Sequence]` | — | `\text{…}` / `\mbox{…}`; text-mode fragment |
+| `NodeKind.Text` | `[body]` | empty for `\text`/`\mbox`; text-style command otherwise | text-mode fragment, including nested `\textsc`/`\textbf` styles |
 | `NodeKind.Operator` | — | bare operator name e.g. `"sin"` | `\sin`, `\operatorname{…}` |
 | `NodeKind.LimitsOverride` | `[base]` | `"limits"` or `"nolimits"` | `\limits` / `\nolimits` override |
 | `NodeKind.FontSwitch` | `[body]` | variant name e.g. `"mathbf"` | `\mathbf{…}`, `\mathbb{…}`, … |
@@ -665,16 +665,19 @@ environment:
 
 | Type | Role |
 |:-----|:-----|
-| `TextAttrs` | Resolved text styling for a span: `font_slot::FontSlot.T` and `size` |
+| `TextAttrs` | Resolved text styling for a span: `slot`, `size`, and semantic `TextFeatures` |
+| `TextFeatures` | Backend-independent text features; currently records `small_caps` |
 | `TextSpan` | A maximal run of characters sharing one `TextAttrs` |
 | `Run` (`TextRun` / `MathRun`) | A horizontal run within a line: shaped text, or a math `Node` with its `TexStyle` |
 | `Line` | A sequence of `Run`s separated by `\\` |
 | `Block` (`ParagraphBlock` / `DisplayBlock` / `ParagraphBreakBlock`) | A paragraph of lines, a free-standing display-math block, or a blank-line break |
 
 Text font-switch commands (`\textbf`, `\textit`, `\emph`, `\textrm`, `\textnormal`,
-`\textsf`, `\texttt`) update the current `TextAttrs`; `\emph` toggles italic relative
-to the surrounding state.  `\text` / `\mbox` open a grouping scope that inherits the
-current attributes.  The display environments `align`, `aligned`, `gather`, and
+`\textsf`, `\texttt`, `\textsc`) update the current `TextAttrs`; `\emph` toggles
+italic relative to the surrounding state and `\textsc` sets the semantic
+`small_caps` feature. `\text` / `\mbox` open a grouping scope that inherits the
+current attributes. The shared definitions in `text_styles.jl` are also used for
+nested styles in math-internal text. The display environments `align`, `aligned`, `gather`, and
 `equation` (in `_DISPLAY_ENVS`) become `DisplayBlock`s when they appear at the top
 level without `$…$`.
 
@@ -690,7 +693,9 @@ glyphs; `shape_span(shaper, span, family, scale)` is the entry point.  The defau
 `MetricShaper` does metric-only shaping (one glyph per character, advances from the
 font's `hmtx` table) with no contextual substitution or kerning.  `HarfBuzzShaper`
 is implemented in the optional `ext/HarfBuzzExt.jl` extension and emits `GlyphID`
-elements with final glyph IDs and exact font paths.  Document text spans always go
+elements with final glyph IDs and exact font paths. It maps semantic small caps to
+the OpenType `smcp` feature. `MetricShaper` rejects feature-bearing spans explicitly:
+it must not manufacture small caps from scaled uppercase glyphs. Document text spans always go
 through `LayoutOptions.shaper`; math `\text{…}` / `\mbox{…}` nodes use the same
 interface only when a non-default shaper is explicitly passed to `layout` or
 `generate_tex_elements`, preserving the legacy `MetricShaper`/`Space` output by

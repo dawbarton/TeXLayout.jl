@@ -83,6 +83,33 @@ using TeXLayout, HarfBuzz_jll
 set_default_layout_options!(shaper = HarfBuzzShaper())
 ```
 
+This opt-in is required for OpenType-substitution-based styles such as genuine
+small capitals. The following renders lowercase letters through Termes's `smcp`
+feature while leaving the initial capital at full cap height:
+
+```julia
+using TeXLayout, HarfBuzz_jll
+
+set_default_font_family!(:termes)
+set_default_layout_options!(shaper = HarfBuzzShaper())
+
+using CairoMakie
+
+fig = Figure()
+ax = Axis(
+    fig[1, 1],
+    title = L"\text{\textsc{This text should be in small caps}}",
+    xlabel = "X-axis",
+    ylabel = "Y-axis",
+)
+lines!(ax, 1:10, rand(10))
+display(fig)
+```
+
+`MetricShaper` deliberately does not synthesize small caps by scaling uppercase
+glyphs; attempting to use `\textsc` with it raises an error explaining how to
+select `HarfBuzzShaper`.
+
 ## Quick start
 
 Load `TeXLayout` before (or alongside) `CairoMakie`; the extension activates
