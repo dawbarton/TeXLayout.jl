@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.3] - 2026-07-23
+
 ### Added
 - `\textsc{…}` support in document text and inside math `\text{…}` / `\mbox{…}`
   fragments. Small caps are represented as semantic text attributes and shaped
@@ -263,5 +265,6 @@ Initial public release.
 - CI workflow with Runic formatting enforcement and Dependabot for GitHub Actions and
   Julia packages
 
-[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/ec8d72d5d8da6eac7f0532438064ab9fd5ae5568...HEAD
+[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.3...HEAD
+[v0.2.3]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.2...v0.2.3
 [0.1.0]: https://github.com/dawbarton/TeXLayout.jl/commit/ec8d72d5d8da6eac7f0532438064ab9fd5ae5568

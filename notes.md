@@ -1175,3 +1175,17 @@
   `Pkg.test()` with HarfBuzz. The Documenter build passed, and a real CairoMakie
   Termes render confirmed a full-height initial followed by genuine small-cap
   glyphs.
+
+## 2026-07-23T11:20+00:00 v0.2.3 release preparation
+
+- PR #25 merged the small-caps implementation into `main` with all required
+  tests, Runic, documentation, and Codecov checks passing.
+- Prepared release branch `codex/release-v0.2.3` from the merged `main`.
+- Updated the Julia package version to `0.2.3`; moved the small-caps changelog
+  entries into a dated `v0.2.3` section and reopened an empty `[Unreleased]`
+  section.
+- Updated changelog comparison links for `v0.2.2...v0.2.3` and
+  `v0.2.3...HEAD`.
+- Release validation passed: `Pkg.project().version == v"0.2.3"`,
+  1336/1336 tests with HarfBuzz, and a Documenter build whose inventory reports
+  version `0.2.3`.
