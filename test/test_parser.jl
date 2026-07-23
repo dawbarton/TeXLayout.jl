@@ -310,10 +310,11 @@
             full_family,
             TeXLayout.Text,
         )
-        glyphs = filter(box -> box.element isa Glyph, boxes)
+        glyphs = filter(box -> box.element isa GlyphID, boxes)
         @test !isempty(glyphs)
         @test all(
-            box.element.font_slot === TeXLayout.FontSlot.Bold for box in glyphs
+            box.element.font_slot === TeXLayout.FontSlot.Bold &&
+                box.element.font_path == full_family.bold for box in glyphs
         )
     end
 

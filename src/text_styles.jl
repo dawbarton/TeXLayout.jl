@@ -25,14 +25,17 @@ Resolved font and feature attributes for one text span.
 two-argument constructor remains the feature-free compatibility path.
 """
 struct TextAttrs
+    family::TextFamily.T
     slot::FontSlot.T
     size::Float64
     features::TextFeatures
 end
 
 TextAttrs(slot::FontSlot.T, size::Real) =
-    TextAttrs(slot, Float64(size), TextFeatures())
-TextAttrs() = TextAttrs(FontSlot.Regular, 1.0)
+    TextAttrs(TextFamily.Roman, slot, Float64(size), TextFeatures())
+TextAttrs(slot::FontSlot.T, size::Real, features::TextFeatures) =
+    TextAttrs(TextFamily.Roman, slot, Float64(size), features)
+TextAttrs() = TextAttrs(TextFamily.Roman, FontSlot.Regular, 1.0, TextFeatures())
 
 const _TEXT_STYLE_COMMANDS = (
     "\\textbf",
@@ -48,14 +51,15 @@ const _TEXT_STYLE_COMMANDS = (
 """
 Apply a braced LaTeX text-style command to resolved span attributes.
 
-The existing font-slot semantics are preserved: bold and italic compose,
-`\\emph` toggles italic, and the regular/sans/monospace commands reset to the
-regular slot. `\\textsc` composes with the selected slot so bold and italic
-companion fonts can provide their own small-cap substitutions.
+Font family, weight, shape, and semantic features are independent axes:
+family commands preserve the current weight, shape, and features; weight and
+shape commands preserve the current family and features. `\\textnormal` is the
+only command that resets all axes.
 """
 function _apply_text_style(cmd::String, attrs::TextAttrs)::TextAttrs
     cmd ∈ _TEXT_STYLE_COMMANDS || throw(ArgumentError("unknown text-style command: $cmd"))
 
+    family = attrs.family
     slot = attrs.slot
     bold = slot === FontSlot.Bold || slot === FontSlot.BoldItalic
     italic = slot === FontSlot.Italic || slot === FontSlot.BoldItalic
@@ -69,7 +73,14 @@ function _apply_text_style(cmd::String, attrs::TextAttrs)::TextAttrs
         italic = !italic
     elseif cmd == "\\textsc"
         features = TextFeatures(true)
-    elseif cmd == "\\textrm" || cmd == "\\textnormal" || cmd == "\\textsf" || cmd == "\\texttt"
+    elseif cmd == "\\textrm"
+        family = TextFamily.Roman
+    elseif cmd == "\\textsf"
+        family = TextFamily.Sans
+    elseif cmd == "\\texttt"
+        family = TextFamily.Monospace
+    elseif cmd == "\\textnormal"
+        family = TextFamily.Roman
         bold = false
         italic = false
         features = TextFeatures()
@@ -78,7 +89,7 @@ function _apply_text_style(cmd::String, attrs::TextAttrs)::TextAttrs
     new_slot = bold && italic ? FontSlot.BoldItalic :
         bold ? FontSlot.Bold :
         italic ? FontSlot.Italic : FontSlot.Regular
-    return TextAttrs(new_slot, attrs.size, features)
+    return TextAttrs(family, new_slot, attrs.size, features)
 end
 
 function _text_feature_names(features::TextFeatures)::Vector{String}
@@ -88,3 +99,7 @@ function _text_feature_names(features::TextFeatures)::Vector{String}
 end
 
 _has_text_features(features::TextFeatures) = features.small_caps
+
+_text_family_name(family::TextFamily.T) =
+    family === TextFamily.Roman ? "Roman" :
+    family === TextFamily.Sans ? "sans-serif" : "monospace"

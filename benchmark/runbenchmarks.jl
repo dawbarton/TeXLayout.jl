@@ -2,6 +2,7 @@ using BenchmarkTools
 using Printf
 using TOML
 using TeXLayout
+using TeXLayout: generate_tex_elements, layout, layout_document, parse_latex
 
 const ROOT = dirname(@__DIR__)
 const DEFAULT_BASELINE = joinpath(@__DIR__, "baseline.toml")

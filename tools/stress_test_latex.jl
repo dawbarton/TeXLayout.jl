@@ -20,6 +20,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using TeXLayout: FontFamily
 using FreeTypeAbstraction
 
 # ── Stress-test content ────────────────────────────────────────────────────────

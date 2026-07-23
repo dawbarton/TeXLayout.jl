@@ -1,4 +1,4 @@
-STRESS_TEST_REFERENCE := "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stress_test_reference.tar"
+STRESS_TEST_REFERENCE := "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/stress_test_reference.tar"
 
 default:
     just --list

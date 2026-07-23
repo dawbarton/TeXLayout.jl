@@ -9,6 +9,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using TeXLayout: FontFamily, LayoutBox, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, RGB, N0f8
@@ -25,6 +26,10 @@ end
 
 module TextStress
     include("stress_test_text.jl")
+end
+
+module MakieStress
+    include("stress_test_makie.jl")
 end
 
 const REFERENCE_ASSET = "stress_test_reference.tar"
@@ -64,6 +69,11 @@ const MAKIE_CASES = [
         section = "6. ACCENTS AND ARROWS",
         name = "accents braces arrows",
         source = raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}",
+    ),
+    (
+        section = "7. TEXT FAMILIES",
+        name = "small caps sans and combined",
+        source = raw"\text{\textsc{Caps} | \textsf{sans} | \textsc{\textsf{both}} | \texttt{mono}}",
     ),
 ]
 
@@ -175,42 +185,57 @@ function _render_text_cases!(root::String, font::Symbol, manifest_cases)
 end
 
 function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
-    TeXLayout.set_default_font_family!(family)
-    mt = TeXLayout.load_math_table(family.math)
-    boxes = try
-        TeXLayout.layout(TeXLayout.parse_latex(expr), family, TeXLayout.Display)
-    catch
-        TeXLayout.LayoutBox[]
+    previous_family = TeXLayout.default_font_family()
+    previous_options = TeXLayout.default_layout_options()
+    return try
+        TeXLayout.set_default_font_family!(family)
+        shaper = TeXLayout.HarfBuzzShaper()
+        TeXLayout.set_default_layout_options!(; shaper)
+        mt = TeXLayout.load_math_table(family.math)
+        boxes = try
+            TeXLayout.layout(
+                TeXLayout.parse_latex(expr), family, TeXLayout.Display; shaper,
+            )
+        catch
+            TeXLayout.LayoutBox[]
+        end
+        bx1, bx2, by1, by2 = isempty(boxes) ?
+            (0.0, 4.0, -1.0, 1.0) :
+            MathStress.em_bbox(boxes, mt.upm; pad = 0.4)
+
+        px = MathStress.BASE_PX
+        margin = 32
+        w = max(240, 2margin + ceil(Int, (bx2 - bx1) * px))
+        h = max(160, 2margin + ceil(Int, (by2 - by1) * px))
+        fig = CairoMakie.Figure(size = (w, h), backgroundcolor = :white)
+        ax = CairoMakie.Axis(fig[1, 1]; backgroundcolor = :white)
+        CairoMakie.hidespines!(ax)
+        CairoMakie.hidedecorations!(ax)
+        CairoMakie.xlims!(ax, 0, w)
+        CairoMakie.ylims!(ax, 0, h)
+
+        x = margin - bx1 * px
+        y = margin - by1 * px
+        CairoMakie.text!(
+            ax, x, y;
+            text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
+            fontsize = px,
+            align = (:left, :bottom),
+            space = :data,
+            markerspace = :data,
+        )
+
+        tmp = tempname() * ".png"
+        try
+            CairoMakie.save(tmp, fig)
+            return _read_png(tmp)
+        finally
+            rm(tmp; force = true)
+        end
+    finally
+        TeXLayout.set_default_font_family!(previous_family)
+        TeXLayout.set_default_layout_options!(previous_options)
     end
-    bx1, bx2, by1, by2 = isempty(boxes) ?
-        (0.0, 4.0, -1.0, 1.0) :
-        MathStress.em_bbox(boxes, mt.upm; pad = 0.4)
-
-    px = MathStress.BASE_PX
-    margin = 32
-    w = max(240, 2margin + ceil(Int, (bx2 - bx1) * px))
-    h = max(160, 2margin + ceil(Int, (by2 - by1) * px))
-    fig = CairoMakie.Figure(size = (w, h), backgroundcolor = :white)
-    ax = CairoMakie.Axis(fig[1, 1]; backgroundcolor = :white)
-    CairoMakie.hidespines!(ax)
-    CairoMakie.hidedecorations!(ax)
-    CairoMakie.xlims!(ax, 0, w)
-    CairoMakie.ylims!(ax, 0, h)
-
-    x = margin - bx1 * px
-    y = margin - by1 * px
-    CairoMakie.text!(
-        ax, x, y;
-        text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
-        fontsize = px,
-        align = (:left, :bottom),
-        space = :data,
-        markerspace = :data,
-    )
-
-    tmp = tempname() * ".png"
-    CairoMakie.save(tmp, fig)
-    return _read_png(tmp)
 end
 
 function _render_makie_cases!(root::String, font::Symbol, manifest_cases)
@@ -248,14 +273,14 @@ function _render_sheets!(root::String, font::Symbol; include_makie::Bool)
     )
 
     if include_makie
-        # Keep Makie sheet generation on the existing wrapper for now: per-case
-        # Makie outputs are the reference-bearing artifacts.
+        previous_family = TeXLayout.default_font_family()
         try
             makie_path = joinpath(sheet_dir, "makie_cairo.png")
-            include("stress_test_makie.jl")
-            run_stress_test_makie(family, makie_path, mt, font_name)
+            MakieStress.run_stress_test_makie(family, makie_path, mt, font_name)
         catch err
             @warn "Makie sheet generation failed for :$(font): $err"
+        finally
+            TeXLayout.set_default_font_family!(previous_family)
         end
     end
     return nothing
@@ -327,14 +352,15 @@ function pack_reference(input::String = "stress_outputs/current", out::String = 
 end
 
 function _reference_dir(reference::String)::String
-    dir = mktempdir()
+    staging = mktempdir()
     ref = reference
     if startswith(reference, "http://") || startswith(reference, "https://")
-        ref = joinpath(dir, basename(reference))
+        ref = joinpath(staging, basename(reference))
         Downloads.download(reference, ref)
     end
-    Tar.extract(ref, dir)
-    return dir
+    extracted = joinpath(staging, "extracted")
+    Tar.extract(ref, extracted)
+    return extracted
 end
 
 # ── Comparison ───────────────────────────────────────────────────────────────

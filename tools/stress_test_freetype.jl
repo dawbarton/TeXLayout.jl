@@ -13,6 +13,8 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using TeXLayout:
+    FontFamily, Glyph, GlyphID, HRule, Space, VRule, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, RGB, N0f8
@@ -59,6 +61,12 @@ function em_bbox(boxes, upm; pad = 0.1)
         el = box.element
         if el isa Glyph
             s = box.scale / upm
+            bx1 = min(bx1, box.x + el.x_min * s)
+            bx2 = max(bx2, box.x + el.x_max * s)
+            by1 = min(by1, box.y + el.y_min * s)
+            by2 = max(by2, box.y + el.y_max * s)
+        elseif el isa GlyphID
+            s = box.scale / TeXLayout._font_upm(el.font_path)
             bx1 = min(bx1, box.x + el.x_min * s)
             bx2 = max(bx2, box.x + el.x_max * s)
             by1 = min(by1, box.y + el.y_min * s)

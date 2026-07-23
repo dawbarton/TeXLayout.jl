@@ -461,7 +461,7 @@ function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
     isempty(node.children) && return 0.0
 
     slot = ctx.family.regular === nothing ? FontSlot.Math : FontSlot.Regular
-    base_attrs = TextAttrs(slot, 1.0)
+    base_attrs = TextAttrs(TextFamily.Roman, slot, 1.0, TextFeatures())
     spans = _text_node_spans(node, base_attrs)
     has_styles = spans !== nothing && any(span -> span.attrs != base_attrs, spans)
     if spans !== nothing && (!(ctx.text_shaper isa MetricShaper) || has_styles)

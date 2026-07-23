@@ -1,23 +1,49 @@
 # Font loading and glyph metrics.
 #
-# `FontFamily` bundles a set of OTF/TTF paths for the roles a complete font
-# family must fill (regular, italic, bold, bold-italic, and math).  Advance
+# `FontFamily` bundles a math font, a primary set of text faces, and optional
+# sans-serif and monospace text-face sets. Advance
 # widths and left side bearings are read directly from the binary hmtx table
 # (matching the font designer's nominal values); ink bounding boxes are
 # obtained via FreeTypeAbstraction.
 #
-# `font_family(::Symbol)` provides lazy-download access to the five bundled
-# font families (NewCMMath, Pagella, Luciole, STIXTwo, FiraMath) via Julia
+# `font_family(::Symbol)` provides lazy-download access to bundled font
+# families via Julia
 # Artifacts.  `font_family(path; ...)` constructs a family from user paths.
 
 using FreeTypeAbstraction
 using LazyArtifacts
 const _FT = FreeTypeAbstraction.FreeType
 
-"""
-A set of OTF/TTF font file paths covering all roles needed for math typesetting.
+"""Four weight/shape faces belonging to one text font family."""
+struct TextFontSet
+    regular::Union{String, Nothing}
+    italic::Union{String, Nothing}
+    bold::Union{String, Nothing}
+    bolditalic::Union{String, Nothing}
+end
 
-The `math` slot is mandatory; text slots may be omitted if only math mode is needed.
+TextFontSet() = TextFontSet(nothing, nothing, nothing, nothing)
+
+function TextFontSet(
+        regular::Union{AbstractString, Nothing},
+        italic::Union{AbstractString, Nothing} = nothing,
+        bold::Union{AbstractString, Nothing} = nothing,
+        bolditalic::Union{AbstractString, Nothing} = nothing,
+    )
+    return TextFontSet(
+        regular === nothing ? nothing : String(regular),
+        italic === nothing ? nothing : String(italic),
+        bold === nothing ? nothing : String(bold),
+        bolditalic === nothing ? nothing : String(bolditalic),
+    )
+end
+
+"""
+A set of OTF/TTF font paths covering math and text typesetting.
+
+The `math` slot is mandatory. The primary text slots, `sans`, and `monospace`
+may be omitted. Missing text faces follow documented fallback rules ending at
+the math font.
 """
 struct FontFamily
     math::String
@@ -25,9 +51,20 @@ struct FontFamily
     italic::Union{String, Nothing}
     bold::Union{String, Nothing}
     bolditalic::Union{String, Nothing}
+    sans::Union{TextFontSet, Nothing}
+    monospace::Union{TextFontSet, Nothing}
 end
 
-FontFamily(math::String) = FontFamily(math, nothing, nothing, nothing, nothing)
+FontFamily(math::String) =
+    FontFamily(math, nothing, nothing, nothing, nothing, nothing, nothing)
+
+FontFamily(
+    math::String,
+    regular::Union{String, Nothing},
+    italic::Union{String, Nothing},
+    bold::Union{String, Nothing},
+    bolditalic::Union{String, Nothing},
+) = FontFamily(math, regular, italic, bold, bolditalic, nothing, nothing)
 
 """
 Basic horizontal metrics for a single glyph (design units, same UPM as the
@@ -140,23 +177,33 @@ function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics
     )
 end
 
-# Metrics for the glyph at Unicode codepoint `cp` in font `path`, or `nothing`.
-# Factored out of glyph_metrics_by_codepoint so text-mode shaping can probe
-# arbitrary font paths (bold, italic, …) without constructing a FontFamily.
-function _codepoint_metrics(path::String, cp::UInt32)::Union{GlyphMetrics, Nothing}
+# Glyph ID and metrics for codepoint `cp` in font `path`, or `nothing`.
+# Text shapers use this to resolve renderer-facing glyph identity once.
+function _codepoint_glyph(
+        path::String, cp::UInt32
+    )::Union{Tuple{UInt32, GlyphMetrics}, Nothing}
     face, hmtx = _load_font(path)
     gid = Int(_FT.FT_Get_Char_Index(face, cp))
     gid == 0 && return nothing
     adv, lsb = hmtx[gid + 1]
     _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
     m = unsafe_load(face.glyph).metrics
-    return GlyphMetrics(
-        adv, lsb,
-        Int(m.horiBearingX),
-        Int(m.horiBearingY) - Int(m.height),
-        Int(m.horiBearingX) + Int(m.width),
-        Int(m.horiBearingY),
+    return (
+        UInt32(gid),
+        GlyphMetrics(
+            adv, lsb,
+            Int(m.horiBearingX),
+            Int(m.horiBearingY) - Int(m.height),
+            Int(m.horiBearingX) + Int(m.width),
+            Int(m.horiBearingY),
+        ),
     )
+end
+
+# Metrics for the glyph at Unicode codepoint `cp` in font `path`, or `nothing`.
+function _codepoint_metrics(path::String, cp::UInt32)::Union{GlyphMetrics, Nothing}
+    result = _codepoint_glyph(path, cp)
+    return result === nothing ? nothing : result[2]
 end
 
 """
@@ -195,6 +242,87 @@ end
 
 """First configured font path for `slot`, following TeXLayout's slot fallback rules."""
 _font_path_for_slot(family::FontFamily, slot::FontSlot.T)::String = first(_slot_fallback(family, slot))
+
+_roman_font_set(family::FontFamily) =
+    TextFontSet(family.regular, family.italic, family.bold, family.bolditalic)
+
+function _font_set(family::FontFamily, text_family::TextFamily.T)
+    text_family === TextFamily.Roman && return _roman_font_set(family)
+    text_family === TextFamily.Sans && return family.sans
+    return family.monospace
+end
+
+function _face_fallback(set::TextFontSet, slot::FontSlot.T)
+    slot === FontSlot.Math && return Union{String, Nothing}[]
+    return if slot === FontSlot.BoldItalic
+        [set.bolditalic, set.bold, set.italic, set.regular]
+    elseif slot === FontSlot.Bold
+        [set.bold, set.regular]
+    elseif slot === FontSlot.Italic
+        [set.italic, set.regular]
+    else
+        [set.regular]
+    end
+end
+
+"""
+Priority-ordered physical font paths for one resolved text-family/face request.
+
+The requested family is exhausted before the primary Roman family is tried;
+the math font is the final fallback. Paths are de-duplicated.
+"""
+function _text_font_fallback(
+        family::FontFamily,
+        text_family::TextFamily.T,
+        slot::FontSlot.T,
+    )::Vector{String}
+    raw = Union{String, Nothing}[]
+    requested = _font_set(family, text_family)
+    requested === nothing || append!(raw, _face_fallback(requested, slot))
+    if text_family !== TextFamily.Roman
+        append!(raw, _face_fallback(_roman_font_set(family), slot))
+    end
+    push!(raw, family.math)
+
+    seen = Set{String}()
+    result = String[]
+    for path in raw
+        (path === nothing || path ∈ seen) && continue
+        push!(seen, path)
+        push!(result, path)
+    end
+    return result
+end
+
+function _text_glyph(
+        family::FontFamily,
+        ch::Char,
+        text_family::TextFamily.T,
+        slot::FontSlot.T,
+    )::Union{Tuple{UInt32, GlyphMetrics, String}, Nothing}
+    for path in _text_font_fallback(family, text_family, slot)
+        result = _codepoint_glyph(path, UInt32(ch))
+        result === nothing && continue
+        gid, metrics = result
+        return (gid, metrics, path)
+    end
+    return nothing
+end
+
+function _font_family_key(family::FontFamily)
+    path_fields(set) = set === nothing ?
+        (nothing, nothing, nothing, nothing) :
+        (set.regular, set.italic, set.bold, set.bolditalic)
+    return (
+        family.math,
+        family.regular,
+        family.italic,
+        family.bold,
+        family.bolditalic,
+        path_fields(family.sans)...,
+        path_fields(family.monospace)...,
+    )
+end
 
 """
     glyph_metrics_slot(family, ch, slot) -> Union{Tuple{GlyphMetrics,String}, Nothing}
@@ -443,38 +571,51 @@ end
 
 # ── Named font families via Artifacts ────────────────────────────────────────
 
-# Maps user-facing Symbol names to artifact names in Artifacts.toml.
-const _NAMED_ARTIFACTS = Dict{Symbol, String}(
-    :new_cm => "NewCMMath",
-    :pagella => "Pagella",
-    :luciole => "Luciole",
-    :stix_two => "STIXTwo",
-    :fira_math => "FiraMath",
-    :schola => "Schola",
-    :termes => "Termes",
-    :bonum => "Bonum",
-)
+# Find one conventional face file in an artifact directory.
+function _artifact_face(dir::AbstractString, base::String)
+    for ext in (".otf", ".ttf")
+        path = joinpath(dir, base * ext)
+        isfile(path) && return path
+    end
+    return nothing
+end
 
-# Build a FontFamily from an artifact directory.  Tries .otf first, then .ttf
-# for the text slots (Luciole ships TTF text fonts).
-function _family_from_artifact(dir::AbstractString)::FontFamily
+function _text_set_from_artifact(dir::AbstractString)::TextFontSet
+    return TextFontSet(
+        _artifact_face(dir, "regular"),
+        _artifact_face(dir, "italic"),
+        _artifact_face(dir, "bold"),
+        _artifact_face(dir, "bolditalic"),
+    )
+end
+
+# Build a FontFamily from its primary artifact and optional shared companion
+# artifacts. Luciole uses TTF text faces; all other bundled faces are OTF.
+function _family_from_artifact(
+        dir::AbstractString;
+        sans_dir::Union{AbstractString, Nothing} = nothing,
+        monospace_dir::Union{AbstractString, Nothing} = nothing,
+        primary_is_sans::Bool = false,
+    )::FontFamily
     math = joinpath(dir, "math.otf")
     isfile(math) || error("artifact at $dir is missing math.otf")
-
-    function find_slot(base)
-        for ext in (".otf", ".ttf")
-            p = joinpath(dir, base * ext)
-            isfile(p) && return p
-        end
-        return nothing
+    primary = _text_set_from_artifact(dir)
+    sans = if primary_is_sans
+        primary
+    elseif sans_dir === nothing
+        nothing
+    else
+        _text_set_from_artifact(sans_dir)
     end
-
+    monospace = monospace_dir === nothing ? nothing : _text_set_from_artifact(monospace_dir)
     return FontFamily(
         math,
-        find_slot("regular"),
-        find_slot("italic"),
-        find_slot("bold"),
-        find_slot("bolditalic")
+        primary.regular,
+        primary.italic,
+        primary.bold,
+        primary.bolditalic,
+        sans,
+        monospace,
     )
 end
 
@@ -488,6 +629,8 @@ _artifact_dir_fira_math() = @artifact_str("FiraMath")
 _artifact_dir_schola() = @artifact_str("Schola")
 _artifact_dir_termes() = @artifact_str("Termes")
 _artifact_dir_bonum() = @artifact_str("Bonum")
+_artifact_dir_heros() = @artifact_str("Heros")
+_artifact_dir_cursor() = @artifact_str("Cursor")
 const _ARTIFACT_LOADERS = Dict{Symbol, Function}(
     :new_cm => _artifact_dir_new_cm,
     :pagella => _artifact_dir_pagella,
@@ -520,24 +663,58 @@ function font_family(name::Symbol)::FontFamily
     loader = get(_ARTIFACT_LOADERS, name, nothing)
     loader === nothing &&
         error("unknown font family :$name — choose from: $(join(sort(string.(keys(_ARTIFACT_LOADERS))), ", "))")
-    return _family_from_artifact(loader())
+    primary_is_sans = name === :fira_math || name === :luciole
+    sans_dir = primary_is_sans ? nothing : _artifact_dir_heros()
+    return _family_from_artifact(
+        loader();
+        sans_dir,
+        monospace_dir = _artifact_dir_cursor(),
+        primary_is_sans,
+    )
 end
 
 """
-    font_family(math_path; regular, bold, italic, bolditalic) -> FontFamily
+    font_family(math_path; regular, bold, italic, bolditalic, sans, monospace)
+        -> FontFamily
 
 Construct a `FontFamily` from user-supplied file paths.  Only `math_path` is
-required; text slots default to `nothing` (math-only mode).
+required; text faces default to `nothing` (math-only mode). `sans` and
+`monospace` accept unexported `TeXLayout.TextFontSet` values.
 """
 function font_family(
         math_path::AbstractString;
         regular::Union{AbstractString, Nothing} = nothing,
         bold::Union{AbstractString, Nothing} = nothing,
         italic::Union{AbstractString, Nothing} = nothing,
-        bolditalic::Union{AbstractString, Nothing} = nothing
+        bolditalic::Union{AbstractString, Nothing} = nothing,
+        sans::Union{TextFontSet, Nothing} = nothing,
+        monospace::Union{TextFontSet, Nothing} = nothing,
     )::FontFamily
-    isfile(math_path) || error("math font not found: $math_path")
-    return FontFamily(math_path, regular, italic, bold, bolditalic)
+    function checked_path(path, role)
+        path === nothing && return nothing
+        isfile(path) || error("$role font not found: $path")
+        return abspath(normpath(path))
+    end
+
+    function checked_set(set, role)
+        set === nothing && return nothing
+        return TextFontSet(
+            checked_path(set.regular, "$role regular"),
+            checked_path(set.italic, "$role italic"),
+            checked_path(set.bold, "$role bold"),
+            checked_path(set.bolditalic, "$role bold-italic"),
+        )
+    end
+
+    return FontFamily(
+        checked_path(math_path, "math"),
+        checked_path(regular, "regular"),
+        checked_path(italic, "italic"),
+        checked_path(bold, "bold"),
+        checked_path(bolditalic, "bold-italic"),
+        checked_set(sans, "sans-serif"),
+        checked_set(monospace, "monospace"),
+    )
 end
 
 # Process-global default.  Stores a Symbol (defers artifact download) or a

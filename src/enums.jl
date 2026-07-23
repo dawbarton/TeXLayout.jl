@@ -8,6 +8,12 @@ EnumX.@enumx FontSlot begin
     BoldItalic
 end
 
+EnumX.@enumx TextFamily begin
+    Roman
+    Sans
+    Monospace
+end
+
 EnumX.@enumx LayoutMode begin
     Math
     Text

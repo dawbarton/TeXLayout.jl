@@ -45,6 +45,7 @@ mutable struct _HBFont
 end
 
 const _FONT_CACHE = Dict{String, _HBFont}()
+const _FEATURE_CACHE = Dict{Tuple{String, UInt32}, Bool}()
 
 _hb_blob_create_from_file(path::String) =
     ccall((:hb_blob_create_from_file_or_fail, _HB), Ptr{Cvoid}, (Cstring,), path)
@@ -171,8 +172,26 @@ function _font_covers_cluster(path::String, cluster::AbstractString)::Bool
     return true
 end
 
-function _fallback_runs(text::String, family::TeXLayout.FontFamily, slot::TeXLayout.FontSlot.T)
-    paths = TeXLayout._slot_fallback(family, slot)
+function _fallback_runs(
+        text::String,
+        family::TeXLayout.FontFamily,
+        attrs::TeXLayout.TextAttrs,
+    )
+    paths = TeXLayout._text_font_fallback(family, attrs.family, attrs.slot)
+    required_tags = _required_feature_tags(attrs.features)
+    eligible_paths = filter(paths) do path
+        all(tag -> _font_supports_feature(path, tag), required_tags)
+    end
+    if !isempty(text) && !isempty(required_tags) && isempty(eligible_paths)
+        names = join(TeXLayout._text_feature_names(attrs.features), ", ")
+        throw(
+            ArgumentError(
+                "no configured $(TeXLayout._text_family_name(attrs.family)) font " *
+                    "supports required OpenType features ($names)",
+            ),
+        )
+    end
+
     runs = Tuple{String, String}[]
     isempty(text) && return runs
 
@@ -188,7 +207,7 @@ function _fallback_runs(text::String, family::TeXLayout.FontFamily, slot::TeXLay
 
     for cluster in Unicode.graphemes(text)
         path = nothing
-        for candidate in paths
+        for candidate in eligible_paths
             if _font_covers_cluster(candidate, cluster)
                 path = candidate
                 break
@@ -220,6 +239,41 @@ function _hb_tag(tag::String)::UInt32
         UInt32(codeunit(tag, 2)) << 16 |
         UInt32(codeunit(tag, 3)) << 8 |
         UInt32(codeunit(tag, 4))
+end
+
+function _hb_ot_layout_table_feature_tags(
+        face::Ptr{Cvoid}, table_tag::UInt32
+    )::Vector{UInt32}
+    count = Ref{UInt32}(0)
+    total = ccall(
+        (:hb_ot_layout_table_get_feature_tags, _HB), UInt32,
+        (Ptr{Cvoid}, UInt32, UInt32, Ref{UInt32}, Ptr{UInt32}),
+        face, table_tag, UInt32(0), count, C_NULL,
+    )
+    total == 0 && return UInt32[]
+
+    tags = Vector{UInt32}(undef, total)
+    count[] = total
+    GC.@preserve tags ccall(
+        (:hb_ot_layout_table_get_feature_tags, _HB), UInt32,
+        (Ptr{Cvoid}, UInt32, UInt32, Ref{UInt32}, Ptr{UInt32}),
+        face, table_tag, UInt32(0), count, pointer(tags),
+    )
+    resize!(tags, count[])
+    return tags
+end
+
+function _font_supports_feature(path::String, feature_tag::UInt32)::Bool
+    return get!(_FEATURE_CACHE, (path, feature_tag)) do
+        hbf = _hb_font(path)
+        feature_tag in _hb_ot_layout_table_feature_tags(hbf.face, _hb_tag("GSUB"))
+    end
+end
+
+function _required_feature_tags(features::TeXLayout.TextFeatures)::Vector{UInt32}
+    result = UInt32[]
+    features.small_caps && push!(result, _hb_tag("smcp"))
+    return result
 end
 
 function _hb_features(features::TeXLayout.TextFeatures)::Vector{_HBFeature}
@@ -292,11 +346,12 @@ function shape_span(
         family::TeXLayout.FontFamily,
         base_scale::Float64,
     )
-    slot = span.attrs.slot
-    scale = base_scale * span.attrs.size
+    attrs = span.attrs
+    slot = attrs.slot
+    scale = base_scale * attrs.size
     parts = [
-        _shape_text_run(path, text, slot, scale, span.attrs.features)
-            for (path, text) in _fallback_runs(span.text, family, slot)
+        _shape_text_run(path, text, slot, scale, attrs.features)
+            for (path, text) in _fallback_runs(span.text, family, attrs)
     ]
     return TeXLayout.hconcat(parts)
 end

@@ -8,6 +8,7 @@
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
+using TeXLayout: FontFamily, Glyph, GlyphID, HRule, VRule, layout_document
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, N0f8

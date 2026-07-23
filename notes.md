@@ -1189,3 +1189,64 @@
 - Release validation passed: `Pkg.project().version == v"0.2.3"`,
   1336/1336 tests with HarfBuzz, and a Documenter build whose inventory reports
   version `0.2.3`.
+
+## 2026-07-23T15:51+00:00 Composable sans-serif and monospace text
+
+- Added an independent `TextFamily` axis alongside the existing weight/shape
+  `FontSlot` and semantic `TextFeatures`. Family commands now preserve weight,
+  shape, and small caps; `\textnormal` is the sole full reset.
+- Extended `FontFamily` compatibly with optional sans-serif and monospace
+  `TextFontSet` values. A centralized resolver exhausts the requested family's
+  face fallbacks, then the primary text family, then the math font.
+- Both text shapers now emit exact-path `GlyphID` values. HarfBuzz enumerates
+  GSUB feature tags and rejects a semantic feature when no configured fallback
+  font supports it.
+- Published shared TeX Gyre Heros and Cursor artifacts from CTAN TeX Gyre 2.501
+  at the `v0.3.0-fonts` GitHub release, avoiding duplicated companion faces in
+  each math-family artifact.
+- Reduced exports to six Makie-facing configuration names; advanced layout,
+  element, and shaper interfaces remain available through qualified access.
+- Stress testing found and fixed two integration issues: the first visual
+  attempt used doubled LaTeX backslashes, and the Cairo case bounds calculator
+  needed per-font `GlyphID` UPM handling. The exact Makie title, full Termes
+  text sheet, per-case Cairo generation, and Documenter build now pass.
+
+## 2026-07-23T16:05+00:00 Stress baseline isolation
+
+- Compared a fresh eight-font stress run against a detached worktree at the
+  current `main` commit to separate feature changes from older release-reference
+  drift.
+- Found that Makie stress cases leaked their process-wide HarfBuzz default into
+  later fonts. The renderer now restores both font and layout defaults in a
+  `finally` block and removes its temporary PNG.
+- Final comparison: 1248 existing cases identical, 0 changed, 0 missing, and 80
+  expected new sans/monospace/small-caps and opt-in Cairo cases.
+
+## 2026-07-23T16:47+00:00 v0.3.0 release preparation
+
+- Set the package version to 0.3.0, closed the changelog release section, and
+  moved README, developer-guide, and `justfile` stress links to
+  `v0.3.0-stress`.
+- Replaced stale and completed `future.md` entries with a focused backlog for
+  paragraph shaping, vertical metrics, display environments, symbol
+  composition, Makie integration, and regression tooling.
+- Generated all eight font families with FreeType math/text sheets and opt-in
+  CairoMakie cases. The packed reference contains 1328 cases across all three
+  suites and compares 1328 identical, with no changed, new, or missing images.
+- Fixed full `--include-makie` sheet generation by loading the Makie renderer
+  once and restoring its process-wide font default after each sheet.
+- Published the 15 MB reference archive and 16 preview sheets at
+  `https://github.com/dawbarton/TeXLayout.jl/releases/tag/v0.3.0-stress`;
+  the archive SHA-256 is
+  `b42d676fe396194ab1b193536dbdcd5ba61543e8f945c9639ab90883e87c74d5`.
+
+## 2026-07-23T16:58+00:00 FontFamily shape review
+
+- Added the shared TeX Gyre Heros/Cursor companion row to the README licence
+  table, matching the font documentation.
+- Reviewed grouping the primary regular/bold/italic/bold-italic fields into a
+  `TextFontSet`. The symmetry would be cleaner internally, but it would make the
+  documented Makie path awkward (`family.regular.regular`) and break existing
+  direct field access across user code. Keep the current layout for v0.3.0;
+  reconsider a `roman::TextFontSet` design only with a deliberate accessor API
+  in a future breaking release.

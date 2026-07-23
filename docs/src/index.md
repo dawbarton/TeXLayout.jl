@@ -38,7 +38,7 @@ The canonical three-liner lays out a formula with the default font (New Computer
 
 ```julia
 using TeXLayout
-boxes = generate_tex_elements(raw"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}")
+boxes = TeXLayout.generate_tex_elements(raw"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}")
 # boxes is a Vector{LayoutBox}
 ```
 
@@ -75,7 +75,8 @@ See [Makie integration](03-makie.md) for font-matching tips and known limitation
 - [Font Families](02-fonts.md) — bundled families, custom fonts, Makie font matching, and licences.
 - [Makie Integration](03-makie.md) — activating the extension, changing fonts, matching Makie text.
 - [LaTeX Command Reference](04-commands.md) — supported commands, operators, accents, environments, and spacing.
-- [API Reference](05-api.md) — docstrings for all exported symbols.
+- [API Reference](05-api.md) — the small exported configuration surface and
+  qualified advanced APIs.
 - [Developer Docs](91-developer.md) — architecture, invariants, and contributing guide.
 
 ## Acknowledgements
