@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `\textsc{…}` support in document text and inside math `\text{…}` / `\mbox{…}`
+  fragments. Small caps are represented as semantic text attributes and shaped
+  with the font's genuine OpenType `smcp` substitutions through
+  `HarfBuzzShaper`; synthetic scaled capitals are deliberately not used.
+- Shared nested text-style parsing for math-internal text fragments, using the
+  same attribute semantics as document text.
+
 ## [v0.2.2] - 2026-06-24
 
 ### Added

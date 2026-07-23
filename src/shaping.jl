@@ -20,6 +20,7 @@ Shape one uniform-attribute text span into a measured layout fragment.
 Contract (must be honoured by every shaper, including future extensions):
   - returned boxes are in em units, baseline at y = 0, first glyph at x = 0;
   - each emitted glyph element carries the `TextSpan`'s resolved text font slot;
+  - semantic `TextFeatures` are applied faithfully or rejected explicitly;
   - width = total advance, ascent/descent = max ink extents (≥ 0);
   - missing glyphs are skipped (advance = 0).
 """
@@ -43,6 +44,16 @@ loaded when `HarfBuzz_jll` is available in the same Julia session.
 struct HarfBuzzShaper <: TextShaper end
 
 function shape_span(::MetricShaper, span, family::FontFamily, base_scale::Float64)
+    if _has_text_features(span.attrs.features)
+        features = join(_text_feature_names(span.attrs.features), ", ")
+        throw(
+            ArgumentError(
+                "MetricShaper cannot apply text features ($features); load HarfBuzz_jll " *
+                    "and use HarfBuzzShaper()",
+            ),
+        )
+    end
+
     slot = span.attrs.slot
     scale = base_scale * span.attrs.size
     boxes = LayoutBox[]

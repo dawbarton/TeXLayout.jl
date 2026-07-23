@@ -13,6 +13,7 @@ module TeXLayout
 
 include("math_table.jl")
 include("enums.jl")
+include("text_styles.jl")
 include("fonts.jl")
 include("style.jl")
 include("lexer.jl")

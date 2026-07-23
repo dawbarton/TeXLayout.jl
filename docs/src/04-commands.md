@@ -264,7 +264,10 @@ classified as an ordinary atom for inter-atom spacing purposes.
 
 When `HarfBuzz_jll` is loaded and `HarfBuzzShaper()` is passed as the active shaper,
 text fragments are shaped as text runs and may emit `GlyphID` elements instead of
-one name-based `Glyph` per character.
+one name-based `Glyph` per character. Nested document-style commands are accepted
+inside these fragments. In particular, `\text{\textsc{Small Caps}}` applies the
+font's OpenType `smcp` substitutions. `MetricShaper` cannot apply that feature and
+raises an explicit error instead of synthesizing scaled capitals.
 
 ## Font switching
 
@@ -357,6 +360,7 @@ explicitly.  The following constructs are recognised only in this document conte
 |:----------|:-------|
 | `\textbf{…}` | Bold text |
 | `\textit{…}` | Italic text |
+| `\textsc{…}` | Small capitals via the OpenType `smcp` feature; requires `HarfBuzzShaper` |
 | `\emph{…}` | Emphasis — toggles italic relative to the surrounding text |
 | `\textrm{…}`, `\textnormal{…}` | Upright (regular) text |
 | `\textsf{…}` | Sans-serif (falls back to the regular slot in v1) |

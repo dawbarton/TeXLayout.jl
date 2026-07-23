@@ -522,6 +522,10 @@ function _parse_command!(p::_Parser)::Node
         body = _parse_text_argument!(p)
         return Node(NodeKind.Text, [body])
 
+    elseif cmd ∈ _TEXT_STYLE_COMMANDS
+        body = _parse_text_argument!(p)
+        return Node(NodeKind.Text, cmd, [body])
+
     else
         bare = cmd[2:end]   # strip leading '\'
         return bare ∈ _OPERATOR_NAMES ? Node(NodeKind.Operator, bare) : Node(NodeKind.Command, cmd)

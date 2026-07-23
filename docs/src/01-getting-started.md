@@ -148,7 +148,8 @@ doc.descent   # depth below the last baseline, in em
 The recognised text-mode constructs are:
 
 - **Styled text** — `\textbf`, `\textit`, `\emph` (toggles italic), `\textrm`,
-  `\textnormal`, `\textsf`, `\texttt`, and `\text` / `\mbox` grouping.
+  `\textnormal`, `\textsc` (with `HarfBuzzShaper`), `\textsf`, `\texttt`, and
+  `\text` / `\mbox` grouping.
 - **Inline math** — anything between `$…$` or `\(…\)` is laid out in `Text` style and
   placed on the current line.
 - **Display math** — `$$…$$`, `\[…\]`, and top-level `align`, `aligned`, `split`,

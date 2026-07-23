@@ -58,6 +58,11 @@
     @testset "MetricShaper" begin
         shaper = TeXLayout.MetricShaper()
 
+        @testset "TextAttrs two-argument constructor defaults to no features" begin
+            attrs = TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0)
+            @test !attrs.features.small_caps
+        end
+
         @testset "Glyph x-positions advance left to right" begin
             span = TeXLayout.TextSpan("abc", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             box = TeXLayout.shape_span(shaper, span, family, 1.0)
@@ -107,6 +112,23 @@
         @testset "Missing glyph (control char) does not throw" begin
             span = TeXLayout.TextSpan("\x01\x02", TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0))
             @test_nowarn TeXLayout.shape_span(shaper, span, family, 1.0)
+        end
+
+        @testset "OpenType features fail explicitly instead of being approximated" begin
+            attrs = TeXLayout.TextAttrs(
+                TeXLayout.FontSlot.Regular,
+                1.0,
+                TeXLayout.TextFeatures(true),
+            )
+            span = TeXLayout.TextSpan("small", attrs)
+            err = try
+                TeXLayout.shape_span(shaper, span, family, 1.0)
+                nothing
+            catch e
+                e
+            end
+            @test err isa ArgumentError
+            @test occursin("HarfBuzzShaper", sprint(showerror, err))
         end
     end
 
@@ -177,6 +199,92 @@
                 1.0,
             )
             @test double.width ≈ 2 * box.width
+
+            @testset "small caps uses the OpenType smcp substitution" begin
+                termes = font_family(:termes)
+                normal_attrs = TeXLayout.TextAttrs(TeXLayout.FontSlot.Regular, 1.0)
+                small_caps_attrs = TeXLayout.TextAttrs(
+                    TeXLayout.FontSlot.Regular,
+                    1.0,
+                    TeXLayout.TextFeatures(true),
+                )
+
+                normal_lower = TeXLayout.shape_span(
+                    shaper,
+                    TeXLayout.TextSpan("a", normal_attrs),
+                    termes,
+                    1.0,
+                )
+                small_lower = TeXLayout.shape_span(
+                    shaper,
+                    TeXLayout.TextSpan("a", small_caps_attrs),
+                    termes,
+                    1.0,
+                )
+                normal_upper = TeXLayout.shape_span(
+                    shaper,
+                    TeXLayout.TextSpan("A", normal_attrs),
+                    termes,
+                    1.0,
+                )
+                small_upper = TeXLayout.shape_span(
+                    shaper,
+                    TeXLayout.TextSpan("A", small_caps_attrs),
+                    termes,
+                    1.0,
+                )
+
+                @test only(normal_lower.boxes).element.glyph_id !=
+                    only(small_lower.boxes).element.glyph_id
+                @test only(normal_upper.boxes).element.glyph_id ==
+                    only(small_upper.boxes).element.glyph_id
+                @test only(small_lower.boxes).element.represented_char == 'a'
+
+                expr = raw"\text{\textsc{This text should be in small caps}}"
+                small_math = TeXLayout.layout(
+                    parse_latex(expr),
+                    termes,
+                    TeXLayout.Display;
+                    shaper,
+                )
+                plain_math = TeXLayout.layout(
+                    parse_latex(raw"\text{This text should be in small caps}"),
+                    termes,
+                    TeXLayout.Display;
+                    shaper,
+                )
+                small_ids = [
+                    b.element.glyph_id for b in small_math
+                        if b.element isa GlyphID
+                ]
+                plain_ids = [
+                    b.element.glyph_id for b in plain_math
+                        if b.element isa GlyphID
+                ]
+                @test length(small_ids) == length(plain_ids)
+                @test small_ids != plain_ids
+
+                small_document = TeXLayout.layout_document(
+                    raw"\textsc{This text should be in small caps}";
+                    family = termes,
+                    shaper,
+                )
+                plain_document = TeXLayout.layout_document(
+                    "This text should be in small caps";
+                    family = termes,
+                    shaper,
+                )
+                document_small_ids = [
+                    b.element.glyph_id for b in small_document.boxes
+                        if b.element isa GlyphID
+                ]
+                document_plain_ids = [
+                    b.element.glyph_id for b in plain_document.boxes
+                        if b.element isa GlyphID
+                ]
+                @test length(document_small_ids) == length(document_plain_ids)
+                @test document_small_ids != document_plain_ids
+            end
         end
     end
 
@@ -303,6 +411,33 @@
             spans = doc[1].lines[1].runs[1].spans
             @test spans[1].text == "hello"
             @test spans[1].attrs.slot === TeXLayout.FontSlot.Italic
+        end
+
+        @testset "\\textsc produces a small-caps span" begin
+            doc = TeXLayout.parse_document("\\textsc{hello}")
+            spans = doc[1].lines[1].runs[1].spans
+            @test spans[1].text == "hello"
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Regular
+            @test spans[1].attrs.features.small_caps
+        end
+
+        @testset "small caps composes with font slots and restores after its group" begin
+            doc = TeXLayout.parse_document("\\textbf{A\\textsc{b}C}")
+            spans = doc[1].lines[1].runs[1].spans
+            @test getfield.(spans, :text) == ["A", "b", "C"]
+            @test all(span.attrs.slot === TeXLayout.FontSlot.Bold for span in spans)
+            @test !spans[1].attrs.features.small_caps
+            @test spans[2].attrs.features.small_caps
+            @test !spans[3].attrs.features.small_caps
+        end
+
+        @testset "\\textnormal resets small caps inside its group" begin
+            doc = TeXLayout.parse_document("\\textsc{a\\textnormal{b}c}")
+            spans = doc[1].lines[1].runs[1].spans
+            @test getfield.(spans, :text) == ["a", "b", "c"]
+            @test spans[1].attrs.features.small_caps
+            @test !spans[2].attrs.features.small_caps
+            @test spans[3].attrs.features.small_caps
         end
 
         @testset "\\textrm inside \\textbf resets slot to Regular" begin

@@ -293,6 +293,30 @@
         @test all(c.kind === NodeKind.Char for c in body.children)
     end
 
+    @testset "\\textsc inside \\text produces a styled Text node" begin
+        tree = parse_latex(raw"\text{\textsc{Small Caps}}")
+        outer = tree.children[1]
+        @test outer.kind === NodeKind.Text
+        inner = outer.children[1]
+        @test inner.kind === NodeKind.Text
+        @test inner.value == "\\textsc"
+        @test length(inner.children) == 1
+    end
+
+    @testset "nested math text font styles use document attributes" begin
+        full_family = font_family(:new_cm)
+        boxes = TeXLayout.layout(
+            parse_latex(raw"\text{\textbf{Bold}}"),
+            full_family,
+            TeXLayout.Text,
+        )
+        glyphs = filter(box -> box.element isa Glyph, boxes)
+        @test !isempty(glyphs)
+        @test all(
+            box.element.font_slot === TeXLayout.FontSlot.Bold for box in glyphs
+        )
+    end
+
     @testset "\\widehat{x}: produces NodeKind.Accent with value \\widehat" begin
         tree = parse_latex("\\widehat{x}")
         acc = tree.children[1]

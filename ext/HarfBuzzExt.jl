@@ -30,6 +30,13 @@ struct _HBGlyphExtents
     height::Int32
 end
 
+struct _HBFeature
+    tag::UInt32
+    value::UInt32
+    start::UInt32
+    stop::UInt32
+end
+
 mutable struct _HBFont
     blob::Ptr{Cvoid}
     face::Ptr{Cvoid}
@@ -82,11 +89,19 @@ _hb_buffer_add_utf8(buffer::Ptr{Cvoid}, text::String) =
 _hb_buffer_guess_segment_properties(buffer::Ptr{Cvoid}) =
     ccall((:hb_buffer_guess_segment_properties, _HB), Cvoid, (Ptr{Cvoid},), buffer)
 
-_hb_shape(font::Ptr{Cvoid}, buffer::Ptr{Cvoid}) =
-    ccall(
-    (:hb_shape, _HB), Cvoid, (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{Cvoid}, UInt32),
-    font, buffer, C_NULL, UInt32(0)
-)
+function _hb_shape(
+        font::Ptr{Cvoid},
+        buffer::Ptr{Cvoid},
+        features::Vector{_HBFeature},
+    )
+    feature_ptr = isempty(features) ? Ptr{_HBFeature}(C_NULL) : pointer(features)
+    GC.@preserve features ccall(
+        (:hb_shape, _HB), Cvoid,
+        (Ptr{Cvoid}, Ptr{Cvoid}, Ptr{_HBFeature}, UInt32),
+        font, buffer, feature_ptr, UInt32(length(features)),
+    )
+    return nothing
+end
 
 function _hb_buffer_get_glyph_infos(buffer::Ptr{Cvoid})
     len = Ref{UInt32}(0)
@@ -199,11 +214,29 @@ function _cluster_representatives(text::String)
     return reps
 end
 
+function _hb_tag(tag::String)::UInt32
+    ncodeunits(tag) == 4 || throw(ArgumentError("OpenType feature tags must contain four bytes"))
+    return UInt32(codeunit(tag, 1)) << 24 |
+        UInt32(codeunit(tag, 2)) << 16 |
+        UInt32(codeunit(tag, 3)) << 8 |
+        UInt32(codeunit(tag, 4))
+end
+
+function _hb_features(features::TeXLayout.TextFeatures)::Vector{_HBFeature}
+    result = _HBFeature[]
+    # `smcp` substitutes lowercase letters only. Deliberately do not enable
+    # `c2sc`: source capitals in \textsc remain full-height capitals.
+    features.small_caps &&
+        push!(result, _HBFeature(_hb_tag("smcp"), UInt32(1), UInt32(0), typemax(UInt32)))
+    return result
+end
+
 function _shape_text_run(
         path::String,
         text::String,
         slot::TeXLayout.FontSlot.T,
         scale::Float64,
+        features::TeXLayout.TextFeatures,
     )::TeXLayout.TeXBox
     hbf = _hb_font(path)
     buffer = _hb_buffer_create()
@@ -211,7 +244,7 @@ function _shape_text_run(
     try
         _hb_buffer_add_utf8(buffer, text)
         _hb_buffer_guess_segment_properties(buffer)
-        _hb_shape(hbf.font, buffer)
+        _hb_shape(hbf.font, buffer, _hb_features(features))
 
         info_ptr, info_len = _hb_buffer_get_glyph_infos(buffer)
         pos_ptr, pos_len = _hb_buffer_get_glyph_positions(buffer)
@@ -262,7 +295,7 @@ function shape_span(
     slot = span.attrs.slot
     scale = base_scale * span.attrs.size
     parts = [
-        _shape_text_run(path, text, slot, scale)
+        _shape_text_run(path, text, slot, scale, span.attrs.features)
             for (path, text) in _fallback_runs(span.text, family, slot)
     ]
     return TeXLayout.hconcat(parts)
