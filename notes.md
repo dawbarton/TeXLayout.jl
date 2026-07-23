@@ -1239,3 +1239,14 @@
   `https://github.com/dawbarton/TeXLayout.jl/releases/tag/v0.3.0-stress`;
   the archive SHA-256 is
   `b42d676fe396194ab1b193536dbdcd5ba61543e8f945c9639ab90883e87c74d5`.
+
+## 2026-07-23T16:58+00:00 FontFamily shape review
+
+- Added the shared TeX Gyre Heros/Cursor companion row to the README licence
+  table, matching the font documentation.
+- Reviewed grouping the primary regular/bold/italic/bold-italic fields into a
+  `TextFontSet`. The symmetry would be cleaner internally, but it would make the
+  documented Makie path awkward (`family.regular.regular`) and break existing
+  direct field access across user code. Keep the current layout for v0.3.0;
+  reconsider a `roman::TextFontSet` design only with a deliberate accessor API
+  in a future breaking release.
