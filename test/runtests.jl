@@ -13,6 +13,24 @@
 
 using Test
 using TeXLayout
+using TeXLayout:
+    FontFamily,
+    TexStyle,
+    parse_latex,
+    layout,
+    LayoutBox,
+    TeXElement,
+    Glyph,
+    GlyphID,
+    HRule,
+    VRule,
+    Space,
+    generate_tex_elements,
+    layout_document,
+    TeXBox,
+    LayoutOptions,
+    TextShaper,
+    MetricShaper
 
 # ── Style enum values ─────────────────────────────────────────────────────────
 # Brought in as const aliases rather than `using TeXLayout: Display` because

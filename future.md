@@ -1,84 +1,62 @@
 # Future Work
 
-These notes record small layout features to implement later.
+This is the focused engineering backlog for work that is not part of v0.3.0.
+Current limitations are also summarized in the user and developer documentation;
+this file records the intended implementation direction.
 
-## Possible bugs to evaluate
+## Paragraph shaping and line breaking
 
-- Does `\frac` display at the right size in displayed equations?
+- Add width-aware soft line breaking for document paragraphs. Preserve the
+  non-breaking behavior of `~` once lines can wrap.
+- Evaluate a paragraph-level bidirectional algorithm. HarfBuzz shapes runs but
+  does not reorder a bidirectional paragraph.
+- Expose HarfBuzz language, script, direction, and optional feature controls
+  only through backend-independent layout options; keep semantic features such
+  as small capitals in `TextFeatures`.
+- Extend fallback coverage for mixed-script runs and combining-mark clusters.
 
-## Revisit stress test code
+## Vertical metrics and matrix spacing
 
-- It's a bit of a mess in terms of the high-level logic around generation/comparison/etc.
+- Implement `\strut` as an invisible, zero-width box with TeX-like height and
+  depth.
+- Add `\phantom`, `\vphantom`, and `\hphantom` using the same invisible measured
+  box representation.
+- Preserve optional matrix row-spacing dimensions such as `\\[0.2em]` in the
+  parsed matrix representation and apply them when computing row baselines.
+- Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
+  compare any proposed default change against TeX, KaTeX, and all snapshot
+  fonts.
 
-## HarfBuzz shaping follow-ups
+## Display environments
 
-- Add optional controls for HarfBuzz features, language, script, and direction if
-  users need them beyond the current `hb_buffer_guess_segment_properties` path.
-- Evaluate paragraph-level bidirectional text support.  HarfBuzz shapes runs but
-  does not perform full bidi paragraph reordering.
-- Broaden fallback tests for mixed-script text and combining-mark clusters.  The
-  current implementation segments by grapheme clusters and shapes adjacent clusters
-  that choose the same fallback font together.
-- Consider whether visual/debug tools other than the text stress renderer should
-  render `GlyphID` elements directly.
+- Implement `multline` through a width-aware display layout path: first row
+  flush left, final row flush right, intermediate rows centered.
+- Replace the current `align` grid approximation with a complete amsmath-style
+  alignment template if exact multi-pair spacing becomes necessary.
 
-## `\strut` / phantom-style height support
+## Symbols and math variants
 
-- Implement `\strut` as an invisible zero-width box with TeX-like height and
-  depth, so users can force a row or expression to reserve normal vertical
-  space without drawing anything.
-- Consider adding related primitives at the same time:
-  - `\vphantom{...}` for invisible height/depth copied from an argument.
-  - `\hphantom{...}` for invisible width copied from an argument.
-  - `\phantom{...}` for invisible width/height/depth copied from an argument.
-- Parser work: add AST representation for invisible measured boxes rather than
-  treating them as glyphs or spaces.
-- Layout work: measure the argument normally, emit no visible boxes, but return
-  the measured advance/ascent/descent contribution.
+- Compose multi-codepoint negated and variant relations from a base glyph plus
+  an overlay or variation selector instead of treating a combining sequence as
+  one codepoint.
+- Investigate per-font support for `\bigplus`, which has no standard Unicode
+  codepoint.
+- Define fallback behavior for math font switches applied to characters outside
+  the Unicode Mathematical Alphanumeric Symbols block.
 
-## Matrix row spacing arguments
+## Makie integration
 
-- The parser currently recognizes optional row-spacing syntax after a matrix row
-  break, e.g. `\\[0.2em]`, but only skips the bracketed dimension.
-- Preserve that parsed dimension in `NodeKind.Matrix` payload data or a child-row
-  metadata structure.
-- Apply the extra spacing in `src/layout/matrix.jl` when computing row baselines:
-  the additional amount should increase the gap below the row where it appears.
-- Add tests for positive, zero, and malformed row-spacing arguments.
+- Pursue an upstream MathTeXEngine extension point or a dedicated Makie recipe
+  so TeXLayout no longer needs the confined `generate_tex_elements` type-piracy
+  method.
+- If Makie exposes per-render layout options, replace the current session-wide
+  default bridge for document width and alignment.
 
-## Matrix default row spacing
+## Regression tooling
 
-- Revisit `_MATRIX_ROWGAP` in `src/layout/matrix.jl`. The current fixed
-  `3 / 18` em gap can make small two-row vectors such as
-  `\begin{bmatrix}x\\y\end{bmatrix}` look cramped.
-- Compare against KaTeX, TeX/LaTeX, and OpenType MATH expectations before
-  changing the default. If changed, update layout snapshots intentionally.
-- Prefer explicit row-spacing support first, so demos and users can opt in
-  without changing global matrix layout behavior.
-
-## Dedicated sans-serif and monospace text slots
-
-- `\textsf{...}` and `\texttt{...}` currently reset to the regular text slot,
-  so they render identically to `\textrm{...}`.
-- Extend `FontFamily` with optional sans-serif and monospace slots, likely with
-  regular/bold/italic/bold-italic variants for each family if the API can stay
-  manageable.
-- Update text attribute parsing so `\textsf` selects a sans-serif family and
-  `\texttt` selects a monospace family while preserving nested bold/italic state.
-- Update slot fallback rules so missing sans-serif or monospace fonts degrade
-  predictably to the current regular-slot behavior.
-- Update the Makie extension runtime cache and `MathTeXEngine.FontFamily`
-  conversion so those additional text faces render correctly through CairoMakie.
-- Add tests showing `\textsf`, `\texttt`, nested `\textbf`, nested `\textit`, and
-  fallback behavior produce the intended font slots.
-
-## Leading and trailing whitespace conventions
-
-- Done. Document text mode trims leading/trailing whitespace at line/paragraph
-  and block boundaries (deferred-space model in `src/document.jl`); `%` line
-  comments are honoured by the lexer.
-- Done. Math mode ignores leading/trailing/repeated ordinary whitespace and a
-  space after `^`/`_` or before a command argument (`x^ 2`, `\frac 1 2`).  `~`,
-  `\ `, `\space`, and `\nobreakspace` produce a normal interword space (1/3 em)
-  in both math mode and `\text{…}`.  `\text{…}` collapses whitespace runs and
-  keeps internal spaces, matching document `{…}` groups and LaTeX.
+- Keep every visual renderer capable of consuming both name-based `Glyph` and
+  exact-path `GlyphID` elements; add renderer-contract tests when shared drawing
+  helpers are introduced.
+- Consider separating stress generation, manifest management, and comparison
+  into small library components if the suite gains more backends or output
+  formats.

@@ -14,8 +14,8 @@ const SNAPSHOT_MATH_CASES = [
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "8b4d9d0ed6897def1022f71dac41daaeb266af40eb7db165b9b4e49304a9339c"),
-    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "38e695096188a456a72c1e4fa4d8ef2f8f036e7bc275b2f23b1b9fcea504516f"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "ffce075175996408630eb01c5b0e6abd579476b12d10d8ae68ec0fe8d70bdbb0"),
+    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "7d6a2b3a26baa8504f046bc567a05c109c7f4e81d8f18f7a6478161da24417e0"),
 ]
 
 _snapshot_float(x) = string(round(Float64(x); digits = 10))
@@ -29,6 +29,16 @@ function _snapshot_box_line(box)
         print(
             io,
             el.glyph_name, "|", TeXLayout._font_slot_symbol(el.font_slot), "|",
+            el.advance_width, "|", el.left_side_bearing, "|",
+            el.x_min, "|", el.y_min, "|", el.x_max, "|", el.y_max,
+        )
+    elseif el isa GlyphID
+        stable_path = joinpath(basename(dirname(el.font_path)), basename(el.font_path))
+        print(
+            io,
+            el.glyph_id, "|", stable_path, "|",
+            TeXLayout._font_slot_symbol(el.font_slot), "|",
+            el.represented_char, "|",
             el.advance_width, "|", el.left_side_bearing, "|",
             el.x_min, "|", el.y_min, "|", el.x_max, "|", el.y_max,
         )

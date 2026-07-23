@@ -34,7 +34,7 @@ The extension inspects each `LaTeXString` and routes it one of two ways:
   and contains no other `$` (the usual `L"…"` form, e.g. `L"x^2"` → `"$x^2$"`) — is
   laid out as one formula in **`Display`** style, exactly as MathTeXEngine would.
   This is the common case for axis labels, legend entries, and annotations.
-- **Anything else** is routed through [`layout_document`](@ref): surrounding prose,
+- **Anything else** is routed through [`TeXLayout.layout_document`](@ref): surrounding prose,
   several `$…$` spans, `\(…\)` inline math, and `$$…$$` / `\[…\]` display math.  This
   lets a single `text!` call render mixed text-and-math content.
 
@@ -57,7 +57,7 @@ save("mixed.png", fig)
 ### Document-layer options through Makie
 
 Makie's call site (`generate_tex_elements(::LaTeXString)`) has a fixed signature, so
-per-render [`LayoutOptions`](@ref) cannot be passed for the document path.  Instead,
+per-render [`TeXLayout.LayoutOptions`](@ref) cannot be passed for the document path. Instead,
 set them session-wide with [`set_default_layout_options!`](@ref) — the extension
 reads [`default_layout_options`](@ref) on every document-path render, just as it
 reads [`default_font_family`](@ref) for the font:
@@ -104,6 +104,13 @@ ax = Axis(
 )
 lines!(ax, 1:10, rand(10))
 display(fig)
+```
+
+Bundled families also provide real sans-serif and monospace companions.
+Family selection composes with small caps, bold, and italic:
+
+```julia
+title = L"\text{\textsc{Small caps} and \textsf{sans serif} and \texttt{typewriter} and \textsc{\textsf{both combined!}}}"
 ```
 
 `MetricShaper` deliberately does not synthesize small caps by scaling uppercase
@@ -180,8 +187,8 @@ save("output.png", fig)
     without companion text fonts), omit the affected slots from the `set_theme!` call
     or replace them with a system font of your choice.
 
-For all eight bundled families, companion text fonts are included in the artifact and
-all four slots are populated.
+For all eight bundled families, all four primary text faces are populated;
+shared Heros and Cursor artifacts provide sans-serif and monospace faces.
 
 ## The `font_family` argument
 

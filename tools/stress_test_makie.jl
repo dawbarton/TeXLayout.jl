@@ -19,6 +19,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using TeXLayout: FontFamily, Glyph, HRule, Space, VRule, layout, parse_latex
 using FreeTypeAbstraction
 using CairoMakie
 using LaTeXStrings
@@ -111,23 +112,26 @@ function run_stress_test_makie(
         for (style, expr) in items
             fa_default = max(font_ascender, 0.35)
             fd_default = min(font_descender, -0.15)
-            bx1, bx2, by1, by2 = try
+            bounds, renderable = try
                 boxes = layout(parse_latex(expr), family, style)
-                isempty(boxes) ? (0.0, 1.0, fd_default, fa_default) :
+                bounds = isempty(boxes) ?
+                    (0.0, 1.0, fd_default, fa_default) :
                     em_bbox(boxes, upm, font_ascender, font_descender; pad = 0.05)
+                (bounds, any(box -> !(box.element isa Space), boxes))
             catch
-                (0.0, 1.0, fd_default, fa_default)
+                ((0.0, 1.0, fd_default, fa_default), false)
             end
+            bx1, bx2, by1, by2 = bounds
             above_px = max(above_px, round(Int, by2 * BASE_PX))
             below_px = max(below_px, round(Int, -by1 * BASE_PX))
-            push!(items_data, (style, expr, bx1, bx2, by1, by2))
+            push!(items_data, (style, expr, bx1, bx2, by1, by2, renderable))
         end
 
         # Leftmost ink of expression 0 is placed at MARGIN pixels;
         # subsequent expressions follow with EXPR_GAP between ink regions.
         x_ink_left = MARGIN
         pens_px = Int[]
-        for (_, _, bx1, bx2, _, _) in items_data
+        for (_, _, bx1, bx2, _, _, _) in items_data
             push!(pens_px, x_ink_left - round(Int, bx1 * BASE_PX))
             x_ink_left += round(Int, (bx2 - bx1) * BASE_PX) + EXPR_GAP
         end
@@ -205,7 +209,8 @@ function run_stress_test_makie(
         # pixels below the mathematical baseline.  To put the baseline at the intended
         # screen y, we lower the anchor by `below_px_i` for each expression.
 
-        for ((style, expr, _, _, by1_i, _), pen_x) in zip(items_data, pens_px)
+        for ((style, expr, _, _, by1_i, _, renderable), pen_x) in zip(items_data, pens_px)
+            renderable || continue
             below_px_i = round(Int, -by1_i * BASE_PX)
             y_anchor = my(y_screen + MARGIN + above_px + below_px_i)
             try

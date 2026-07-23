@@ -2,7 +2,8 @@
 
 ## Overview
 
-A `FontFamily` bundles file paths for up to five font roles:
+A `FontFamily` bundles a math font, a primary text family, and optional
+sans-serif and monospace `TextFontSet` companions:
 
 | Field | Required | Purpose |
 |:------|:---------|:--------|
@@ -11,11 +12,15 @@ A `FontFamily` bundles file paths for up to five font roles:
 | `italic` | No | Italic text font |
 | `bold` | No | Bold text font |
 | `bolditalic` | No | Bold-italic text font |
+| `sans` | No | Sans-serif regular/italic/bold/bold-italic face set |
+| `monospace` | No | Monospace regular/italic/bold/bold-italic face set |
 
 Only `math` is mandatory.  If `regular` is omitted, upright glyphs fall back to the
 math font's own codepoint map, which yields upright roman forms in well-constructed
 OpenType math fonts such as New Computer Modern.  The document text layer uses
 `italic`, `bold`, and `bolditalic` for commands such as `\textit` and `\textbf`.
+`\textsf` and `\texttt` select the optional companion sets while preserving
+weight, shape, size, and semantic features such as small capitals.
 Math-mode font switching commands like `\mathbf` still map to Unicode math-variant
 codepoints rather than these companion files.
 
@@ -48,7 +53,7 @@ using TeXLayout
 
 # Return a FontFamily for a single call.
 family = font_family(:pagella)
-boxes  = generate_tex_elements(raw"\Gamma(n+1) = n!", family)
+boxes = TeXLayout.generate_tex_elements(raw"\Gamma(n+1) = n!", family)
 
 # Override the session-wide default (affects all subsequent calls, including
 # the Makie integration extension).
@@ -73,11 +78,25 @@ To also provide a companion regular font for `\text{}`/`\mbox{}` and upright ope
 letters, use the keyword arguments:
 
 ```julia
-family = font_family("/path/to/MyMath.otf";
-                     regular    = "/path/to/MyText-Regular.otf",
-                     bold       = "/path/to/MyText-Bold.otf",
-                     italic     = "/path/to/MyText-Italic.otf",
-                     bolditalic = "/path/to/MyText-BoldItalic.otf")
+family = font_family(
+    "/path/to/MyMath.otf";
+    regular = "/path/to/MyText-Regular.otf",
+    bold = "/path/to/MyText-Bold.otf",
+    italic = "/path/to/MyText-Italic.otf",
+    bolditalic = "/path/to/MyText-BoldItalic.otf",
+    sans = TeXLayout.TextFontSet(
+        "/path/to/MySans-Regular.otf",
+        "/path/to/MySans-Italic.otf",
+        "/path/to/MySans-Bold.otf",
+        "/path/to/MySans-BoldItalic.otf",
+    ),
+    monospace = TeXLayout.TextFontSet(
+        "/path/to/MyMono-Regular.otf",
+        "/path/to/MyMono-Italic.otf",
+        "/path/to/MyMono-Bold.otf",
+        "/path/to/MyMono-BoldItalic.otf",
+    ),
+)
 ```
 
 **Requirements for the math font:**
@@ -122,10 +141,13 @@ save("output.png", fig)
 If a slot is `nothing` (e.g. `ff.regular === nothing` for a custom math-only family),
 omit it from the `set_theme!` call or fall back to a font of your choice.
 
-For the bundled TeX Gyre and New Computer Modern families, companion text fonts are
-included in the artifact and all four slots are populated.  For `:fira_math`, the
-companion text font is Fira Sans.  For `:luciole`, the companion text font is the
-Luciole text font.
+For the bundled TeX Gyre and New Computer Modern families, all four primary text
+faces are populated. For `:fira_math`, the primary text font is Fira Sans. For
+`:luciole`, it is the Luciole text font.
+
+Bundled serif families share TeX Gyre Heros for `\textsf` and TeX Gyre Cursor
+for `\texttt`; the companion artifacts are downloaded once and reused. Fira
+Math and Luciole use their primary sans-serif faces for `\textsf`.
 
 ## Licences
 
@@ -142,3 +164,4 @@ artifact tarball includes the relevant licence file.
 | `:luciole` | [Luciole](https://luciole-vision.com/) | Math: [SIL OFL 1.1](https://openfontlicense.org); text: [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `:stix_two` | [STIX Two Math](https://github.com/stipub/stixfonts) v2.0.2 | [SIL OFL 1.1](https://openfontlicense.org) |
 | `:fira_math` | [Fira Math](https://github.com/firamath/firamath) v0.3.4 + [Fira Sans](https://github.com/mozilla/Fira) | [SIL OFL 1.1](https://openfontlicense.org) |
+| text companions | [TeX Gyre Heros](https://ctan.org/pkg/tex-gyre-heros) and [TeX Gyre Cursor](https://ctan.org/pkg/tex-gyre-cursor) | GUST Font Licence |

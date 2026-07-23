@@ -22,6 +22,7 @@ import CairoMakie.Makie
 using LaTeXStrings: LaTeXString
 import MathTeXEngine
 using TeXLayout
+using TeXLayout: FontFamily, generate_tex_elements
 
 const BASE_PX = 110
 const MARGIN = 28

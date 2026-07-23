@@ -11,6 +11,8 @@
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
+using TeXLayout:
+    FontFamily, Glyph, HRule, LayoutBox, Space, VRule, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, N0f8

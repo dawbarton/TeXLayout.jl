@@ -10,6 +10,8 @@
 #   italic.otf/.ttf
 #   bolditalic.otf/.ttf
 #   LICENSE / OFL.txt / README.md  — font license files
+#
+# Shared text-only companion artifacts omit math.otf.
 
 [NewCMMath]
 lazy = true
@@ -74,3 +76,19 @@ git-tree-sha1 = "c9e16f0b9080b7c6c6d7b52dced28733bf5ae6d5"
     [[Termes.download]]
     url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-fonts/Termes.tar.gz"
     sha256 = "698b7af592cb4f640a978563ec5e1f713988faff1f6e4461e89b9f9e74fdbad1"
+
+[Heros]
+lazy = true
+git-tree-sha1 = "db7692284384110c2c5cfcf42cecfc737ea4fab4"
+
+    [[Heros.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-fonts/Heros.tar.gz"
+    sha256 = "b28ab0e99dcc5744de2893e81ef01097d99e3a29396ce7d521c44d1676253437"
+
+[Cursor]
+lazy = true
+git-tree-sha1 = "4871d5ddd67c2c7de2fab05577aff7a19a374b93"
+
+    [[Cursor.download]]
+    url = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-fonts/Cursor.tar.gz"
+    sha256 = "0a307bef9e6ee48fb6704ce809a9b4e8a27d35347816b872312da6328dea47f4"

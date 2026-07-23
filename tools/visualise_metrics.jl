@@ -19,6 +19,8 @@ Pkg.activate(@__DIR__; io = devnull)
 
 using FreeTypeAbstraction
 using TeXLayout
+using TeXLayout:
+    FontFamily, Glyph, HRule, LayoutBox, Space, VRule, layout, parse_latex
 using PNGFiles
 using Colors: RGB, N0f8
 

@@ -14,6 +14,16 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
+using TeXLayout:
+    FontFamily,
+    Glyph,
+    GlyphID,
+    HRule,
+    HarfBuzzShaper,
+    LayoutBox,
+    TeXBox,
+    VRule,
+    layout_document
 using HarfBuzz_jll
 using FreeTypeAbstraction
 using PNGFiles
@@ -188,6 +198,21 @@ const TEXT_STRESS_SECTIONS = [
         (
             name = "harfbuzz small capitals",
             source = raw"Termes-style \textsc{Small Capitals} with a full-height Initial.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
+            name = "harfbuzz sans and monospace",
+            source = raw"Roman, \textsf{sans serif}, and \texttt{monospace typewriter}.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
+            name = "harfbuzz family weight and shape composition",
+            source = raw"\textsf{Sans \textbf{bold} and \textit{italic}}; \texttt{mono \textbf{bold}}.",
+            kwargs = (shaper = HarfBuzzShaper(),),
+        ),
+        (
+            name = "harfbuzz sans small capitals",
+            source = raw"\textsc{\textsf{Small Caps Sans}} equals \textsf{\textsc{Small Caps Sans}}.",
             kwargs = (shaper = HarfBuzzShaper(),),
         ),
         (

@@ -34,7 +34,7 @@ include("shaping.jl")
 include("document.jl")
 include("compose.jl")
 
-# Public API — minimal surface for typical users.
+# Public API — configuration surface for typical Makie users.
 #
 # Internal types (NodeKind, TokenKind, MathTable, GlyphMetrics,
 # style helpers, glyph-metric functions) are accessible as TeXLayout.Xxx but
@@ -44,18 +44,10 @@ include("compose.jl")
 # exported to avoid conflicts with Base.Text and Base.Display; access them
 # as TeXLayout.Display etc.
 
-# Font API
-export FontFamily, font_family, default_font_family, set_default_font_family!
-# Style enum type (values accessed as TeXLayout.Display / TeXLayout.Text / …)
-export TexStyle
-# Pipeline
-export parse_latex, layout
-# Layout output types
-export LayoutBox, TeXElement, Glyph, GlyphID, HRule, VRule, Space
-# Makie integration
-export generate_tex_elements
-# Text-layer API (layout_document and its option/shaper types)
-export layout_document, TeXBox, LayoutOptions, TextShaper, MetricShaper, HarfBuzzShaper
+# Advanced layout, AST, font-structure, element, and shaper-interface names
+# remain available through qualified `TeXLayout.Xxx` access.
+export font_family, default_font_family, set_default_font_family!
 export default_layout_options, set_default_layout_options!
+export HarfBuzzShaper
 
 end

@@ -11,14 +11,14 @@ with [Makie.jl](https://github.com/MakieOrg/Makie.jl). Full documentation availa
 
 Full-sheet example outputs from the stress renderer:
 
-- New Computer Modern [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/new_cm_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/new_cm_text_freetype.png)
-- TeX Gyre Bonum [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/bonum_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/bonum_text_freetype.png)
-- TeX Gyre Pagella [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/pagella_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/pagella_text_freetype.png)
-- TeX Gyre Schola [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/schola_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/schola_text_freetype.png)
-- TeX Gyre Termes [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/termes_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/termes_text_freetype.png)
-- Luciole [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/luciole_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/luciole_text_freetype.png)
-- STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/stix_two_text_freetype.png)
-- Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.2.0-stress/fira_math_text_freetype.png)
+- New Computer Modern [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/new_cm_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/new_cm_text_freetype.png)
+- TeX Gyre Bonum [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/bonum_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/bonum_text_freetype.png)
+- TeX Gyre Pagella [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/pagella_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/pagella_text_freetype.png)
+- TeX Gyre Schola [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/schola_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/schola_text_freetype.png)
+- TeX Gyre Termes [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/termes_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/termes_text_freetype.png)
+- Luciole [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/luciole_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/luciole_text_freetype.png)
+- STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/stix_two_text_freetype.png)
+- Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/fira_math_text_freetype.png)
 
 Since a picture is worth a thousand words...
 
@@ -48,7 +48,7 @@ it.  The two take different approaches:
 
 - **Fonts available.** MathTeXEngine renders in Computer Modern / New Computer
   Modern. TeXLayout bundles eight math font families (New Computer Modern, the
-  TeX Gyre families, STIX Two, Fira Math, and Luciole) and can can use any other
+  TeX Gyre families, STIX Two, Fira Math, and Luciole) and can use any other
   OpenType Math font. A notable difference is that TeXLayout takes metrics
   directly from the MATH table in the font (hence being usable with any OpenType
   Math font).
@@ -71,9 +71,9 @@ MathTeXEngine does not currently parse:
 
 - **Environments.** `\begin{matrix}`/`pmatrix`/`bmatrix`/`Bmatrix`/`vmatrix`/
   `Vmatrix`/`smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
-  `l`/`c`/`r` alignment and single/double vertical rules. (Note that some
-  vertical rules do not render in Makie due to a bug in their implementation.)
-  In document mode also `align`, `aligned`, `gather`, and `equation`.
+  `l`/`c`/`r` alignment and single/double vertical rules. In document mode,
+  `align`, `aligned`, `split`, `gather`, `gathered`, and `equation` are also
+  supported, including starred forms.
 - **Binomials and generalised fractions.** `\binom`, `\genfrac`, and the
   display/text fraction variants `\dfrac` / `\tfrac`.
 - **Explicit style overrides.** `\displaystyle` / `\textstyle` /
@@ -108,15 +108,16 @@ coverage on both sides continues to change.
   `Vmatrix`, `smallmatrix`, `cases`, and `\begin{array}{colspec}` with per-column
   `l`/`c`/`r` alignment and single/double vertical rules (`|` / `||`).
 - Mixed text-and-math document layout (`layout_document`): styled text
-  (`\textbf`, `\textit`, `\textsc`, `\emph`, `\textrm`, …), inline `$…$` math, display-math
+  (`\textbf`, `\textit`, `\textsc`, `\textsf`, `\texttt`, `\emph`, `\textrm`, …),
+  inline `$…$` math, display-math
   environments (`align`, `aligned`, `gather`, `equation`), explicit line breaks
   (`\\`), and blank-line paragraph breaks, with configurable line and display
   spacing.
 - Eight bundled font families, downloaded lazily via Julia Artifacts on first use.
 - Lenient parser: never throws on ill-formed input; unknown commands produce inert
   `NodeKind.Command` leaf nodes that are silently skipped by the layout engine.
-- Optional HarfBuzz-based text shaping (e.g., ligatures, character-pair spacing)
-  when `HarfBuzz_jll` is loaded.
+- Optional HarfBuzz-based text shaping for ligatures, character-pair spacing,
+  and genuine OpenType small capitals when `HarfBuzz_jll` is loaded.
 
 ## Makie integration
 
@@ -196,7 +197,7 @@ save("output.png", fig)
 using TeXLayout
 
 # Lay out a formula with the default font (New Computer Modern Math).
-boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2}}")
+boxes = TeXLayout.generate_tex_elements(raw"\frac{1}{\sqrt{2}}")
 
 # boxes is a Vector{LayoutBox}; each box carries:
 #   .element  — a Glyph, GlyphID, HRule, VRule, or Space value
@@ -227,7 +228,7 @@ set_default_font_family!(:stix_two)
 
 # Or pass a FontFamily explicitly for a single call:
 family = font_family(:pagella)
-boxes  = generate_tex_elements(raw"\int_0^\infty e^{-x}\,dx", family)
+boxes  = TeXLayout.generate_tex_elements(raw"\int_0^\infty e^{-x}\,dx", family)
 
 # Supply your own OpenType math font:
 family = font_family("/path/to/MyMath.otf"; regular="/path/to/MyText.otf")
@@ -235,37 +236,41 @@ family = font_family("/path/to/MyMath.otf"; regular="/path/to/MyText.otf")
 
 ### Lower-level pipeline
 
-`generate_tex_elements` is a convenience wrapper.  The individual pipeline stages
-are also exported for advanced use:
+`generate_tex_elements` is a convenience wrapper. The layout pipeline is an
+advanced API and is intentionally accessed through the `TeXLayout` module:
 
 ```julia
 using TeXLayout
 
-node  = parse_latex(raw"\sum_{k=0}^{n} k^2")  # → Node (AST)
-boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
+node = TeXLayout.parse_latex(raw"\sum_{k=0}^{n} k^2")
+boxes = TeXLayout.layout(node, default_font_family(), TeXLayout.Display)
 ```
 
-Pass `shaper = HarfBuzzShaper()` to `layout` or `generate_tex_elements` to shape
+Pass `shaper = HarfBuzzShaper()` to `TeXLayout.layout` or
+`TeXLayout.generate_tex_elements` to shape
 text inside math `\text{…}` / `\mbox{…}` nodes when `HarfBuzz_jll` is loaded.
 For mixed text/math documents, pass the same shaper to `layout_document`:
 
 ```julia
 using TeXLayout, HarfBuzz_jll
 
-doc = layout_document("office \$x + \\text{affine}\$"; shaper = HarfBuzzShaper())
+doc = TeXLayout.layout_document(
+    "office \$x + \\text{affine}\$";
+    shaper = HarfBuzzShaper(),
+)
 ```
 
 OpenType-dependent styles use the same shaping path. For example, genuine small
 capitals (rather than scaled uppercase glyphs) are available with `\textsc`:
 
 ```julia
-doc = layout_document(
+doc = TeXLayout.layout_document(
     raw"Mixed \textsc{Small Capitals}";
     shaper = HarfBuzzShaper(),
 )
 ```
 
-`MetricShaper` cannot apply GSUB substitutions and reports an explicit error for
+`TeXLayout.MetricShaper` cannot apply GSUB substitutions and reports an explicit error for
 `\textsc`; use `HarfBuzzShaper` with a font that provides the OpenType `smcp`
 feature.
 
@@ -278,7 +283,7 @@ together with the laid-out `width`, `ascent`, and `descent`:
 ```julia
 using TeXLayout
 
-doc = layout_document(raw"""
+doc = TeXLayout.layout_document(raw"""
 The Gaussian integral is $\int_{-\infty}^\infty e^{-x^2}\,dx = \sqrt{\pi}$.
 We can \textbf{align} a derivation:
 \begin{align}
@@ -297,36 +302,23 @@ family = font_family(:stix_two), align = :center, width = 30.0)`.
 
 ## API reference
 
-The public API is intentionally small.  All other names (lexer tokens, parser node
-kinds, style helpers, MATH-table types, glyph-metric functions) are accessible as
+The exported API is intentionally limited to configuration needed by typical Makie
+users. All layout, AST, renderer, and extension interfaces remain accessible as
 `TeXLayout.Xxx` or via explicit `using TeXLayout: name` imports but are not
 exported.
 
 | Name | Kind | Description |
 |:-----|:-----|:------------|
-| `FontFamily` | type | Holds file paths for the math, regular, italic, bold, and bold-italic font roles |
 | `font_family` | function | Construct a `FontFamily` from a symbol (`:new_cm`, `:stix_two`, …) or an OTF path |
 | `default_font_family` | function | Return the current session-wide default `FontFamily` |
 | `set_default_font_family!` | function | Override the session-wide default; accepts a `Symbol` or a `FontFamily` |
-| `TexStyle` | enum type | The eight TeX style levels (`TeXLayout.Display`, `TeXLayout.Text`, …) |
-| `parse_latex` | function | Tokenise and parse a LaTeX math string into a `Node` AST |
-| `layout` | function | Lay out a `Node` into a `Vector{LayoutBox}` given a `FontFamily` and `TexStyle` |
-| `generate_tex_elements` | function | Convenience: `parse_latex` + `layout` in one call |
-| `layout_document` | function | Lay out mixed text/math input into a `TeXBox`; keyword options control spacing, alignment, width, and shaping |
-| `TeXBox` | struct | Document layout result: `.boxes`, `.width`, `.ascent`, `.descent` |
-| `LayoutOptions` | struct | Keyword-configurable options for `layout_document` |
 | `default_layout_options` | function | Return the session-wide default `LayoutOptions` used by `layout_document` and the Makie extension |
 | `set_default_layout_options!` | function | Override the session-wide default options (keyword form merges; positional `LayoutOptions` replaces) |
-| `TextShaper` | abstract type | Interface for text shaping; default implementation is `MetricShaper` |
-| `MetricShaper` | struct | Default metric-only text shaper (no contextual shaping) |
 | `HarfBuzzShaper` | struct | Optional HarfBuzz-backed text shaper, active when `HarfBuzz_jll` is loaded |
-| `LayoutBox` | struct | A positioned element: `.element`, `.x`, `.y`, `.scale` |
-| `TeXElement` | abstract type | Base for `Glyph`, `GlyphID`, `HRule`, `VRule`, and `Space` |
-| `Glyph` | struct | A single rendered glyph, identified by PostScript name and font role |
-| `GlyphID` | struct | A single rendered glyph, identified by exact font path and glyph ID |
-| `HRule` | struct | A horizontal rule (fraction bar, radical bar, …) |
-| `VRule` | struct | A vertical rule (array column separator) |
-| `Space` | struct | Explicit horizontal white space |
+
+Advanced entry points such as `TeXLayout.layout_document`,
+`TeXLayout.generate_tex_elements`, `TeXLayout.parse_latex`, and the concrete
+layout element types use qualified access.
 
 ## Scope
 

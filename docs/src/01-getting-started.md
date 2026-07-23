@@ -16,13 +16,13 @@ local depot cache.
 
 ## Basic usage
 
-The top-level entry point is `generate_tex_elements`, which runs the full pipeline and
+The qualified entry point `TeXLayout.generate_tex_elements` runs the full pipeline and
 returns a `Vector{LayoutBox}`:
 
 ```julia
 using TeXLayout
 
-boxes = generate_tex_elements(raw"\frac{1}{\sqrt{2\pi}} e^{-x^2/2}")
+boxes = TeXLayout.generate_tex_elements(raw"\frac{1}{\sqrt{2\pi}} e^{-x^2/2}")
 ```
 
 ### What is a `LayoutBox`?
@@ -55,20 +55,20 @@ dimensions are already stored in em units.
 ```julia
 for box in boxes
     el = box.element
-    if el isa Glyph
+    if el isa TeXLayout.Glyph
         println("Glyph '$(el.glyph_name)'  font=$(el.font_slot)  ",
                 "x=$(round(box.x, digits=4))  y=$(round(box.y, digits=4))  ",
                 "scale=$(box.scale)")
-    elseif el isa GlyphID
+    elseif el isa TeXLayout.GlyphID
         println("GlyphID $(el.glyph_id)  font=$(el.font_path)  ",
                 "x=$(round(box.x, digits=4))  y=$(round(box.y, digits=4))  ",
                 "scale=$(box.scale)")
-    elseif el isa HRule
+    elseif el isa TeXLayout.HRule
         println("HRule  width=$(round(el.width, digits=4))  ",
                 "thickness=$(round(el.thickness, digits=4))")
-    elseif el isa VRule
+    elseif el isa TeXLayout.VRule
         println("VRule  height=$(round(el.height, digits=4))")
-    elseif el isa Space
+    elseif el isa TeXLayout.Space
         println("Space  width=$(round(el.width, digits=4))")
     end
 end
@@ -83,8 +83,8 @@ individual pipeline stages, use `parse_latex` and `layout` directly:
 ```julia
 using TeXLayout
 
-node  = parse_latex(raw"\sum_{k=0}^n k^2")          # tokenise + parse → Node AST
-boxes = layout(node, default_font_family(), TeXLayout.Display)  # → Vector{LayoutBox}
+node = TeXLayout.parse_latex(raw"\sum_{k=0}^n k^2")
+boxes = TeXLayout.layout(node, default_font_family(), TeXLayout.Display)
 ```
 
 The eight `TexStyle` values are accessed as `TeXLayout.XYZ` (they are not exported, to
@@ -117,19 +117,19 @@ set_default_font_family!(:stix_two)
 
 # Use a specific family for one call only.
 family = font_family(:pagella)
-boxes  = generate_tex_elements(raw"\alpha + \beta", family)
+boxes = TeXLayout.generate_tex_elements(raw"\alpha + \beta", family)
 ```
 
 ## Mixed text and math
 
 `generate_tex_elements` handles a single formula.  For input that mixes prose with
 math — styled text, inline `$…$` math, and display-math environments — use
-`layout_document`, which returns a [`TeXBox`](@ref):
+`layout_document`, which returns a [`TeXLayout.TeXBox`](@ref):
 
 ```julia
 using TeXLayout
 
-doc = layout_document(raw"""
+doc = TeXLayout.layout_document(raw"""
 The Gaussian integral is $\int_{-\infty}^\infty e^{-x^2}\,dx = \sqrt{\pi}$.
 
 Now a \textbf{displayed} derivation:
@@ -162,10 +162,10 @@ The recognised text-mode constructs are:
   paragraph with `parskip` vertical space.
 
 Spacing and alignment are controlled with keyword arguments forwarded to
-[`LayoutOptions`](@ref):
+[`TeXLayout.LayoutOptions`](@ref):
 
 ```julia
-doc = layout_document(text;
+doc = TeXLayout.layout_document(text;
                       family       = font_family(:stix_two),
                       align        = :center,   # :left | :center | :right
                       width        = 30.0,      # fixed line width in em (default: widest item)
@@ -245,26 +245,26 @@ for box in boxes
     x   = box.x * fontsize_px
     y   = box.y * fontsize_px
 
-    if el isa Glyph
+    if el isa TeXLayout.Glyph
         # Resolve the physical font file.
         font_path = TeXLayout._font_path_for_slot(family, el.font_slot)
         # Render the glyph named `el.glyph_name` from `font_path`
         # at pixel position (x, baseline_y - y) at size (box.scale * fontsize_px).
         render_glyph(el.glyph_name, font_path, x, y, box.scale * fontsize_px)
 
-    elseif el isa GlyphID
+    elseif el isa TeXLayout.GlyphID
         # Render the final glyph ID from the exact font file chosen by the shaper.
         render_glyph_id(el.glyph_id, el.font_path, x, y, box.scale * fontsize_px)
 
-    elseif el isa HRule
+    elseif el isa TeXLayout.HRule
         # Draw a filled rectangle of width `el.width * fontsize_px`
         # and height `el.thickness * fontsize_px`, bottom-left at (x, y).
         draw_hrule(x, y, el.width * fontsize_px, el.thickness * fontsize_px)
 
-    elseif el isa VRule
+    elseif el isa TeXLayout.VRule
         draw_vrule(x, y, el.height * fontsize_px, el.thickness * fontsize_px)
 
-    elseif el isa Space
+    elseif el isa TeXLayout.Space
         # Nothing to draw; advance x by el.width * fontsize_px.
     end
 end

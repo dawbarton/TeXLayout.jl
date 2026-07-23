@@ -10,6 +10,21 @@
 @testset "Text and document layout" begin
 
     family = FontFamily(FIXTURE_FONT_PATH)
+    is_glyph_box(box) = box.element isa Glyph || box.element isa GlyphID
+
+    @testset "exports stay limited to Makie-facing configuration" begin
+        @test Set(names(TeXLayout)) == Set(
+            (
+                :TeXLayout,
+                :font_family,
+                :default_font_family,
+                :set_default_font_family!,
+                :default_layout_options,
+                :set_default_layout_options!,
+                :HarfBuzzShaper,
+            )
+        )
+    end
 
     # ── Font additions ────────────────────────────────────────────────────────
 
@@ -47,6 +62,30 @@
         @test TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.BoldItalic) == family.math
     end
 
+    @testset "text-family fallback keeps family and face as independent axes" begin
+        termes = font_family(:termes)
+        @test termes.sans isa TeXLayout.TextFontSet
+        @test termes.monospace isa TeXLayout.TextFontSet
+        @test TeXLayout._text_font_fallback(
+            termes, TeXLayout.TextFamily.Sans, TeXLayout.FontSlot.BoldItalic,
+        )[1] == termes.sans.bolditalic
+        @test TeXLayout._text_font_fallback(
+            termes, TeXLayout.TextFamily.Monospace, TeXLayout.FontSlot.Italic,
+        )[1] == termes.monospace.italic
+
+        no_companions = FontFamily(
+            termes.math, termes.regular, termes.italic, termes.bold, termes.bolditalic,
+        )
+        @test TeXLayout._text_font_fallback(
+            no_companions, TeXLayout.TextFamily.Sans, TeXLayout.FontSlot.Bold,
+        )[1] == termes.bold
+        @test last(
+            TeXLayout._text_font_fallback(
+                no_companions, TeXLayout.TextFamily.Monospace, TeXLayout.FontSlot.Regular,
+            ),
+        ) == termes.math
+    end
+
     @testset "_font_upm returns correct UPM for fixture font" begin
         upm = TeXLayout._font_upm(FIXTURE_FONT_PATH)
         @test upm isa Float64
@@ -71,6 +110,7 @@
             @test box.boxes[1].x ≈ 0.0
             @test box.boxes[2].x > 0.0
             @test box.boxes[3].x > box.boxes[2].x
+            @test all(b.element isa GlyphID for b in box.boxes)
         end
 
         @testset "Emitted glyphs carry FontSlot.Regular" begin
@@ -172,7 +212,7 @@
             @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in box.boxes)
 
             metric_box = TeXLayout.shape_span(TeXLayout.MetricShaper(), span, full_family, 1.0)
-            @test all(b.element isa Glyph for b in metric_box.boxes)
+            @test all(b.element isa GlyphID for b in metric_box.boxes)
 
             math_default = TeXLayout.layout(
                 parse_latex(raw"x+\text{office}"),
@@ -284,6 +324,54 @@
                 ]
                 @test length(document_small_ids) == length(document_plain_ids)
                 @test document_small_ids != document_plain_ids
+            end
+
+            @testset "sans-serif and monospace families compose with text features" begin
+                termes = font_family(:termes)
+                sans_small = TeXLayout.layout_document(
+                    raw"\textsc{\textsf{Small caps}}";
+                    family = termes,
+                    shaper,
+                )
+                sans_small_reversed = TeXLayout.layout_document(
+                    raw"\textsf{\textsc{Small caps}}";
+                    family = termes,
+                    shaper,
+                )
+                mono = TeXLayout.layout_document(
+                    raw"\texttt{Typewriter}";
+                    family = termes,
+                    shaper,
+                )
+
+                sans_glyphs = [
+                    b.element for b in sans_small.boxes if b.element isa GlyphID
+                ]
+                reversed_glyphs = [
+                    b.element for b in sans_small_reversed.boxes if b.element isa GlyphID
+                ]
+                mono_glyphs = [b.element for b in mono.boxes if b.element isa GlyphID]
+
+                @test !isempty(sans_glyphs)
+                @test !isempty(mono_glyphs)
+                @test all(g.font_path == termes.sans.regular for g in sans_glyphs)
+                @test all(g.font_path == termes.monospace.regular for g in mono_glyphs)
+                @test getfield.(sans_glyphs, :glyph_id) ==
+                    getfield.(reversed_glyphs, :glyph_id)
+
+                title = TeXLayout.layout(
+                    parse_latex(
+                        raw"\text{\textsc{Small caps} and \textsf{sans serif font} and \textsc{\textsf{both combined!}}}",
+                    ),
+                    termes,
+                    TeXLayout.Display;
+                    shaper,
+                )
+                @test any(
+                    b -> b.element isa GlyphID &&
+                        b.element.font_path == termes.sans.regular,
+                    title,
+                )
             end
         end
     end
@@ -440,22 +528,35 @@
             @test spans[3].attrs.features.small_caps
         end
 
-        @testset "\\textrm inside \\textbf resets slot to Regular" begin
+        @testset "family commands preserve weight and features" begin
             doc = TeXLayout.parse_document("\\textbf{\\textrm{x}}")
-            all_spans = vcat(
-                [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
+            span = only(doc[1].lines[1].runs[1].spans)
+            @test span.attrs.family === TeXLayout.TextFamily.Roman
+            @test span.attrs.slot === TeXLayout.FontSlot.Bold
+
+            cases = (
+                ("\\textsf", TeXLayout.TextFamily.Sans),
+                ("\\texttt", TeXLayout.TextFamily.Monospace),
             )
-            @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
+            for (cmd, expected_family) in cases
+                styled = TeXLayout.parse_document("\\textsc{\\textbf{$cmd{x}}}")
+                styled_span = only(styled[1].lines[1].runs[1].spans)
+                @test styled_span.attrs.family === expected_family
+                @test styled_span.attrs.slot === TeXLayout.FontSlot.Bold
+                @test styled_span.attrs.features.small_caps
+            end
         end
 
-        @testset "\\textsf and \\texttt currently map to Regular slot" begin
-            for cmd in ("\\textsf", "\\texttt")
-                doc = TeXLayout.parse_document("\\textbf{$cmd{x}}")
-                all_spans = vcat(
-                    [r.spans for r in doc[1].lines[1].runs if r isa TeXLayout.TextRun]...,
-                )
-                @test any(s -> s.text == "x" && s.attrs.slot === TeXLayout.FontSlot.Regular, all_spans)
-            end
+        @testset "independent text styles commute and restore their scopes" begin
+            left = TeXLayout.parse_document("\\textsc{\\textsf{x}}y")
+            right = TeXLayout.parse_document("\\textsf{\\textsc{x}}y")
+            left_spans = left[1].lines[1].runs[1].spans
+            right_spans = right[1].lines[1].runs[1].spans
+            @test left_spans[1].attrs == right_spans[1].attrs
+            @test left_spans[1].attrs.family === TeXLayout.TextFamily.Sans
+            @test left_spans[1].attrs.features.small_caps
+            @test left_spans[2].attrs.family === TeXLayout.TextFamily.Roman
+            @test !left_spans[2].attrs.features.small_caps
         end
 
         @testset "\\emph toggles italic" begin
@@ -870,7 +971,7 @@
             @test result isa TeXLayout.TeXBox
             @test result.ascent > 0.0
             @test result.descent >= 0.0
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test length(glyphs) == 3
             @test all(b.y ≈ 0.0 for b in glyphs)
             @test glyphs[1].x ≈ 0.0
@@ -879,7 +980,7 @@
         @testset "Case 2: line break → second baseline ≈ -1.2" begin
             result = TeXLayout.layout_document("a\\\\b"; family = family)
             glyphs = sort(
-                filter(b -> b.element isa Glyph, result.boxes);
+                filter(is_glyph_box, result.boxes);
                 by = b -> b.y,
                 rev = true,
             )
@@ -893,11 +994,11 @@
             para_result = TeXLayout.layout_document("a\n\nb"; family = family)
 
             line_ys = sort(
-                unique(round(b.y; digits = 6) for b in line_result.boxes if b.element isa Glyph);
+                unique(round(b.y; digits = 6) for b in line_result.boxes if is_glyph_box(b));
                 rev = true,
             )
             para_ys = sort(
-                unique(round(b.y; digits = 6) for b in para_result.boxes if b.element isa Glyph);
+                unique(round(b.y; digits = 6) for b in para_result.boxes if is_glyph_box(b));
                 rev = true,
             )
             @test length(line_ys) == 2
@@ -907,7 +1008,7 @@
 
             custom = TeXLayout.layout_document("a\n\nb"; family = family, parskip = 0.25)
             custom_ys = sort(
-                unique(round(b.y; digits = 6) for b in custom.boxes if b.element isa Glyph);
+                unique(round(b.y; digits = 6) for b in custom.boxes if is_glyph_box(b));
                 rev = true,
             )
             @test custom_ys[1] - custom_ys[2] ≈ 1.45 atol = 0.1
@@ -915,7 +1016,7 @@
 
         @testset "Case 3: tall line forces advance > line_height" begin
             result = TeXLayout.layout_document("\$\\dfrac{a}{b}\$\\\\x"; family = family)
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test minimum(b.y for b in glyphs) < -1.2
         end
 
@@ -923,7 +1024,7 @@
             result = TeXLayout.layout_document(
                 "long text here\\\\x"; family = family, align = :right,
             )
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             line2_glyphs = filter(b -> b.y < -0.5, glyphs)
             @test !isempty(line2_glyphs)
             @test minimum(b.x for b in line2_glyphs) > 0.0
@@ -936,7 +1037,7 @@
 
         @testset "Case 6: inline math — superscript present, shared baseline" begin
             result = TeXLayout.layout_document("x is \$x^2\$ here"; family = family)
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test length(glyphs) > 3
             # Math superscript must be above the baseline.
             @test maximum(b.y for b in glyphs) > 0.0
@@ -960,7 +1061,7 @@
         @testset "Display-only document does not start with an empty baseline" begin
             full_family = font_family(:new_cm)
             result = TeXLayout.layout_document("\\begin{equation}x\\end{equation}"; family = full_family)
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test length(glyphs) == 1
             @test abs(glyphs[1].y) < 0.2
             @test result.descent < 1.0
@@ -978,7 +1079,7 @@
 
             function first_regular_y(box)
                 glyphs = filter(
-                    b -> b.element isa Glyph &&
+                    b -> is_glyph_box(b) &&
                         b.element.font_slot === TeXLayout.FontSlot.Regular,
                     box.boxes,
                 )
@@ -1015,7 +1116,7 @@
                 "\\begin{equation}x\\end{equation}\\begin{equation}y\\end{equation}";
                 family = full_family,
             )
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test length(glyphs) == 2
             ys = sort([b.y for b in glyphs]; rev = true)
             @test abs(ys[1]) < 0.2
@@ -1043,7 +1144,7 @@
                 display_align = :right,
             )
 
-            first_x(box) = only(filter(b -> b.element isa Glyph, box.boxes)).x
+            first_x(box) = only(filter(is_glyph_box, box.boxes)).x
             @test left.width ≈ 12.0
             @test center.width ≈ 12.0
             @test right.width ≈ 12.0
@@ -1055,12 +1156,12 @@
                 "wide text line"; family = family, width = 0.5, align = :center,
             )
             @test result.width ≈ 0.5
-            @test minimum(b.x for b in result.boxes if b.element isa Glyph) < 0.0
+            @test minimum(b.x for b in result.boxes if is_glyph_box(b)) < 0.0
         end
 
         @testset "Case 9: first line glyphs have y ≈ 0 (y-origin invariant)" begin
             result = TeXLayout.layout_document("Hello world"; family = family)
-            glyphs = filter(b -> b.element isa Glyph, result.boxes)
+            glyphs = filter(is_glyph_box, result.boxes)
             @test !isempty(glyphs)
             @test all(b.y ≈ 0.0 for b in glyphs)
         end

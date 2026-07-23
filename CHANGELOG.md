@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-07-23
+
+### Added
+- Genuine sans-serif and monospace document text through `\textsf{…}` and
+  `\texttt{…}`, backed by shared TeX Gyre Heros and Cursor artifacts for bundled
+  serif families. Family, weight, shape, and OpenType features now compose as
+  independent text-style axes.
+- Feature-aware HarfBuzz fallback: semantic small caps require a physical font
+  with the OpenType `smcp` feature and never silently synthesize or ignore it.
+- Sans-serif, monospace, nested-feature, and Makie cases in the text and Cairo
+  stress suites.
+
+### Changed
+- `MetricShaper` text now emits exact-path `GlyphID` elements, matching the
+  renderer contract already used by `HarfBuzzShaper`.
+- The exported namespace is limited to Makie-facing font/layout configuration
+  functions and `HarfBuzzShaper`. Advanced layout, AST, element, and shaper
+  interfaces remain available through qualified `TeXLayout.Xxx` access.
+- `\textrm`, `\textsf`, and `\texttt` now preserve surrounding weight, shape,
+  and semantic features; `\textnormal` remains the explicit full reset.
+
+### Fixed
+- Stress-reference URLs now download outside the extraction directory, allowing
+  remote reference archives to be compared on Julia versions that require an
+  empty extraction target.
+- Cairo stress cases now restore the process-wide font and layout defaults,
+  preventing HarfBuzz settings from leaking into later FreeType cases.
+- Full stress generation now loads the Makie sheet renderer once, avoiding
+  world-age failures and repeated constant redefinitions under
+  `--include-makie`.
+
 ## [v0.2.3] - 2026-07-23
 
 ### Added
@@ -265,6 +296,7 @@ Initial public release.
 - CI workflow with Runic formatting enforcement and Dependabot for GitHub Actions and
   Julia packages
 
-[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.3...v0.3.0
 [v0.2.3]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.2...v0.2.3
 [0.1.0]: https://github.com/dawbarton/TeXLayout.jl/commit/ec8d72d5d8da6eac7f0532438064ab9fd5ae5568

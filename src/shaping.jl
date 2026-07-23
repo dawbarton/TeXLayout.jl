@@ -19,7 +19,8 @@ Shape one uniform-attribute text span into a measured layout fragment.
 
 Contract (must be honoured by every shaper, including future extensions):
   - returned boxes are in em units, baseline at y = 0, first glyph at x = 0;
-  - each emitted glyph element carries the `TextSpan`'s resolved text font slot;
+  - each emitted `GlyphID` carries the exact physical font path selected by
+    the text-family/face fallback resolver;
   - semantic `TextFeatures` are applied faithfully or rejected explicitly;
   - width = total advance, ascent/descent = max ink extents (≥ 0);
   - missing glyphs are skipped (advance = 0).
@@ -54,7 +55,8 @@ function shape_span(::MetricShaper, span, family::FontFamily, base_scale::Float6
         )
     end
 
-    slot = span.attrs.slot
+    attrs = span.attrs
+    slot = attrs.slot
     scale = base_scale * span.attrs.size
     boxes = LayoutBox[]
     cursor = 0.0
@@ -62,20 +64,18 @@ function shape_span(::MetricShaper, span, family::FontFamily, base_scale::Float6
     descent = 0.0
 
     for ch in span.text
-        r = glyph_metrics_slot(family, ch, slot)
+        r = _text_glyph(family, ch, attrs.family, slot)
         r === nothing && continue   # no glyph in any fallback — skip, zero advance
 
-        m, font_path = r
+        glyph_id, m, font_path = r
         upm = _font_upm(font_path)   # cached; per-glyph because fallback fonts may differ
-
-        ps = glyph_name_by_codepoint(font_path, UInt32(ch))
-        isempty(ps) && (ps = string(ch))   # no post table → use char as last-resort name
 
         push!(
             boxes,
             LayoutBox(
-                Glyph(
-                    ps, slot, m.advance_width, m.left_side_bearing,
+                GlyphID(
+                    glyph_id, font_path, slot, ch,
+                    m.advance_width, m.left_side_bearing,
                     m.x_min, m.y_min, m.x_max, m.y_max,
                 ),
                 cursor, 0.0, scale,

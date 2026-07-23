@@ -71,7 +71,10 @@ function main()
 
     stanzas = String[]
 
-    GITHUB_RELEASE = "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0"
+    GITHUB_RELEASE =
+        "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1.0-fonts"
+    COMPANION_RELEASE =
+        "https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-fonts"
 
     # ── NewCMMath ────────────────────────────────────────────────────────────
     println("\n=== NewCMMath ===")
@@ -121,6 +124,17 @@ function main()
     h, s = make_artifact("Termes", src, output_dir)
     push!(stanzas, toml_stanza("Termes", h, s, "$GITHUB_RELEASE/Termes.tar.gz"))
 
+    # ── Shared text companions ───────────────────────────────────────────────
+    println("\n=== Heros ===")
+    src = joinpath(ARTIFACTS_DIR, "Heros")
+    h, s = make_artifact("Heros", src, output_dir)
+    push!(stanzas, toml_stanza("Heros", h, s, "$COMPANION_RELEASE/Heros.tar.gz"))
+
+    println("\n=== Cursor ===")
+    src = joinpath(ARTIFACTS_DIR, "Cursor")
+    h, s = make_artifact("Cursor", src, output_dir)
+    push!(stanzas, toml_stanza("Cursor", h, s, "$COMPANION_RELEASE/Cursor.tar.gz"))
+
     # ── Write draft Artifacts.toml ────────────────────────────────────────────
     toml_path = joinpath(output_dir, "Artifacts.toml.draft")
     println("\n=== Writing draft Artifacts.toml → $toml_path ===")
@@ -136,6 +150,8 @@ function main()
         println(io, "#   bold.otf/.ttf")
         println(io, "#   italic.otf/.ttf")
         println(io, "#   bolditalic.otf/.ttf")
+        println(io, "#")
+        println(io, "# Text-only companion artifacts omit math.otf.")
         println(io, "#   LICENSE / OFL.txt / README.md  — font license files")
         println(io)
         for stanza in stanzas
@@ -149,10 +165,10 @@ function main()
           $output_dir
 
         Next steps:
-          1. Create a GitHub Release on your TeXLayout.jl repo (tag: e.g. v0.1-fonts)
+          1. Create a GitHub Release for any new font assets
           2. Upload the .tar.gz files as release assets
           3. Update URLs in Artifacts.toml.draft with the release asset URLs
-             (format: https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.1-fonts/<Name>.tar.gz)
+             (format: https://github.com/dawbarton/TeXLayout.jl/releases/download/<tag>/<Name>.tar.gz)
           4. Copy the completed file to TeXLayout.jl/Artifacts.toml
         """
     )

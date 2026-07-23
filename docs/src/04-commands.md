@@ -263,8 +263,8 @@ enclosed content.  With the default `MetricShaper`, spaces are preserved as expl
 classified as an ordinary atom for inter-atom spacing purposes.
 
 When `HarfBuzz_jll` is loaded and `HarfBuzzShaper()` is passed as the active shaper,
-text fragments are shaped as text runs and may emit `GlyphID` elements instead of
-one name-based `Glyph` per character. Nested document-style commands are accepted
+text fragments are shaped as text runs and emit exact-path `GlyphID` elements.
+Nested document-style commands are accepted
 inside these fragments. In particular, `\text{\textsc{Small Caps}}` applies the
 font's OpenType `smcp` substitutions. `MetricShaper` cannot apply that feature and
 raises an explicit error instead of synthesizing scaled capitals.
@@ -362,9 +362,10 @@ explicitly.  The following constructs are recognised only in this document conte
 | `\textit{…}` | Italic text |
 | `\textsc{…}` | Small capitals via the OpenType `smcp` feature; requires `HarfBuzzShaper` |
 | `\emph{…}` | Emphasis — toggles italic relative to the surrounding text |
-| `\textrm{…}`, `\textnormal{…}` | Upright (regular) text |
-| `\textsf{…}` | Sans-serif (falls back to the regular slot in v1) |
-| `\texttt{…}` | Monospace (falls back to the regular slot in v1) |
+| `\textrm{…}` | Select the primary Roman text family while preserving weight, shape, and features |
+| `\textnormal{…}` | Reset to primary Roman, regular, upright, feature-free text |
+| `\textsf{…}` | Select the configured sans-serif family |
+| `\texttt{…}` | Select the configured monospace family |
 | `\text{…}`, `\mbox{…}` | Grouping scope that inherits the current text attributes |
 | `$…$`, `\(…\)` | Inline math, laid out in `Text` style on the current line |
 | `$$…$$`, `\[…\]` | Free-standing centred display-math block |
@@ -372,8 +373,9 @@ explicitly.  The following constructs are recognised only in this document conte
 | `\\` | Explicit line break |
 | blank line | Paragraph break with `parskip` vertical space |
 
-Styling nests correctly: `\textbf` inside `\textit` produces bold-italic, and `\emph`
-flips italic on or off depending on the surrounding state.
+Styling nests by independent axes: `\textbf` inside `\textit` produces bold-italic,
+family commands preserve weight and shape, and `\textsc{\textsf{…}}` is equivalent
+to `\textsf{\textsc{…}}`. `\emph` flips italic relative to the surrounding state.
 
 Whitespace follows LaTeX: runs collapse to a single inter-word space, a blank line
 starts a new paragraph, and leading/trailing whitespace at a line or block boundary

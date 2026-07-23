@@ -26,10 +26,7 @@ using LaTeXStrings: LaTeXString
 
 const _MTEElement = Union{MathTeXEngine.TeXChar, MathTeXEngine.HLine, MathTeXEngine.VLine}
 const _MTEElementTuple = Tuple{_MTEElement, Point2f, Float64}
-const _RuntimeKey = Tuple{
-    String, Union{String, Nothing}, Union{String, Nothing},
-    Union{String, Nothing}, Union{String, Nothing},
-}
+const _RuntimeKey = NTuple{13, Union{String, Nothing}}
 const _REPRESENTED_CHAR_BY_GLYPH_NAME = Dict(
     "space" => ' ',
     "hyphen" => '-',
@@ -156,13 +153,8 @@ function _mte_font_family(tl_family::TeXLayout.FontFamily)
     )
 end
 
-@inline _runtime_key(tl_family::TeXLayout.FontFamily) = (
-    tl_family.math,
-    tl_family.regular,
-    tl_family.italic,
-    tl_family.bold,
-    tl_family.bolditalic,
-)
+@inline _runtime_key(tl_family::TeXLayout.FontFamily) =
+    TeXLayout._font_family_key(tl_family)
 
 function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
     return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do

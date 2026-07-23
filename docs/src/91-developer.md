@@ -40,12 +40,12 @@ The public entry points are:
 
 ```julia
 # Run the full pipeline in one call.
-boxes = generate_tex_elements(raw"\frac{a}{b}", family)
+boxes = TeXLayout.generate_tex_elements(raw"\frac{a}{b}", family)
 
 # Run stages individually.
 tokens = TeXLayout.tokenize(raw"\frac{a}{b}")   # tokenize is internal (not exported)
-node   = parse_latex(tokens)          # or parse_latex(raw"\frac{a}{b}")
-boxes  = layout(node, family, TeXLayout.Display)
+node = TeXLayout.parse_latex(tokens)
+boxes = TeXLayout.layout(node, family, TeXLayout.Display)
 ```
 
 ---
@@ -665,35 +665,34 @@ environment:
 
 | Type | Role |
 |:-----|:-----|
-| `TextAttrs` | Resolved text styling for a span: `slot`, `size`, and semantic `TextFeatures` |
+| `TextAttrs` | Resolved text styling for a span: independent text `family`, weight/shape `slot`, `size`, and semantic `TextFeatures` |
 | `TextFeatures` | Backend-independent text features; currently records `small_caps` |
 | `TextSpan` | A maximal run of characters sharing one `TextAttrs` |
 | `Run` (`TextRun` / `MathRun`) | A horizontal run within a line: shaped text, or a math `Node` with its `TexStyle` |
 | `Line` | A sequence of `Run`s separated by `\\` |
 | `Block` (`ParagraphBlock` / `DisplayBlock` / `ParagraphBreakBlock`) | A paragraph of lines, a free-standing display-math block, or a blank-line break |
 
-Text font-switch commands (`\textbf`, `\textit`, `\emph`, `\textrm`, `\textnormal`,
-`\textsf`, `\texttt`, `\textsc`) update the current `TextAttrs`; `\emph` toggles
-italic relative to the surrounding state and `\textsc` sets the semantic
-`small_caps` feature. `\text` / `\mbox` open a grouping scope that inherits the
-current attributes. The shared definitions in `text_styles.jl` are also used for
+Text font-switch commands update independent family, weight, shape, and feature
+axes in `TextAttrs`; `\textnormal` is the only full reset. `\emph` toggles italic
+relative to the surrounding state and `\textsc` sets the semantic `small_caps`
+feature. `\text` / `\mbox` open a grouping scope that inherits the current
+attributes. The shared definitions in `text_styles.jl` are also used for
 nested styles in math-internal text. The display environments `align`, `aligned`, `gather`, and
 `equation` (in `_DISPLAY_ENVS`) become `DisplayBlock`s when they appear at the top
 level without `$…$`.
 
-Currently `\textbf`, `\textit`, and nested bold-italic text select the corresponding
-`FontFamily` text slots.  `\textsf` and `\texttt` are parsed as text-style scopes but
-fall back to the regular text slot until dedicated sans-serif and monospace slots are
-added.
+`\textsf` and `\texttt` select optional sans-serif and monospace `TextFontSet`
+values. The centralized text resolver exhausts the requested family's face
+fallbacks before trying the primary Roman set and, finally, the math font.
 
 ### Shaping (`src/shaping.jl`)
 
 `TextShaper` is the abstract interface for turning a `TextSpan` into positioned
 glyphs; `shape_span(shaper, span, family, scale)` is the entry point.  The default
 `MetricShaper` does metric-only shaping (one glyph per character, advances from the
-font's `hmtx` table) with no contextual substitution or kerning.  `HarfBuzzShaper`
-is implemented in the optional `ext/HarfBuzzExt.jl` extension and emits `GlyphID`
-elements with final glyph IDs and exact font paths. It maps semantic small caps to
+font's `hmtx` table) with no contextual substitution or kerning. Both text shapers
+emit `GlyphID` elements with final glyph IDs and exact font paths. `HarfBuzzShaper`
+is implemented in the optional `ext/HarfBuzzExt.jl` extension and maps semantic small caps to
 the OpenType `smcp` feature. `MetricShaper` rejects feature-bearing spans explicitly:
 it must not manufacture small caps from scaled uppercase glyphs. Document text spans always go
 through `LayoutOptions.shaper`; math `\text{…}` / `\mbox{…}` nodes use the same
@@ -734,11 +733,14 @@ struct FontFamily
     italic::Union{String, Nothing}
     bold::Union{String, Nothing}
     bolditalic::Union{String, Nothing}
+    sans::Union{TextFontSet, Nothing}
+    monospace::Union{TextFontSet, Nothing}
 end
 ```
 
-Only `math` is mandatory.  The remaining slots may be `nothing`; when absent, any
-operation that would use them falls back to the math font.
+Only `math` is mandatory. `TextFontSet` groups regular, italic, bold, and
+bold-italic faces for a secondary family. Missing faces follow the centralized
+text fallback resolver; the math font is the final fallback.
 
 ```julia
 # From a registered artifact symbol.
@@ -1153,19 +1155,15 @@ increases are usually more actionable than nanosecond-scale timing movement.
   text layer uses the `bold`, `italic`, and `bolditalic` `FontFamily` slots, but
   math-mode font switching does not yet use those slots to cover these cases.
 
-- **Dedicated sans-serif and monospace text slots** — `\textsf` and `\texttt` are
-  parsed by the document text layer but currently fall back to the regular text slot.
-  Extending `FontFamily` with sans-serif and monospace slots would let these render
-  distinct faces and would require matching Makie runtime-cache support.
-
 - **Matrix vertical spacing helpers** — `\strut`, `\phantom`/`\vphantom`/`\hphantom`,
   and applied row-spacing arguments such as `\\[0.2em]` are not implemented.  The
   parser currently recognises and skips bracketed matrix row-spacing arguments; layout
   does not apply them.
 
-- **Whitespace conventions** — leading, trailing, and repeated whitespace handling in
-  math and document text modes needs a compatibility review against LaTeX before any
-  behavior changes.
+- **Soft line breaking** — document whitespace follows LaTeX's collapsing and
+  boundary-trimming conventions, but paragraphs do not yet wrap to a target width.
+  Consequently, the non-breaking property of `~` is not observable until a
+  width-aware line-breaking pass is added.
 
 - **Makie type piracy** — the `MathTeXEngineExt` extension adds a method to a function
   and argument type that TeXLayout does not own.  Alternative integration strategies
