@@ -1306,3 +1306,6 @@
   literal and Makie routing fixes.
 - Bumped `Project.toml` to `0.3.1`, closed the changelog fixes under
   `v0.3.1` dated 2026-07-25, and reopened an empty `[Unreleased]` section.
+- Full tests (1,518/1,518), the Documenter build, Runic, and diff checks passed;
+  committed as `8c321ae` and opened
+  [PR #28](https://github.com/dawbarton/TeXLayout.jl/pull/28).
