@@ -28,6 +28,53 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test glyphs[1].scale ≈ 1.0  # Text style
     end
 
+    @testset "Literal commands emit portable glyphs" begin
+        math_cases = (
+            raw"\#" => "numbersign",
+            raw"\$" => "dollar",
+            raw"\%" => "percent",
+            raw"\&" => "ampersand",
+            raw"\_" => "underscore",
+            raw"\{" => "braceleft",
+            raw"\}" => "braceright",
+            raw"\lbrace" => "braceleft",
+            raw"\rbrace" => "braceright",
+            raw"\|" => "dblverticalbar",
+        )
+        for (source, expected_name) in math_cases
+            glyph = only(find_glyphs(layout(parse_latex(source), family, Text)))
+            @test glyph.element.glyph_name == expected_name
+        end
+
+        text_cases = (
+            raw"\textdollar" => "dollar",
+            raw"\textunderscore" => "underscore",
+            raw"\textbraceleft" => "braceleft",
+            raw"\textbraceright" => "braceright",
+            raw"\textasciitilde" => "asciitilde",
+            raw"\textbackslash" => "backslash",
+            raw"\textasciicircum" => "asciicircum",
+            raw"\textbar" => "bar",
+            raw"\textbardbl" => "dblverticalbar",
+        )
+        for (source, expected_name) in text_cases
+            expression = "\\text{" * source * "}"
+            glyph = only(find_glyphs(layout(parse_latex(expression), family, Text)))
+            @test glyph.element.glyph_name == expected_name
+        end
+    end
+
+    @testset "\\lbrace and \\rbrace remain valid delimiter aliases" begin
+        boxes = layout(
+            parse_latex(raw"\left\lbrace x \right\rbrace"),
+            family,
+            Text,
+        )
+        names = [box.element.glyph_name for box in find_glyphs(boxes)]
+        @test any(contains("braceleft"), names)
+        @test any(contains("braceright"), names)
+    end
+
     @testset "Superscript is above baseline" begin
         # In x^2, the '2' must have a positive y offset.
         boxes = layout(parse_latex("x^2"), family, Text)

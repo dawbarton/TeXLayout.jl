@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-07-25
+
+### Fixed
+- Escaped special characters (`\#`, `\$`, `\%`, `\&`, `\_`, `\{`, `\}`),
+  brace aliases, `\|`, and text literal commands now render consistently in
+  math, math-internal text, document text, and Makie's `LaTeXString` path.
+- Escaped dollar signs inside a single Makie `LaTeXString` no longer make the
+  extension misclassify the input as a mixed text-and-math document.
+
 ## [v0.3.0] - 2026-07-23
 
 ### Added

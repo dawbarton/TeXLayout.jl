@@ -314,7 +314,7 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "langle" => 0x27E8, "rangle" => 0x27E9,
     "lfloor" => 0x230A, "rfloor" => 0x230B,
     "lceil" => 0x2308, "rceil" => 0x2309,
-    "vert" => 0x007C, "Vert" => 0x2016,
+    "vert" => 0x007C, "Vert" => 0x2016, "|" => 0x2016,
     # Punctuation
     "colon" => 0x003A, "cdotp" => 0x22C5,
     "ldotp" => 0x002E,

@@ -75,6 +75,11 @@ const MAKIE_CASES = [
         name = "small caps sans and combined",
         source = raw"\text{\textsc{Caps} | \textsf{sans} | \textsc{\textsf{both}} | \texttt{mono}}",
     ),
+    (
+        section = "8. ESCAPED LITERALS",
+        name = "math special characters",
+        source = raw"\#\;\$\;\%\;\&\;\_\;\{\;\}\;\|",
+    ),
 ]
 
 # ── Small utilities ──────────────────────────────────────────────────────────

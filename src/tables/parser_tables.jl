@@ -6,6 +6,43 @@
 # and `\nobreakspace`.
 const _NORMAL_SPACE_EM = 6 / 18
 
+# Escaped TeX special characters accepted in both math and text modes.  The
+# lexer keeps these as commands so the unescaped character can retain its TeX
+# syntax (for example, `%` starts a comment while `\%` renders a percent sign).
+const _ESCAPED_SPECIAL_CHARS = Dict{String, Char}(
+    raw"\#" => '#',
+    raw"\$" => '$',
+    raw"\%" => '%',
+    raw"\&" => '&',
+    raw"\_" => '_',
+    raw"\{" => '{',
+    raw"\}" => '}',
+)
+
+# Mode-specific aliases.  Keeping these separate prevents text-only commands
+# such as `\textasciitilde` from silently acquiring math-mode semantics.
+const _MATH_LITERAL_CHARS = merge(
+    _ESCAPED_SPECIAL_CHARS,
+    Dict{String, Char}(
+        raw"\lbrace" => '{',
+        raw"\rbrace" => '}',
+    ),
+)
+const _TEXT_LITERAL_CHARS = merge(
+    _ESCAPED_SPECIAL_CHARS,
+    Dict{String, Char}(
+        raw"\textdollar" => '$',
+        raw"\textunderscore" => '_',
+        raw"\textbraceleft" => '{',
+        raw"\textbraceright" => '}',
+        raw"\textasciitilde" => '~',
+        raw"\textbackslash" => '\\',
+        raw"\textasciicircum" => '^',
+        raw"\textbar" => '|',
+        raw"\textbardbl" => '‖',
+    ),
+)
+
 # Explicit horizontal spacing commands mapped to their width in em units.
 # Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
 const _SPACE_WIDTHS = Dict{String, Float64}(
@@ -36,6 +73,8 @@ const _DELIM_GLYPH_NAMES = Dict{String, String}(
     "]" => "bracketright",
     "\\{" => "braceleft",
     "\\}" => "braceright",
+    "\\lbrace" => "braceleft",
+    "\\rbrace" => "braceright",
     "|" => "bar",
     "\\|" => "dblverticalbar",
     "/" => "slash",

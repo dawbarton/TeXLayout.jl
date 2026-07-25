@@ -1250,3 +1250,59 @@
   direct field access across user code. Keep the current layout for v0.3.0;
   reconsider a `roman::TextFontSet` design only with a deliberate accessor API
   in a future breaking release.
+
+## 2026-07-25T17:23+00:00 Escaped percent rendering
+
+- Updated `main` from `origin/main` and reproduced missing `\%` output in both
+  core layout and `MathTeXEngine.generate_tex_elements(::LaTeXString)`.
+- The lexer correctly distinguished escaped `\%` from an unescaped comment, but
+  the parsers left it as an unsupported command: math layout emitted no glyph
+  and document text skipped it.
+- Treat `\%` as a shared escaped literal in math, math-internal text, and
+  document text; retain unescaped `%` comment behavior.
+- Core tests pass 1,342/1,342, the full `Pkg.test()` target with HarfBuzz passes
+  1,367/1,367, and direct CairoMakie rendering confirms visible `50%` output
+  with nonzero glyph IDs through inline-math, document, and `\text{…}` routes.
+
+## 2026-07-25T17:31+00:00 Escaped literal audit
+
+- Audited the standard LaTeX special-character escapes through math,
+  math-internal `\text{…}`, document text, and the Makie extension.
+- Besides the now-fixed `\%`, the lexer preserves but the parsers/layout drop
+  `\#`, `\$`, `\&`, `\_`, `\{`, and `\}` in every route. Literal braces do
+  remain usable specifically as delimiter arguments such as `\left\{`.
+- Math `\backslash` renders, but document-text `\textbackslash`,
+  `\textasciitilde`, and `\textasciicircum` are unsupported.
+- Related aliases are inconsistent: `\textdollar` renders in math and
+  math-internal text but not document text, while `\textunderscore`,
+  `\textbraceleft`, `\textbraceright`, `\lbrace`, and `\rbrace` are dropped.
+  Ordinary math `\vert`/`\Vert` render, but the `\|` alias is dropped except
+  when consumed as a delimiter argument.
+- Makie's `_is_inline_math` counts escaped `\$` as a delimiter, so an otherwise
+  single-span `LaTeXString` containing a literal dollar is routed through the
+  document path in addition to the missing-glyph problem.
+
+## 2026-07-25T17:40+00:00 Maintainable literal-command implementation
+
+- Split literal handling into a shared escaped-special-character table and
+  mode-specific math/text alias tables. Math parsing emits `NodeKind.Char`;
+  document parsing writes the same characters into text spans; math-internal
+  `\text{…}` consumes the text-specific table.
+- Added literal brace atom classes and `\lbrace`/`\rbrace` delimiter aliases;
+  routed ordinary `\|` through the portable symbol-codepoint table.
+- Replaced Makie's raw dollar count with an inline-token helper that reuses the
+  core lexer, so escapes and comments have one source of truth; the resulting
+  tokens are reused by `parse_latex` to avoid a second inline tokenization pass.
+- Added table-driven core tests, optional-extension tests under `Pkg.test()`,
+  and math/text Cairo stress cases covering the full literal set.
+- Verification passes: dependency-light tests 1,435/1,435; full `Pkg.test()`
+  with HarfBuzz and the MathTeXEngine extension 1,518/1,518; Documenter build;
+  New CM math/text Cairo stress generation and visual inspection. Direct probes
+  found no missing literal glyphs across all eight bundled font families.
+
+## 2026-07-25T18:52+00:00 v0.3.1 release PR preparation
+
+- Created `fix/escaped-literals-v0.3.1` from `origin/main` for the escaped
+  literal and Makie routing fixes.
+- Bumped `Project.toml` to `0.3.1`, closed the changelog fixes under
+  `v0.3.1` dated 2026-07-25, and reopened an empty `[Unreleased]` section.
