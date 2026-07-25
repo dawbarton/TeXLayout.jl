@@ -73,6 +73,11 @@ const TEXT_STRESS_SECTIONS = [
             source = raw"short\\a much longer text line\\mid",
             kwargs = (align = :center, width = 12.0),
         ),
+        (
+            name = "escaped literal characters",
+            source = raw"Escaped: \# \$ \% \& \_ \{ \}; text: \textbackslash{} \textasciitilde{} \textasciicircum{}.",
+            kwargs = (;),
+        ),
     ],
     "2. TEXT STYLES AND NESTING" => TextCase[
         (

@@ -50,9 +50,9 @@ const _CHAR_ATOM_CLASS = Dict{Char, Symbol}(
     '↓' => :rel, '⇑' => :rel,
     '⇓' => :rel,
     # Open delimiters
-    '(' => :open, '[' => :open,
+    '(' => :open, '[' => :open, '{' => :open,
     # Close delimiters
-    ')' => :close, ']' => :close,
+    ')' => :close, ']' => :close, '}' => :close,
     '!' => :close,
     # Punctuation
     ',' => :punct, ';' => :punct,
@@ -288,7 +288,7 @@ const _CMD_ATOM_CLASS = Dict{String, Symbol}(
     "clubsuit" => :ord, "diamondsuit" => :ord,
     "heartsuit" => :ord, "spadesuit" => :ord,
     "checkmark" => :ord,
-    "vert" => :ord, "Vert" => :ord,
+    "vert" => :ord, "Vert" => :ord, "|" => :ord,
     "backslash" => :ord,
     "S" => :ord, "P" => :ord,
     "copyright" => :ord, "circledR" => :ord,

@@ -87,6 +87,51 @@
         @test cmd.value == "\\alpha"
     end
 
+    @testset "Escaped special characters and math aliases" begin
+        cases = (
+            raw"\#" => "#",
+            raw"\$" => "\$",
+            raw"\%" => "%",
+            raw"\&" => "&",
+            raw"\_" => "_",
+            raw"\{" => "{",
+            raw"\}" => "}",
+            raw"\lbrace" => "{",
+            raw"\rbrace" => "}",
+        )
+        for (source, expected) in cases
+            tree = parse_latex(source)
+            literal = only(tree.children)
+            @test literal.kind === NodeKind.Char
+            @test literal.value == expected
+        end
+
+        @test TeXLayout._atom_class(only(parse_latex(raw"\{").children)) === :open
+        @test TeXLayout._atom_class(only(parse_latex(raw"\}").children)) === :close
+    end
+
+    @testset "Text literal commands become characters inside \\text" begin
+        cases = (
+            raw"\textdollar" => "\$",
+            raw"\textunderscore" => "_",
+            raw"\textbraceleft" => "{",
+            raw"\textbraceright" => "}",
+            raw"\textasciitilde" => "~",
+            raw"\textbackslash" => "\\",
+            raw"\textasciicircum" => "^",
+            raw"\textbar" => "|",
+            raw"\textbardbl" => "‖",
+        )
+        for (source, expected) in cases
+            tree = parse_latex("\\text{" * source * "}")
+            text_node = only(tree.children)
+            @test text_node.kind === NodeKind.Text
+            literal = only(text_node.children)
+            @test literal.kind === NodeKind.Char
+            @test literal.value == expected
+        end
+    end
+
     @testset "Nested: \\frac{x^2}{y_i}" begin
         tree = parse_latex("\\frac{x^2}{y_i}")
         frac = tree.children[1]

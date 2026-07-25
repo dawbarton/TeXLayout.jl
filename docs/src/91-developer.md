@@ -936,10 +936,10 @@ Julia's standard method dispatch selects the TeXLayout method automatically.
 The extension converts TeXLayout output to MathTeXEngine's expected tuple format:
 
 1. Inspect the `LaTeXString`.
-   - A string that starts and ends with a single `$` and contains no other `$` is
-     treated as one inline-math formula.  The extension strips the delimiters, calls
-     `TeXLayout.parse_latex`, and lays the result out in `Display` style with
-     `TeXLayout.default_font_family()`.
+   - A string that starts and ends with a single `$` and contains exactly two
+     unescaped `$` math shifts is treated as one inline-math formula. The
+     extension strips the delimiters, calls `TeXLayout.parse_latex`, and lays the
+     result out in `Display` style with `TeXLayout.default_font_family()`.
    - Every other string is treated as document input and routed through
      `TeXLayout.layout_document` with `TeXLayout.default_font_family()` and
      `TeXLayout.default_layout_options()`.

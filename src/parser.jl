@@ -136,6 +136,15 @@ end
 
 # Like _parse_sequence_children! but preserves whitespace as NodeKind.Char(' ') nodes.
 # Used for the argument of \text{} and \mbox{}, where spaces are significant.
+function _parse_text_literal_command!(p::_Parser)::Union{Node, Nothing}
+    tok = _current(p)
+    tok.kind === TokenKind.Command || return nothing
+    ch = get(_TEXT_LITERAL_CHARS, tok.value, nothing)
+    ch === nothing && return nothing
+    _advance!(p)
+    return Node(NodeKind.Char, string(ch))
+end
+
 function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
@@ -145,7 +154,8 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
             push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
         else
-            push!(children, _parse_atom!(p))
+            literal = _parse_text_literal_command!(p)
+            push!(children, literal === nothing ? _parse_atom!(p) : literal)
         end
     end
     return children
@@ -160,7 +170,8 @@ function _parse_text_argument!(p::_Parser)::Node
         length(children) == 1 && return children[1]
         return Node(NodeKind.Sequence, children)
     else
-        return _parse_primary!(p)
+        literal = _parse_text_literal_command!(p)
+        return literal === nothing ? _parse_primary!(p) : literal
     end
 end
 
@@ -373,7 +384,11 @@ function _parse_command!(p::_Parser)::Node
     tok = _advance!(p)
     cmd = tok.value
 
-    if haskey(_SPACE_WIDTHS, cmd)
+    literal = get(_MATH_LITERAL_CHARS, cmd, nothing)
+    if literal !== nothing
+        return Node(NodeKind.Char, string(literal))
+
+    elseif haskey(_SPACE_WIDTHS, cmd)
         return space_node(_SPACE_WIDTHS[cmd])
 
     elseif cmd ∈ ("\\kern", "\\hskip")

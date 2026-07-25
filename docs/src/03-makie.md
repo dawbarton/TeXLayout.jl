@@ -31,9 +31,11 @@ the OpenType font data on every formula.
 The extension inspects each `LaTeXString` and routes it one of two ways:
 
 - **A single inline-math span** — a string that starts and ends with a single `$`
-  and contains no other `$` (the usual `L"…"` form, e.g. `L"x^2"` → `"$x^2$"`) — is
-  laid out as one formula in **`Display`** style, exactly as MathTeXEngine would.
-  This is the common case for axis labels, legend entries, and annotations.
+  and contains no other unescaped `$` (the usual `L"…"` form, e.g. `L"x^2"` →
+  `"$x^2$"`) — is laid out as one formula in **`Display`** style, exactly as
+  MathTeXEngine would. Escaped dollar literals such as the one in `L"\$5"` do
+  not change this routing. This is the common case for axis labels, legend
+  entries, and annotations.
 - **Anything else** is routed through [`TeXLayout.layout_document`](@ref): surrounding prose,
   several `$…$` spans, `\(…\)` inline math, and `$$…$$` / `\[…\]` display math.  This
   lets a single `text!` call render mixed text-and-math content.

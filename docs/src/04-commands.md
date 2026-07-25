@@ -350,6 +350,26 @@ The following commands insert explicit horizontal space:
 a command name (`x^ 2` and `\frac 1 2` bind the following token).  A `%` starts a
 comment that runs to the end of the line.
 
+### Literal special characters
+
+The standard escaped special characters work in both math and document text:
+
+| Source | Output |
+|:-------|:-------|
+| `\#` | `#` |
+| `\$` | `$` |
+| `\%` | `%` |
+| `\&` | `&` |
+| `\_` | `_` |
+| `\{`, `\lbrace` | `{` (`\lbrace` is math-only) |
+| `\}`, `\rbrace` | `}` (`\rbrace` is math-only) |
+
+In math, `\backslash`, `\vert`/`\Vert`, and `\|` render `\`, `|`, and `‖`.
+Document text and math-internal `\text{…}` additionally recognise
+`\textdollar`, `\textunderscore`, `\textbraceleft`, `\textbraceright`,
+`\textasciitilde`, `\textbackslash`, `\textasciicircum`, `\textbar`, and
+`\textbardbl`.
+
 ## Document text mode
 
 The commands above apply to **math** input.  `layout_document` additionally accepts
@@ -380,7 +400,8 @@ to `\textsf{\textsc{…}}`. `\emph` flips italic relative to the surrounding sta
 Whitespace follows LaTeX: runs collapse to a single inter-word space, a blank line
 starts a new paragraph, and leading/trailing whitespace at a line or block boundary
 is trimmed.  `~` is a non-breaking space that is never trimmed, and `%` starts a
-line comment (a line ending in `%` joins the next line with no space).
+line comment (a line ending in `%` joins the next line with no space). Use the
+escaped forms above when those characters should be rendered literally.
 
 See [`layout_document`](05-api.md) and the [Getting Started](01-getting-started.md#Mixed-text-and-math)
 walkthrough for usage and the available `LayoutOptions`.

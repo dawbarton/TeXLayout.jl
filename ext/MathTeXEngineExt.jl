@@ -65,14 +65,24 @@ function _strip_math_delimiters(s::AbstractString)
     return str
 end
 
-# True when the whole string is a single inline-math span: it starts and ends with
-# a single `$` and contains no other `$`.  This is the canonical `L"…"` form (e.g.
-# "$x^2$").  Anything else — surrounding text, `$$…$$`/`\[…\]` display math, or
-# several `$…$` spans — is routed through the document layer instead.
+# Return already-tokenized inline math when the whole string is one `$…$` span,
+# or `nothing` when it must use document routing.  Reusing TeXLayout's lexer
+# keeps escaped-dollar and comment semantics in one place: `\$` is a command,
+# while an unescaped `$` inside the outer delimiters is a MathShift token.
+function _inline_math_tokens(s::AbstractString)
+    length(s) >= 2 || return nothing
+    (first(s) == '$' && last(s) == '$') || return nothing
+    tokens = TeXLayout.tokenize(_strip_math_delimiters(s))
+    any(token -> token.kind === TeXLayout.TokenKind.MathShift, tokens) && return nothing
+    return tokens
+end
+
+# True when the whole string is a single inline-math span.  This is the
+# canonical `L"…"` form (e.g. "$x^2$").  Anything else — surrounding text,
+# `$$…$$`/`\[…\]` display math, or several `$…$` spans — is routed through the
+# document layer instead.
 function _is_inline_math(s::AbstractString)::Bool
-    length(s) >= 2 || return false
-    (first(s) == '$' && last(s) == '$') || return false
-    return count(==('$'), s) == 2
+    return _inline_math_tokens(s) !== nothing
 end
 
 # Return the single character encoded by `name`, or `nothing` if the string is
@@ -274,9 +284,10 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = Mat
     tl_family = TeXLayout.default_font_family()
     runtime = _runtime_bundle(tl_family)
     opts = TeXLayout.default_layout_options()
+    inline_tokens = _inline_math_tokens(str)
 
-    boxes = if _is_inline_math(str)
-        node = TeXLayout.parse_latex(_strip_math_delimiters(str))
+    boxes = if inline_tokens !== nothing
+        node = TeXLayout.parse_latex(inline_tokens)
         TeXLayout.layout(node, tl_family, TeXLayout.Display; shaper = opts.shaper)
     else
         # Width/alignment cannot be passed through Makie's fixed call site, so the

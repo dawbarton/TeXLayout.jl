@@ -1265,6 +1265,31 @@
             @test length(paras) == 2
         end
 
+        @testset "Escaped specials and text literal aliases render literally" begin
+            cases = (
+                raw"\#" => "#",
+                raw"\$" => "\$",
+                raw"\%" => "%",
+                raw"\&" => "&",
+                raw"\_" => "_",
+                raw"\{" => "{",
+                raw"\}" => "}",
+                raw"\textdollar" => "\$",
+                raw"\textunderscore" => "_",
+                raw"\textbraceleft" => "{",
+                raw"\textbraceright" => "}",
+                raw"\textasciitilde" => "~",
+                raw"\textbackslash" => "\\",
+                raw"\textasciicircum" => "^",
+                raw"\textbar" => "|",
+                raw"\textbardbl" => "‖",
+            )
+            for (source, expected) in cases
+                @test para_text(source) == expected
+                @test para_text("\\textbf{" * source * "}") == expected
+            end
+        end
+
         @testset "Non-breaking space ~ renders as a single inter-word space" begin
             @test para_text("Fig.~3") == "Fig. 3"
             @test para_text("a~b") == "a b"

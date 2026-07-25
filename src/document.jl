@@ -244,6 +244,11 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
             _advance!(p)
             _parse_text_group!(p, builder, builder.attrs)   # no attr change
 
+        elseif tok.kind === TokenKind.Command && haskey(_TEXT_LITERAL_CHARS, tok.value)
+            in_group || _commit_space!(builder)
+            write(builder.buf, _TEXT_LITERAL_CHARS[tok.value])
+            _advance!(p)
+
         elseif tok.kind === TokenKind.LBrace
             in_group || _commit_space!(builder)
             _parse_text_group!(p, builder, builder.attrs)   # bare grouping
