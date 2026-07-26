@@ -1374,3 +1374,9 @@
   0.3.2.
 - Runic and diff checks pass. Documenter builds successfully and reports its
   inventory version as 0.3.2.
+
+## 2026-07-26T22:45+00:00 v0.3.2 pull request
+
+- Committed the visualiser fix and release preparation as `39b1a47` on
+  `fix/visualise-text-glyphid-v0.3.2` and opened
+  [PR #31](https://github.com/dawbarton/TeXLayout.jl/pull/31).
