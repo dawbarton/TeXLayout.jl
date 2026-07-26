@@ -62,6 +62,11 @@ end
 # and instead emitted as a normal interword space by `_parse_primary!`.
 @inline _is_ignorable_space(tok::Token) = tok.kind === TokenKind.Space && tok.value != "~"
 
+# Expression parsers leave their boundary token unconsumed for the caller that
+# owns it. Explicit braced groups always establish a fresh `}` boundary, while
+# implicit declaration bodies inherit the surrounding expression boundary.
+@inline _is_group_end(tok::Token) = tok.kind === TokenKind.RBrace
+
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
 function _parse_delim_name!(p::_Parser)::String
@@ -74,19 +79,20 @@ end
 # that the caller can record the right-delimiter glyph name.  \middle<delim> inside
 # the body is consumed here and emitted as a NodeKind.Middle node; the layout engine uses
 # it to place an auto-sized inner delimiter at the correct position.
-function _parse_delimited_children!(p::_Parser)::Vector{Node}
+function _parse_delimited_children!(p::_Parser, outer_stop = _is_group_end)::Vector{Node}
+    isstop(tok) = outer_stop(tok) ||
+        (tok.kind === TokenKind.Command && tok.value == "\\right")
     children = Node[]
     while true
-        k = _current(p).kind
-        _is_ignorable_space(_current(p)) && (_advance!(p); continue)
-        (k === TokenKind.EOF || k === TokenKind.RBrace) && break
-        k === TokenKind.Command && _current(p).value == "\\right" && break
-        if k === TokenKind.Command && _current(p).value == "\\middle"
+        tok = _current(p)
+        _is_ignorable_space(tok) && (_advance!(p); continue)
+        (tok.kind === TokenKind.EOF || isstop(tok)) && break
+        if tok.kind === TokenKind.Command && tok.value == "\\middle"
             _advance!(p)   # consume \middle
             ps = _parse_delim_name!(p)
             push!(children, Node(NodeKind.Middle, ps))
         else
-            push!(children, _parse_atom!(p))
+            push!(children, _parse_atom!(p, isstop))
         end
     end
     return children
@@ -96,7 +102,7 @@ end
 # A braced group is parsed as its interior sequence; single elements are
 # unwrapped.  This differs from _parse_group! which preserves the NodeKind.Group
 # wrapper for explicit braces that appear in a sequence.
-function _parse_argument!(p::_Parser)::Node
+function _parse_argument!(p::_Parser, isstop = _is_group_end)::Node
     # Ignorable whitespace before an argument is skipped, so `x^ 2` and `\frac 1 2`
     # bind to the following token rather than capturing the space.
     while _is_ignorable_space(_current(p))
@@ -109,7 +115,7 @@ function _parse_argument!(p::_Parser)::Node
         length(children) == 1 && return children[1]
         return Node(NodeKind.Sequence, children)
     else
-        return _parse_primary!(p)
+        return _parse_primary!(p, isstop)
     end
 end
 
@@ -121,18 +127,23 @@ function _parse_group!(p::_Parser)::Node
     return Node(NodeKind.Group, children)
 end
 
-# Parse atoms until '}' or EOF, returning the list of child nodes.
-# Whitespace tokens are skipped (math mode: spaces are insignificant).
-function _parse_sequence_children!(p::_Parser)::Vector{Node}
+# Parse atoms until `isstop(token)` or EOF, returning the list of child nodes.
+# The stop token is not consumed. Whitespace tokens are skipped (math mode:
+# spaces are insignificant).
+function _parse_expression_children!(p::_Parser, isstop)::Vector{Node}
     children = Node[]
     while true
-        k = _current(p).kind
-        (k === TokenKind.EOF || k === TokenKind.RBrace) && break
-        _is_ignorable_space(_current(p)) && (_advance!(p); continue)
-        push!(children, _parse_atom!(p))
+        tok = _current(p)
+        (tok.kind === TokenKind.EOF || isstop(tok)) && break
+        _is_ignorable_space(tok) && (_advance!(p); continue)
+        push!(children, _parse_atom!(p, isstop))
     end
     return children
 end
+
+# Parse a top-level sequence or explicit braced group. Style and sizing
+# declarations inside it inherit the matching `}` boundary.
+_parse_sequence_children!(p::_Parser) = _parse_expression_children!(p, _is_group_end)
 
 # Like _parse_sequence_children! but preserves whitespace as NodeKind.Char(' ') nodes.
 # Used for the argument of \text{} and \mbox{}, where spaces are significant.
@@ -176,14 +187,14 @@ function _parse_text_argument!(p::_Parser)::Node
 end
 
 # Parse a single "atom": a primary optionally decorated with ^ and/or _.
-function _parse_atom!(p::_Parser)::Node
+function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
     # Ordinary whitespace is ignored at the atom level; `~` falls through to
     # _parse_primary! and becomes a normal interword space.
     while _is_ignorable_space(_current(p))
         _advance!(p)
     end
 
-    base = _parse_primary!(p)
+    base = _parse_primary!(p, isstop)
 
     # Consume an explicit \limits or \nolimits modifier immediately after the primary,
     # wrapping the base so the script branches can dispatch on it.
@@ -201,11 +212,11 @@ function _parse_atom!(p::_Parser)::Node
         k = _current(p).kind
         if k === TokenKind.Sup && !has_sup
             _advance!(p)
-            sup_node = _parse_argument!(p)
+            sup_node = _parse_argument!(p, isstop)
             has_sup = true
         elseif k === TokenKind.Sub && !has_sub
             _advance!(p)
-            sub_node = _parse_argument!(p)
+            sub_node = _parse_argument!(p, isstop)
             has_sub = true
         else
             break
@@ -224,7 +235,7 @@ function _parse_atom!(p::_Parser)::Node
 end
 
 # Parse a single primary (no script decoration).
-function _parse_primary!(p::_Parser)::Node
+function _parse_primary!(p::_Parser, isstop = _is_group_end)::Node
     tok = _current(p)
 
     if tok.kind === TokenKind.Char
@@ -235,7 +246,7 @@ function _parse_primary!(p::_Parser)::Node
         return _parse_group!(p)
 
     elseif tok.kind === TokenKind.Command
-        return _parse_command!(p)
+        return _parse_command!(p, isstop)
 
     elseif tok.kind === TokenKind.Space
         _advance!(p)
@@ -243,9 +254,9 @@ function _parse_primary!(p::_Parser)::Node
         # here (e.g. an empty script argument) contributes nothing.
         return space_node(tok.value == "~" ? _NORMAL_SPACE_EM : 0.0)
 
-    elseif tok.kind === TokenKind.EOF
-        # Do not advance past the sentinel — leave it in place so every caller
-        # that loops on _current(p).kind sees TokenKind.EOF and exits cleanly.
+    elseif tok.kind === TokenKind.EOF || isstop(tok)
+        # Do not advance past EOF or an expression boundary. Leave it in place
+        # so the parser that owns the boundary can consume it.
         return space_node(0.0)
 
     else
@@ -283,11 +294,16 @@ _canonical_env_name(name::AbstractString) = endswith(name, "*") ? String(chop(na
 # colspec: explicit column-spec string (e.g. "|l|c|r|") for \begin{array};
 #          empty for shorthand environments (pmatrix, cases, etc.) — derived
 #          automatically from info.align and the observed column count.
-function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")::Node
+function _parse_matrix_body!(
+        p::_Parser, env_name::String, colspec::String = "", outer_stop = _is_group_end,
+    )::Node
     cells = Node[]   # flat row-major list of completed cells
     row_lengths = Int[]   # number of cells in each row
     current_cell = Node[]
     ncol_current = 0   # cells completed in the current row (0-based)
+
+    is_cell_end(tok) = outer_stop(tok) || tok.kind === TokenKind.Ampersand ||
+        (tok.kind === TokenKind.Command && tok.value ∈ ("\\\\", "\\end"))
 
     function finish_cell!()
         push!(cells, Node(NodeKind.Group, copy(current_cell)))
@@ -306,6 +322,9 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
 
         if tok.kind === TokenKind.EOF
             break   # unclosed environment: lenient, keep what we have
+
+        elseif outer_stop(tok)
+            break   # malformed environment: preserve the surrounding boundary
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\end"
             _advance!(p)
@@ -332,7 +351,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
             _advance!(p)   # skip whitespace in matrix bodies (math mode)
 
         else
-            push!(current_cell, _parse_atom!(p))
+            push!(current_cell, _parse_atom!(p, is_cell_end))
         end
     end
 
@@ -380,7 +399,7 @@ function _parse_matrix_body!(p::_Parser, env_name::String, colspec::String = "")
 end
 
 # Parse a command token and return the appropriate node.
-function _parse_command!(p::_Parser)::Node
+function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
     tok = _advance!(p)
     cmd = tok.value
 
@@ -398,36 +417,36 @@ function _parse_command!(p::_Parser)::Node
         return space_node(_parse_kern_dimension!(p, true))
 
     elseif cmd == "\\frac"
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         return Node(NodeKind.Frac, [num, den])
 
     elseif cmd == "\\dfrac"
         # \dfrac forces Display style regardless of nesting context (KaTeX behaviour).
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         return Node(NodeKind.StyleOverride, "Display", [Node(NodeKind.Frac, [num, den])])
 
     elseif cmd == "\\tfrac"
         # \tfrac forces Text style (inline fraction) regardless of nesting context.
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         return Node(NodeKind.StyleOverride, "Text", [Node(NodeKind.Frac, [num, den])])
 
     elseif cmd == "\\binom"
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         return Node(NodeKind.Genfrac, _encode_payload(_DelimiterPairPayload("parenleft", "parenright")), [num, den])
 
     elseif cmd == "\\dbinom"
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
         return Node(NodeKind.StyleOverride, "Display", [Node(NodeKind.Genfrac, payload, [num, den])])
 
     elseif cmd == "\\tbinom"
-        num = _parse_argument!(p)
-        den = _parse_argument!(p)
+        num = _parse_argument!(p, isstop)
+        den = _parse_argument!(p, isstop)
         payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
         return Node(NodeKind.StyleOverride, "Text", [Node(NodeKind.Genfrac, payload, [num, den])])
 
@@ -441,12 +460,12 @@ function _parse_command!(p::_Parser)::Node
     elseif haskey(_STYLE_COMMANDS, cmd)
         # \displaystyle / \textstyle / \scriptstyle / \scriptscriptstyle: consume the
         # rest of the current group and render all of it at the overridden style.
-        children = _parse_sequence_children!(p)
+        children = _parse_expression_children!(p, isstop)
         return Node(NodeKind.StyleOverride, _STYLE_COMMANDS[cmd], [Node(NodeKind.Sequence, children)])
 
     elseif haskey(_SIZING_MULTIPLIERS, cmd)
         # \large / \tiny etc.: consume the rest of the current group and scale it.
-        children = _parse_sequence_children!(p)
+        children = _parse_expression_children!(p, isstop)
         return Node(NodeKind.Sizing, string(_SIZING_MULTIPLIERS[cmd]), [Node(NodeKind.Sequence, children)])
 
     elseif cmd ∈ _XARROW_COMMANDS
@@ -455,13 +474,14 @@ function _parse_command!(p::_Parser)::Node
         if _current(p).kind === TokenKind.Char && _current(p).value == "["
             _advance!(p)   # consume '['
             below_children = Node[]
-            while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
-                push!(below_children, _parse_atom!(p))
+            while _current(p).kind !== TokenKind.EOF &&
+                    _current(p).value != "]" && !isstop(_current(p))
+                push!(below_children, _parse_atom!(p, isstop))
             end
             _current(p).value == "]" && _advance!(p)   # consume ']'
             below_node = Node(NodeKind.Group, below_children)
         end
-        above_node = _parse_argument!(p)
+        above_node = _parse_argument!(p, isstop)
         children = below_node === nothing ? [above_node] : [above_node, below_node]
         return Node(NodeKind.XArrow, cmd, children)
 
@@ -471,15 +491,16 @@ function _parse_command!(p::_Parser)::Node
             # Consume the degree argument up to the matching ']'.
             _advance!(p)   # consume '['
             deg_children = Node[]
-            while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
-                push!(deg_children, _parse_atom!(p))
+            while _current(p).kind !== TokenKind.EOF &&
+                    _current(p).value != "]" && !isstop(_current(p))
+                push!(deg_children, _parse_atom!(p, isstop))
             end
             _current(p).value == "]" && _advance!(p)  # consume ']'
             degree = Node(NodeKind.Group, deg_children)
-            body = _parse_argument!(p)
+            body = _parse_argument!(p, isstop)
             return Node(NodeKind.Sqrt, [degree, body])
         else
-            body = _parse_argument!(p)
+            body = _parse_argument!(p, isstop)
             return Node(NodeKind.Sqrt, [body])
         end
 
@@ -487,7 +508,7 @@ function _parse_command!(p::_Parser)::Node
         # \left<delim> … \right<delim>
         # Consume left delimiter and record its PS glyph name.
         left_name = _parse_delim_name!(p)
-        inner = _parse_delimited_children!(p)
+        inner = _parse_delimited_children!(p, isstop)
         # Consume \right and record the right delimiter's PS glyph name.
         right_name = ""
         if _current(p).kind === TokenKind.Command && _current(p).value == "\\right"
@@ -497,24 +518,24 @@ function _parse_command!(p::_Parser)::Node
         return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
     elseif cmd == "\\operatorname"
-        arg = _parse_argument!(p)
+        arg = _parse_argument!(p, isstop)
         return Node(NodeKind.Operator, _node_text(arg))
 
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
-        body = _parse_argument!(p)
+        body = _parse_argument!(p, isstop)
         return Node(NodeKind.Accent, cmd, [body])
 
     elseif cmd == "\\overline" || cmd == "\\underline"
-        body = _parse_argument!(p)
+        body = _parse_argument!(p, isstop)
         return Node(NodeKind.OverUnder, cmd[2:end], [body])   # value = "overline" or "underline"
 
     elseif haskey(_FONT_SWITCH_COMMANDS, cmd)
         variant = _FONT_SWITCH_COMMANDS[cmd]
-        body = _parse_argument!(p)
+        body = _parse_argument!(p, isstop)
         return Node(NodeKind.FontSwitch, variant, [body])
 
     elseif cmd ∈ _HORIZ_BRACE_COMMANDS
-        body = _parse_argument!(p)
+        body = _parse_argument!(p, isstop)
         return Node(NodeKind.HorizBrace, cmd, [body])
 
     elseif cmd == "\\begin"
@@ -522,7 +543,7 @@ function _parse_command!(p::_Parser)::Node
         if haskey(_MATRIX_ENVS, env_name)
             # Environments in _COLSPEC_ENVS require an explicit column-spec argument.
             colspec = env_name ∈ _COLSPEC_ENVS ? _read_brace_word!(p) : ""
-            return _parse_matrix_body!(p, env_name, colspec)
+            return _parse_matrix_body!(p, env_name, colspec, isstop)
         else
             # Unknown environment: emit a sentinel so the layout engine can skip it gracefully.
             return Node(NodeKind.Command, "\\begin{$(env_name)}")
@@ -551,13 +572,7 @@ end
 # the stop token. Used by the document parser for inline ($…$, \(…\)) and display
 # ($$…$$, \[…\]) math, each of which stops at a different closing delimiter.
 function _parse_math_until!(p::_Parser, isstop)::Node
-    children = Node[]
-    while true
-        tok = _current(p)
-        (tok.kind === TokenKind.EOF || isstop(tok)) && break
-        _is_ignorable_space(tok) && (_advance!(p); continue)
-        push!(children, _parse_atom!(p))
-    end
+    children = _parse_expression_children!(p, isstop)
     return Node(NodeKind.Sequence, children)
 end
 

@@ -632,6 +632,55 @@
             @test doc[2].node.children[1].kind === NodeKind.Superscript
         end
 
+        @testset "Style declarations preserve inline-math boundaries" begin
+            for source in (
+                    raw"before $\displaystyle x$ after",
+                    raw"before \(\displaystyle x\) after",
+                )
+                doc = TeXLayout.parse_document(source)
+                @test length(doc) == 1
+                runs = only(doc).lines[1].runs
+                @test length(runs) == 3
+                @test runs[1] isa TeXLayout.TextRun
+                @test runs[2] isa TeXLayout.MathRun
+                @test runs[3] isa TeXLayout.TextRun
+                @test only(runs[1].spans).text == "before "
+                @test only(runs[3].spans).text == " after"
+
+                style = only(runs[2].node.children)
+                @test style.kind === NodeKind.StyleOverride
+                @test only(style.children).children[1].value == "x"
+            end
+        end
+
+        @testset "Style declarations preserve display-math boundaries" begin
+            for source in (
+                    raw"before $$\displaystyle x$$ after",
+                    raw"before \[\displaystyle x\] after",
+                )
+                doc = TeXLayout.parse_document(source)
+                @test length(doc) == 3
+                @test doc[1] isa TeXLayout.ParagraphBlock
+                @test doc[2] isa TeXLayout.DisplayBlock
+                @test doc[3] isa TeXLayout.ParagraphBlock
+                @test only(doc[1].lines[1].runs[1].spans).text == "before"
+                @test only(doc[3].lines[1].runs[1].spans).text == "after"
+
+                style = only(doc[2].node.children)
+                @test style.kind === NodeKind.StyleOverride
+                @test only(style.children).children[1].value == "x"
+            end
+        end
+
+        @testset "Sizing declarations preserve inline-math boundaries" begin
+            doc = TeXLayout.parse_document(raw"before $\large x$ after")
+            runs = only(doc).lines[1].runs
+            @test length(runs) == 3
+            @test runs[2] isa TeXLayout.MathRun
+            @test only(runs[2].node.children).kind === NodeKind.Sizing
+            @test only(runs[3].spans).text == " after"
+        end
+
         @testset "\$ \$ (spaced) stays inline, not display" begin
             doc = TeXLayout.parse_document("a \$ \$ b")
             @test all(blk -> blk isa TeXLayout.ParagraphBlock, doc)

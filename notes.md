@@ -1309,3 +1309,37 @@
 - Full tests (1,518/1,518), the Documenter build, Runic, and diff checks passed;
   committed as `8c321ae` and opened
   [PR #28](https://github.com/dawbarton/TeXLayout.jl/pull/28).
+
+## 2026-07-26T17:09+00:00 Issue 29 parser-boundary review
+
+- Fast-forwarded `main` to `origin/main` at `3949f63` and reproduced issue #29:
+  a style declaration inside document math consumes the closing math delimiter
+  and all following text because its implicit body uses
+  `_parse_sequence_children!`, which only stops at `}` or EOF.
+- Adding `TokenKind.MathShift` to that helper fixes the reported `$…$` example,
+  but not the same bug for `\(…\)` / `\[…\]`, size declarations, `\right`, or
+  matrix cell/row/environment boundaries.
+- Recommended fix: propagate the active expression-stop predicate through
+  `_parse_math_until!` → atom/primary/command parsing and reuse it when style or
+  sizing declarations parse their implicit bodies. Explicit braced groups must
+  establish their own `}` boundary. This follows KaTeX's `breakOnTokenText`
+  design and keeps closing delimiters unconsumed for the owning parser.
+- Regression coverage should include all document math delimiter forms, retained
+  trailing text, style and sizing declarations, grouped scope, `\left…\right`,
+  and matrix cell/row boundaries.
+
+## 2026-07-26T17:31+00:00 Issue 29 boundary-aware parser implementation
+
+- Consolidated math expression loops in `_parse_expression_children!` and
+  threaded context-specific stop predicates through atom, primary, command, and
+  unbraced-argument parsing. Explicit braced groups continue to reset their
+  boundary to `}`.
+- Delimited bodies combine `\right` with the surrounding boundary; matrix cells
+  combine `&`, `\\`, and `\end` with the surrounding boundary. Boundary tokens
+  remain unconsumed for their owning parser.
+- Added parser and document regressions for inline/display delimiters, retained
+  trailing text, sizing declarations, `\left…\right`, and multi-cell matrices.
+- Dependency-light tests pass 1,484/1,484; full `Pkg.test()` passes 1,567/1,567
+  with HarfBuzz and the MathTeXEngine extension. Runic and diff checks pass.
+- The quick benchmark smoke completed successfully; results are in
+  `/tmp/texlayout-boundary-bench-smoke.toml`.
