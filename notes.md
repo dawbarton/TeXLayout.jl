@@ -1343,3 +1343,9 @@
   with HarfBuzz and the MathTeXEngine extension. Runic and diff checks pass.
 - The quick benchmark smoke completed successfully; results are in
   `/tmp/texlayout-boundary-bench-smoke.toml`.
+
+## 2026-07-26T17:40+00:00 Issue 29 pull request
+
+- Committed the boundary-aware parser fix as `8fda4a9` on
+  `fix/issue-29-parser-boundaries` and opened
+  [PR #30](https://github.com/dawbarton/TeXLayout.jl/pull/30).
