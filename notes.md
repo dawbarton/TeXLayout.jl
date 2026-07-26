@@ -1349,3 +1349,28 @@
 - Committed the boundary-aware parser fix as `8fda4a9` on
   `fix/issue-29-parser-boundaries` and opened
   [PR #30](https://github.com/dawbarton/TeXLayout.jl/pull/30).
+
+## 2026-07-26T22:41+00:00 visualise_text GlyphID fix and v0.3.2 plan
+
+- After PR #30 merged, full stress output and focused issue-29 renders were
+  visually clean. An ancillary `tools/visualise_text.jl` bug was isolated: its
+  bounds and raster loop handled name-based `Glyph` elements but ignored shaped
+  `GlyphID` document text.
+- Added exact-font `GlyphID` bounds and rasterization, plus advance/space-aware
+  horizontal measurement. The issue expression now produces a 1257×320 image
+  containing both the display-style integral and trailing text, instead of a
+  cropped 600×320 math-only image.
+- Prepared v0.3.2 for 2026-07-26: close the issue-29 parser fix and visualiser
+  fix under the release changelog, bump `Project.toml`, verify, and open a PR.
+
+## 2026-07-26T22:44+00:00 v0.3.2 verification
+
+- `visualise_text.jl` renders the issue expression completely for all eight
+  bundled fonts; output widths range from 1115 to 1340 pixels and visual spot
+  checks cover New CM, Luciole, and Bonum. The mixed bold-text/alignment worked
+  example also renders completely.
+- Dependency-light tests pass 1,484/1,484 and full `Pkg.test()` passes
+  1,567/1,567 with HarfBuzz and MathTeXEngine extensions at package version
+  0.3.2.
+- Runic and diff checks pass. Documenter builds successfully and reports its
+  inventory version as 0.3.2.

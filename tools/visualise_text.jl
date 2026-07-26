@@ -8,7 +8,7 @@
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
-using TeXLayout: FontFamily, Glyph, GlyphID, HRule, VRule, layout_document
+using TeXLayout: FontFamily, Glyph, GlyphID, HRule, Space, VRule, layout_document
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, N0f8
@@ -24,8 +24,14 @@ function em_bbox(boxes, upm)
         el = box.element
         if el isa Glyph
             s = box.scale / upm
-            bx1 = min(bx1, box.x + el.x_min * s)
-            bx2 = max(bx2, box.x + el.x_max * s)
+            bx1 = min(bx1, box.x + el.x_min * s, box.x + el.advance_width * s)
+            bx2 = max(bx2, box.x + el.x_max * s, box.x + el.advance_width * s)
+            by1 = min(by1, box.y + el.y_min * s)
+            by2 = max(by2, box.y + el.y_max * s)
+        elseif el isa GlyphID
+            s = box.scale / TeXLayout._font_upm(el.font_path)
+            bx1 = min(bx1, box.x + el.x_min * s, box.x + el.advance_width * s)
+            bx2 = max(bx2, box.x + el.x_max * s, box.x + el.advance_width * s)
             by1 = min(by1, box.y + el.y_min * s)
             by2 = max(by2, box.y + el.y_max * s)
         elseif el isa HRule
@@ -38,6 +44,9 @@ function em_bbox(boxes, upm)
             bx2 = max(bx2, box.x + el.thickness)
             by1 = min(by1, box.y)
             by2 = max(by2, box.y + el.height)
+        elseif el isa Space
+            bx1 = min(bx1, box.x, box.x + el.width)
+            bx2 = max(bx2, box.x, box.x + el.width)
         end
     end
     by1 = min(by1, -0.15); by2 = max(by2, 0.15)
@@ -63,6 +72,28 @@ function hline!(canvas, row, c1, c2, val::UInt8)
 end
 
 write_image(path, canvas) = PNGFiles.save(path, reinterpret(Gray{N0f8}, canvas))
+
+function render_glyph!(canvas, face, glyph, px_size, pen_cx, pen_cy)
+    local bmp, ext
+    try
+        bmp, ext = renderface(face, glyph, px_size)
+    catch err
+        @warn "renderface failed for $(glyph): $(err)"
+        return
+    end
+
+    bx_px = round(Int, ext.horizontal_bearing[1])
+    by_px = round(Int, ext.horizontal_bearing[2])
+    bmp_top = pen_cy - by_px
+    bmp_left = pen_cx + bx_px
+
+    for row in axes(bmp, 2), col in axes(bmp, 1)
+        alpha = bmp[col, row]
+        alpha == 0x00 && continue
+        composite!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
+    end
+    return
+end
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
@@ -92,12 +123,12 @@ function main()
     upm = Float64(TeXLayout.load_math_table(family.math).upm)
 
     face_cache = Dict{String, FTFont}()
-    function face_for(slot)
-        key = TeXLayout._font_path_for_slot(family, slot)
-        return get!(face_cache, key) do
-            FTFont(key)
+    function face_for_path(path)
+        return get!(face_cache, path) do
+            FTFont(path)
         end
     end
+    face_for(slot) = face_for_path(TeXLayout._font_path_for_slot(family, slot))
 
     bx1, bx2, by1, by2 = em_bbox(boxes, upm)
     pad_em = 0.15
@@ -122,25 +153,14 @@ function main()
             px_size = max(1, round(Int, box.scale * BASE_PX))
             pen_cx = em_to_px_x(box.x)
             pen_cy = em_to_px_y(box.y)
+            render_glyph!(canvas, face, el.glyph_name, px_size, pen_cx, pen_cy)
 
-            local bmp, ext
-            try
-                bmp, ext = renderface(face, el.glyph_name, px_size)
-            catch e
-                @warn "renderface failed for $(el.glyph_name): $e"
-                continue
-            end
-
-            bx_px = round(Int, ext.horizontal_bearing[1])
-            by_px = round(Int, ext.horizontal_bearing[2])
-            bmp_top = pen_cy - by_px
-            bmp_left = pen_cx + bx_px
-
-            for row in axes(bmp, 2), col in axes(bmp, 1)
-                alpha = bmp[col, row]
-                alpha == 0x00 && continue
-                composite!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
-            end
+        elseif el isa GlyphID
+            face = face_for_path(el.font_path)
+            px_size = max(1, round(Int, box.scale * BASE_PX))
+            pen_cx = em_to_px_x(box.x)
+            pen_cy = em_to_px_y(box.y)
+            render_glyph!(canvas, face, Int(el.glyph_id), px_size, pen_cx, pen_cy)
 
         elseif el isa HRule
             c1 = em_to_px_x(box.x);              c2 = em_to_px_x(box.x + el.width)
