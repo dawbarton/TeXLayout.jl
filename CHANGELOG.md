@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Style and sizing declarations in mixed text/math input now stop at the
+  surrounding math, delimiter, or matrix boundary instead of consuming closing
+  delimiters and subsequent content.
+
 ## [v0.3.1] - 2026-07-25
 
 ### Fixed

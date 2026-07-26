@@ -662,6 +662,30 @@
         @test node.value == "Script"
     end
 
+    @testset "Style declaration preserves \\right boundary" begin
+        tree = parse_latex(raw"\left(\displaystyle x\right)+y")
+        delimited = tree.children[1]
+        @test delimited.kind === NodeKind.Delimited
+        @test split(delimited.value, '\0') == ["parenleft", "parenright"]
+        style = only(delimited.children)
+        @test style.kind === NodeKind.StyleOverride
+        @test only(style.children).children[1].value == "x"
+        @test [node.value for node in tree.children[2:3]] == ["+", "y"]
+    end
+
+    @testset "Style declaration preserves matrix boundaries" begin
+        tree = parse_latex(raw"\begin{matrix}\displaystyle a&b\\c&d\end{matrix}")
+        matrix = only(tree.children)
+        @test matrix.kind === NodeKind.Matrix
+        @test split(matrix.value, '\0')[2:3] == ["2", "cc"]
+        @test length(matrix.children) == 4
+
+        style = only(matrix.children[1].children)
+        @test style.kind === NodeKind.StyleOverride
+        @test only(style.children).children[1].value == "a"
+        @test [only(cell.children).value for cell in matrix.children[2:4]] == ["b", "c", "d"]
+    end
+
     # ── Sizing commands ────────────────────────────────────────────────────────
 
     @testset "\\large produces NodeKind.Sizing with multiplier > 1" begin
