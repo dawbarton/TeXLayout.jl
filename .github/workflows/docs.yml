@@ -34,7 +34,7 @@ jobs:
         with:
           version: "1"
       - name: Use Julia cache
-        uses: julia-actions/cache@a45e8fa8be21c18a06b7177052533149e61e9b38 # v3
+        uses: julia-actions/cache@b7788abd52452d5bc033d69796e110d9906af4ab # v3.2.0
       - name: Instantiate environment with development version of the package
         run: |
           julia --project=docs -e '
