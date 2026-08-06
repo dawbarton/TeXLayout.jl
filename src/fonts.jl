@@ -309,7 +309,16 @@ function _text_glyph(
     return nothing
 end
 
-function _font_family_key(family::FontFamily)
+"""
+Cache key identifying a `FontFamily` by its font paths alone.
+
+`_font_family_key` is the only place that fixes the tuple's arity; anything
+caching per family (the renderer adapters in `ext/`, say) should key on this
+type rather than restating the arity.
+"""
+const FontFamilyKey = NTuple{13, Union{String, Nothing}}
+
+function _font_family_key(family::FontFamily)::FontFamilyKey
     path_fields(set) = set === nothing ?
         (nothing, nothing, nothing, nothing) :
         (set.regular, set.italic, set.bold, set.bolditalic)

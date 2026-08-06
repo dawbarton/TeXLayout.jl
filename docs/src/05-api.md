@@ -10,6 +10,7 @@ Advanced layout and renderer APIs remain available through qualified
 default_layout_options
 set_default_layout_options!
 HarfBuzzShaper
+TeXLayoutHandler
 font_family
 default_font_family
 set_default_font_family!

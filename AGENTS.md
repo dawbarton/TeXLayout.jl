@@ -39,10 +39,12 @@ TeXLayout.jl/
 │   ├── boxes.jl            # Internal measured box tree + shape pass for composition
 │   ├── shaping.jl          # TextShaper interface, MetricShaper, HarfBuzzShaper seam
 │   ├── document.jl         # Document AST (Block/Line/Run/TextSpan) + parse_document
-│   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
+│   ├── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
+│   └── render_support.jl   # Shared adapter helpers: LaTeXString routing, GlyphRuntime
 ├── ext/
 │   ├── HarfBuzzExt.jl      # Optional HarfBuzz_jll-backed TextShaper implementation
-│   └── MathTeXEngineExt.jl # Makie/MathTeXEngine extension + cached runtime conversion bundle
+│   ├── MakieExt.jl         # Makie 0.25 text_handler implementation
+│   └── MathTeXEngineExt.jl # Legacy Makie 0.24 adapter
 ├── test/
 │   ├── runtests.jl         # Top-level testset; includes all test files
 │   ├── fixtures/
@@ -158,8 +160,11 @@ String  ──tokenize──►  Vector{Token}  ──parse_latex──►  Node
 
 Each stage is stateless and pure apart from memoization caches: `fonts.jl`
 caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
-parsed `MathTable` values by math-font path, and `ext/MathTeXEngineExt.jl`
-caches the Makie-facing runtime bundle by effective `FontFamily`.
+parsed `MathTable` values by math-font path, and `render_support.jl` caches one
+`GlyphRuntime` (faces, slot fallback chains, glyph-name → glyph-index lookups)
+per `FontFamilyKey` for both renderer adapters to share.
+`ext/MathTeXEngineExt.jl` adds only its own derived `MathTeXEngine.FontFamily`
+cache on the same key.
 
 ## Key types
 
@@ -327,36 +332,41 @@ at the end of that file.
   resolves those slots through the same fallback chains.  Math-mode font
   switching still does not use the text slots for characters outside the
   Unicode math block.
-- **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
-  extension).  When `TeXLayout`, `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings`
-  are all loaded, the extension adds a specialised
-  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method that uses TeXLayout's
-  OpenType layout engine.  Makie's `texelems_and_glyph_collection` always passes a
-  `LaTeXString`, so dispatch picks our method over MathTeXEngine's fallback.  The
-  extension is fully precompiled (no `__precompile__(false)` needed) because adding
-  a method with a more specific argument type is a new method, not an overwrite.
+- **Makie integration** — Makie 0.25 uses `ext/MakieExt.jl` and the public
+  `Makie.layout_text(handler, source, attributes) -> Makie.TextLayout` protocol.
+  Users select `TeXLayoutHandler()` per plot or through `text_handler` in a theme;
+  unhandled source types fall through to Makie. The adapter emits glyph IDs,
+  exact FreeType faces, origins, extents, scales, block bounds, and `LineSegments`
+  plot specs for both horizontal and vertical rules. Makie owns alignment,
+  rotation, offset, validation, placement, and batching. Makie 0.24 continues to
+  use `ext/MathTeXEngineExt.jl`, whose specialised
+  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method is retained only
+  for compatibility. Once the Makie handler interface is active, that method
+  delegates to MathTeXEngine's original generic implementation.
   **Routing:** `_is_inline_math` treats a string that starts and ends with a
   single `$` and contains exactly two unescaped `$` math shifts (the usual
   `L"…"` form) as one inline-math formula, laid out via `parse_latex` + `layout`
   in Display style. Escaped `\$` literals do not change the route. Every other
   string — surrounding text, multiple `$…$` spans, `\(…\)`, or `$$…$$` /
   `\[…\]` display math — is routed through `layout_document`, and the resulting
-  `TeXBox.boxes` are converted by the same `_box_to_mte` adapter.
-  The extension also maintains a per-font runtime cache so repeated Makie renders
-  reuse loaded FreeType faces for every configured font-slot fallback path, the
-  derived `MathTeXEngine.FontFamily`, and glyph lookup tables.  Name-based `Glyph`
-  values are resolved by `(font path, glyph name)`; shaped `GlyphID` values render
-  directly from their exact font path and glyph ID.
+  `TeXBox.boxes` are converted by the selected adapter. Routing and glyph
+  resolution are shared: both adapters call `_inline_math_tokens` and the cached
+  `GlyphRuntime` in `src/render_support.jl`, so name-based `Glyph` values are
+  resolved through each slot's full fallback chain and shaped `GlyphID` values
+  render directly from their exact font path and glyph ID.
   **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
-  (`HRule.y` = bottom edge, `VRule.x` = left edge), while
-  `MathTeXEngine.HLine` / `VLine` use line-centre positions.  The adapter in
-  `_box_to_mte` is responsible for converting between these conventions by
-  shifting rule positions by half the thickness.
-  **This is type piracy**: TeXLayout owns neither the function (`MathTeXEngine.generate_tex_elements`)
-  nor the argument type (`LaTeXStrings.LaTeXString`).  It is pragmatic and confined
-  to the extension, but alternative integration strategies (e.g. a dedicated Makie
-  recipe or a proper upstream extension point in MathTeXEngine) will be investigated
-  in future.
+  (`HRule.y` = bottom edge, `VRule.x` = left edge), while both Makie line specs
+  and legacy `MathTeXEngine.HLine` / `VLine` use line-centre positions. Adapters
+  shift rules by half their thickness and must report the full visual spec bounds.
+  **Metric contract:** Makie derives every glyph bounding box from
+  `(0, descender)`–`(hadvance, ascender)` and expects those to be the *font's*
+  line metrics, not the glyph's ink, so that a box's height does not depend on
+  which characters it holds. `MakieExt._glyph_extent` therefore pads the ink
+  extents to `max(ink_top, font_ascender)` / `min(ink_bottom, font_descender)`,
+  matching `MathTeXEngine.TeXChar`, and `_block_bbox` pads `TeXBox.ascent` /
+  `descent` the same way so `align` behaves like it does for a plain string.
+  Reporting bare ink bounds instead makes `align = (:*, :center)` scatter
+  baselines across labels and makes axis tick-label space content-dependent.
 - **`align` column-spacing approximation** — `\begin{align}` reuses the matrix column
   machinery and its column-separation model.  Cells after `&` do insert the
   ordinary atom needed for TeX-style spacing before leading relations such as
@@ -411,14 +421,13 @@ at the end of that file.
   `MetricShaper` must reject unsupported feature-bearing spans rather than
   synthesizing approximations, and must stay independently testable without
   `HarfBuzz_jll`.
-- **Makie extension ignores caller-specified font family** — the overridden
-  `generate_tex_elements` accepts a `font_family` argument (for API compatibility
-  with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
-  Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
-  before rendering; the extension will pick up the new default automatically.
-  Likewise, the document path's width/alignment cannot be passed through Makie's
-  fixed call site, so it reads `TeXLayout.default_layout_options()`; set these with
-  `TeXLayout.set_default_layout_options!` (e.g. `width`, `align`, `display_align`).
+- **Makie text-handler wrapping and justification** — `TeXLayoutHandler` honors
+  the handler's pinned/default font family and layout options, and maps Makie's
+  `lineheight`, `word_wrap_width`, and resolved justification into document
+  options. TeXLayout does not yet perform soft line breaking, so
+  `word_wrap_width` sets the document box width without wrapping content.
+  `LayoutOptions.align` is a three-value enum, so arbitrary fractional Makie
+  justification is currently mapped to the nearest left/centre/right choice.
 
 ## Changelog
 
@@ -433,11 +442,19 @@ fresh `[Unreleased]` section is opened above it.
 
 Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
 
-`Pkg.test()` includes `HarfBuzz_jll` from `[extras]`, so the `HarfBuzzExt`
-extension loads and HarfBuzz-specific assertions run.  A direct
-`julia --project=. test/runtests.jl` does not load that weak dependency and should
-continue to pass with the HarfBuzz tests skipped; use it to verify the core
-`MetricShaper` path stays independent.
+`Pkg.test()` includes `HarfBuzz_jll` and `Makie` from `[extras]`, so
+`HarfBuzzExt` and `MakieExt` both load and their assertions run.  A direct
+`julia --project=. test/runtests.jl` does not load those weak dependencies and
+should continue to pass with the extension tests skipped; use it to verify the
+core `MetricShaper` path stays independent.
+
+`test/test_makie_extension.jl` selects its assertions from what the installed
+Makie exposes: with Makie 0.25 it exercises `TeXLayoutHandler` through real
+`text!` calls, and with Makie 0.24 it falls back to the legacy
+`generate_tex_elements` assertions.  Inline-math routing is tested
+unconditionally because it lives in `src/render_support.jl` and needs no weak
+dependency.  Until Makie 0.25 is released, only the 0.24 branch runs in CI, so
+handler changes must additionally be checked against a PR checkout of Makie.
 
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with

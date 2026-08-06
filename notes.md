@@ -1380,3 +1380,131 @@
 - Committed the visualiser fix and release preparation as `39b1a47` on
   `fix/visualise-text-glyphid-v0.3.2` and opened
   [PR #31](https://github.com/dawbarton/TeXLayout.jl/pull/31).
+
+## 2026-08-01T10:30+00:00 Makie 0.25 text-handler integration
+
+- Fast-forwarded local `main` to `origin/main` at `eac6b8b` and created
+  `feat/makie-layout-text-interface` from that tip.
+- Reviewed [Makie PR #5717](https://github.com/MakieOrg/Makie.jl/pull/5717) at
+  head `a21d5edf`: the return-value `layout_text(handler, source,
+  TextAttributes) -> TextLayout` protocol gives Makie ownership of validation,
+  placement, and batching and removes TeXLayout's need for type piracy.
+- Added `TeXLayoutHandler` and `MakieExt`: direct glyph IDs/faces/extents, exact
+  font-slot fallbacks, measured block bounds, and combined horizontal/vertical
+  rule specs with explicit visual bounds. Handler family/options can use session
+  defaults or be pinned per handler.
+- Retained Makie 0.24 compatibility. When Makie 0.25's interface is active, the
+  legacy MathTeXEngine specialization delegates to MathTeXEngine's original
+  method so loading TeXLayout alone no longer changes Makie's default renderer.
+- Focused tests against the PR checkout and a real CairoMakie 0.16 render pass;
+  the render covers fractions, radicals, mixed text/math, plain-string fallback,
+  and matrix vertical rules.
+- Review follow-ups: make Makie's display-only cacheability trait depend on the
+  handler as well as the source; TeXLayout still lacks soft wrapping and
+  fractional document justification; fontsize-scaled `TextLayout` output means
+  handlers need their own em-layout cache to avoid recomputation on size changes.
+- Makie PR unit-test and formatting jobs pass, but its current overall CI is not
+  merge-ready: docs still read removed `text_scales`, WGL rendering reads a
+  missing `strokewidth` field after the `uniform_strokewidth` rename, one Cairo
+  reference case still supplies per-character color under the new per-string
+  contract, and several reference images require inspection/update.
+- Final TeXLayout verification: 1,568/1,568 full tests, 11/11 focused Makie 0.25
+  handler assertions, Runic and diff checks, Documenter build, legacy Makie
+  metric-visualizer smoke, and CairoMakie 0.16 rendering against PR #5717.
+
+## 2026-08-01T11:04+00:00 TeXLayoutHandler naming and cache design
+
+- Renamed the unreleased public handler from `MakieTeXHandler` to
+  `TeXLayoutHandler` throughout source, extensions, tests, tools, and
+  documentation to avoid confusion with the existing MakieTeX ecosystem name.
+- A handler-local bounded cache can retain source/font/options-dependent em-space
+  geometry and avoid repeated parsing, shaping, and glyph lookup. Makie would
+  still call the handler and require a lightweight materialization step for
+  fontsize and display attributes.
+- A Makie-side cacheability capability should distinguish layout dependencies
+  from display dependencies per handler/source. Reusing the complete result is
+  not sufficient for TeXLayout because fraction/radical rules are emitted as
+  plot specs whose color currently comes from the text attributes; a display
+  refresh hook or separate stable geometry representation is needed alongside
+  handler-aware cacheability.
+- Post-rename verification passes: 11/11 focused Makie 0.25 assertions,
+  1,568/1,568 full package tests, and the Documenter build.
+
+## 2026-08-06T11:39+00:00 Review against Makie PR #5717 head 727b340b
+
+- Re-reviewed [Makie PR #5717](https://github.com/MakieOrg/Makie.jl/pull/5717)
+  from the branch's original review point `a21d5edf` to the current head
+  `727b340b`. Only `Makie/src/basic_recipes/text.jl` and
+  `text_boundingbox.jl` changed in ways that could touch us, and the
+  handler-facing protocol (`layout_text`, `TextAttributes`, `TextLayout`) is
+  byte-for-byte unchanged. All 11 focused handler assertions pass against
+  `727b340b` with no TeXLayout changes, so the interface work needed no update.
+- Three upstream commits are relevant as context rather than as work:
+  - `53948fd7` adds `display_independent_layout(::LaTeXString) = false`, fixing
+    stale rule colours on Makie's *own* LaTeX path. Verified our handler was
+    already correct here: rule specs carry `attributes.color` and track a
+    recolour.
+  - `727b340b` removes the overloadable `bakes_display_attributes` hook, so any
+    non-`nothing` handler is assumed to bake display attributes and a colour
+    change re-runs `layout_text`. This closes out the "make cacheability depend
+    on the handler" follow-up from 2026-08-01: upstream considered it and
+    deliberately went the other way, because an opted-out handler would leave
+    its plot specs' colours stale. Docs updated to record it as a decision, not
+    a gap.
+  - `acf2fb84` routes Axis3D tick-label measurement through
+    `layout_text(nothing, …)`, i.e. hardcoded to Makie's own layout. Not our
+    bug, but worth knowing that Axis3D ignores the handler when measuring.
+
+### Glyph metric bug found and fixed
+
+- `MakieExt._glyph_extent` reported per-glyph `ascender`/`descender` as pure ink
+  bounds. Makie turns every `GlyphExtent` into
+  `height_insensitive_boundingbox_with_advance` = `(0, descender)`–`(hadvance,
+  ascender)`, and both Makie's own layouters and `MathTeXEngine.TeXChar` put the
+  *font's* line metrics there precisely so that a box's height does not depend
+  on which characters it holds.
+- Measured at fontsize 20 before the fix: `L"$x$"` → 9.06 px tall, `L"$y$"` →
+  12.94 px, against 20.0 / 20.2 px from Makie's own LaTeX path. Consequences:
+  `align = (:*, :center)` scattered baselines across labels of differing ink
+  height (visible in a side-by-side render), and `Axis` tick-label space, which
+  comes from `raw_string_boundingboxes`, became content-dependent.
+- This was a regression relative to shipped behaviour: the legacy
+  `MathTeXEngineExt` path got the padding for free from
+  `MathTeXEngine.ascender(::TeXChar) = max(ascender(math_font), topinkbound)`.
+- Fixed by padding each glyph's ink extent to `max(ink_top, font_ascender)` /
+  `min(ink_bottom, font_descender)`, and by deriving the block bbox as the union
+  of the placed padded glyph boxes plus rule spec bounds. The latter matters
+  because Makie's `raw_string_boundingboxes` unions those same boxes: deriving
+  the align box any other way makes a label align to one box and measure as
+  another. `texelems_and_layout` builds Makie's own LaTeX bbox the same way.
+  After the fix `L"$x$"`/`L"$y$"` measure 20.0 / 20.22 px, identical to Makie.
+
+### Quality pass
+
+- De-duplicated ~120 lines that both extensions had carried verbatim into
+  `src/render_support.jl`: `_strip_math_delimiters`, `_inline_math_tokens`,
+  `_is_inline_math`, `_single_char`, `_uni_glyph_codepoint`,
+  `_glyph_index_uncached`, and a shared `GlyphRuntime` (faces, slot fallback
+  chains, memoized glyph-name → glyph-index lookups) cached per `FontFamilyKey`.
+  Nothing there needs a weak dependency. `MathTeXEngineExt` keeps only its own
+  derived `MathTeXEngine.FontFamily` cache on the same key.
+- `FontFamilyKey` is now a named type in `src/fonts.jl`, so the 13-tuple arity
+  of `_font_family_key` is stated once instead of being restated in each
+  extension.
+- `Makie` added to `[extras]`/`[targets]`. The handler tests were silently
+  skipped under `Pkg.test()` because Makie was not a test dependency, so nothing
+  in CI loaded `MakieExt` at all. Until Makie 0.25 is released only the 0.24
+  branch runs, which at least verifies the extension precompiles and the legacy
+  delegation path still works.
+- Inline-math routing tests moved out of the extension-conditional block; they
+  now exercise `TeXLayout._is_inline_math` directly and run unconditionally.
+- `docs/src/03-makie.md` showed `Label(fig[1, 1], …; text_handler = handler)`,
+  which errors: `text_handler` is a `text` plot attribute inherited from the
+  theme, not a `Block` attribute. Replaced with `with_theme` and a note.
+- Three tool scripts had their own copy of the handler-kwargs helper; now
+  `tools/makie_handler.jl`.
+
+### Open
+
+- Stress-suite `makie_cairo` reference images need regenerating: the metric fix
+  changes alignment, which is the point of the fix.
