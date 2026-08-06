@@ -1,8 +1,8 @@
 # Render a stress-test sheet for TeXLayout.jl using CairoMakie.
 #
 # Produces PNG, PDF, or SVG output.  Requires CairoMakie and LaTeXStrings.
-# The MathTeXEngineExt extension is activated automatically once TeXLayout,
-# CairoMakie, and LaTeXStrings are all in scope.
+# Makie 0.25 uses TeXLayoutHandler; older Makie releases use the legacy automatic
+# MathTeXEngine adapter.
 #
 # Layout uses the same per-expression em_bbox measurements as the FreeType
 # renderer, so the horizontal arrangement is equivalent.  Positions are in
@@ -32,6 +32,8 @@ const SEC_H = 22      # section-header strip height (px)
 const TITLE_H = 30    # title-bar strip height (px)
 const SEC_PX = 13     # font size for section-header text
 const TITLE_PX = 16   # font size for title text
+
+include("makie_handler.jl")
 
 # ── Bounding box ───────────────────────────────────────────────────────────────
 
@@ -217,6 +219,7 @@ function run_stress_test_makie(
                 CairoMakie.text!(
                     ax, pen_x, y_anchor;
                     text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
+                    makie_handler_kwargs()...,
                     fontsize = BASE_PX,
                     align = (:left, :bottom),
                     space = :data, markerspace = :data,
