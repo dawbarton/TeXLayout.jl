@@ -27,6 +27,7 @@ HarfBuzz_jll = "8.5.1, 100.14002"
 LaTeXStrings = "1.4"
 LazyArtifacts = "1.10"
 MathTeXEngine = "0.6"
+Unicode = "1.10"
 julia = "1.10"
 
 [extras]
