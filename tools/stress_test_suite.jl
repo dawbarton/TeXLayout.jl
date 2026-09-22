@@ -34,6 +34,8 @@ end
 
 const REFERENCE_ASSET = "stress_test_reference.tar"
 
+include("makie_handler.jl")
+
 const ALL_FONTS = [
     :new_cm, :pagella, :luciole, :stix_two,
     :fira_math, :schola, :termes, :bonum,
@@ -224,6 +226,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         CairoMakie.text!(
             ax, x, y;
             text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
+            makie_handler_kwargs()...,
             fontsize = px,
             align = (:left, :bottom),
             space = :data,

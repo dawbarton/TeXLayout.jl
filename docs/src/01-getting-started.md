@@ -232,8 +232,9 @@ end
 `LayoutBox` is deliberately renderer-agnostic — it carries no dependency on any
 particular graphics library.
 
-**Makie users:** just load `TeXLayout` before `CairoMakie` or `GLMakie`; the
-`MathTeXEngineExt` extension takes over automatically.  See [Makie Integration](03-makie.md).
+**Makie users:** on Makie 0.25, pass `text_handler = TeXLayoutHandler()` to a
+text plot or theme. Makie 0.24 uses the legacy automatic adapter. See
+[Makie Integration](03-makie.md).
 
 **Custom renderers:** iterate over `boxes` and dispatch on the element type:
 

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
+  including glyph IDs, exact font faces, horizontal and vertical rule specs,
+  block bounds, and per-plot or theme-level selection.
+
+### Changed
+- Makie 0.25 integration no longer relies on intercepting
+  `MathTeXEngine.generate_tex_elements(::LaTeXString)`. The legacy automatic
+  adapter remains active only for Makie versions without the public text-handler
+  interface.
+- Inline-math routing and cached glyph/face resolution moved from the two
+  renderer extensions into `src/render_support.jl`, so both adapters share one
+  implementation and one per-`FontFamily` runtime cache.
+
+### Fixed
+- Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
+  string indices, so formulas ending in a multibyte character such as `$α$` do
+  not raise a `StringIndexError`.
+- `TeXLayoutHandler` reports glyph and block metrics padded to the font's
+  ascender and descender rather than bare ink bounds, matching what Makie's own
+  layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
+  placed labels of differing ink height on different baselines, and `Axis`
+  tick-label space depended on whether a label happened to have a descender.
+
 ## [v0.3.2] - 2026-07-26
 
 ### Fixed

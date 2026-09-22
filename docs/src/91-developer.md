@@ -911,61 +911,88 @@ the `\large` factor).
 
 ---
 
-## Makie extension (`ext/MathTeXEngineExt.jl`)
+## Makie extensions (`ext/MakieExt.jl`, `ext/MathTeXEngineExt.jl`)
 
 ### Activation
 
-The extension is loaded automatically by Julia's package extension mechanism when all
-of `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings` are present in the current
-session.  No user action is required beyond loading those packages.
+`MakieExt` loads when Makie and LaTeXStrings are present. It defines the public
+handler method only when Makie exposes `TextAttributes`, `TextLayout`, and
+`layout_text`, which keeps the same weak-dependency declaration loadable with
+Makie 0.24. `MathTeXEngineExt` remains the automatic compatibility path for
+Makie 0.24.
 
 ### Dispatch strategy
 
-The extension adds a method:
+The forward interface adds:
 
 ```julia
-MathTeXEngine.generate_tex_elements(str::LaTeXString, ...) -> ...
+Makie.layout_text(
+    ::TeXLayout.TeXLayoutHandler,
+    ::LaTeXString,
+    ::Makie.TextAttributes,
+) -> Makie.TextLayout
 ```
 
-MathTeXEngine's existing method accepts `::AbstractString`, which is less specific than
-`::LaTeXString`.  Makie always passes a `LaTeXString` to `generate_tex_elements`, so
-Julia's standard method dispatch selects the TeXLayout method automatically.
+The handler claims only `LaTeXString`; Makie's generic handler fallback sends
+other source types to `layout_text(nothing, ...)`. A handler may pin a
+`FontFamily` and `LayoutOptions`, or resolve the session defaults at each call.
+Makie owns block validation, placement, and batching.
 
 ### Conversion pipeline
 
-The extension converts TeXLayout output to MathTeXEngine's expected tuple format:
+The handler converts TeXLayout output directly to Makie's layout result:
 
 1. Inspect the `LaTeXString`.
    - A string that starts and ends with a single `$` and contains exactly two
      unescaped `$` math shifts is treated as one inline-math formula. The
      extension strips the delimiters, calls `TeXLayout.parse_latex`, and lays the
-     result out in `Display` style with `TeXLayout.default_font_family()`.
+     result out in `Display` style with the handler's effective font family.
    - Every other string is treated as document input and routed through
-     `TeXLayout.layout_document` with `TeXLayout.default_font_family()` and
-     `TeXLayout.default_layout_options()`.
-2. Convert each `LayoutBox` element to an MTE tuple `(element, Point2f, scale)`:
-   - `Glyph` → `MathTeXEngine.TeXChar`; glyph indices are resolved through the
-     glyph's `FontSlot` fallback paths and cached by `(font path, glyph name)`.
-   - `GlyphID` → `MathTeXEngine.TeXChar`; the glyph ID and exact font path are
-     used directly, bypassing name lookup.
-   - `HRule` → `MathTeXEngine.HLine` with the corresponding width and thickness.
-   - `VRule` → `MathTeXEngine.VLine` with the corresponding height and thickness.
-   - `Space` → skipped (carries no renderable geometry).
+     `TeXLayout.layout_document` with effective options. Makie's line height,
+     wrapping width, and justification are mapped into those options.
+2. Convert visible elements:
+   - `Glyph` resolves through its complete `FontSlot` fallback chain.
+   - `GlyphID` uses its exact font path and glyph ID.
+   - Both produce `NativeFont`, glyph ID, `GlyphExtent`, origin, and scale arrays.
+   - `HRule` and `VRule` become one `LineSegments` `PlotSpec`, including an
+     explicit visual bounding box that accounts for rule thickness.
+   - `Space` has no glyph, but contributes through the measured block width.
+3. Return `Makie.TextLayout` with baseline zero and a fontsize-scaled block box.
+   Makie applies `align`, `rotation`, and `offset` later.
 
-### Type piracy note
+Steps 1 and 2 use `src/render_support.jl`, which is where both adapters get
+`_inline_math_tokens` and the per-family `GlyphRuntime` (loaded faces, slot
+fallback chains, memoized glyph-name → glyph-index lookups). Neither depends on
+a weak dependency, so neither is duplicated per extension.
 
-This is an instance of **type piracy**: TeXLayout owns neither
-`MathTeXEngine.generate_tex_elements` nor `LaTeXStrings.LaTeXString`.  The approach is
-pragmatic — it adds a more-specific method rather than overwriting an existing one,
-which is the least disruptive form of piracy — and is confined entirely to the
-extension module.  A future alternative would be a dedicated Makie recipe or an
-upstream extension point in MathTeXEngine.  The Makie integration section of the README
-describes the current status.
+### Glyph and block metrics
 
-**Note**: the extension always uses `TeXLayout.default_font_family()`, ignoring any
-`font_family` argument passed by Makie.  Users can change the effective font by calling
-`TeXLayout.set_default_font_family!(:stix_two)` (or any other family) before rendering;
-the extension picks up the change on the next render call.
+Makie turns every `GlyphExtent` into the bounding box `(0, descender)` to
+`(hadvance, ascender)` — see `height_insensitive_boundingbox_with_advance` —
+and its own layouters report the *font's* line metrics there rather than the
+glyph's ink, so a block's height does not depend on which characters it holds.
+`_glyph_extent` follows that contract, padding each glyph's ink extent to
+`max(ink_top, font_ascender)` and `min(ink_bottom, font_descender)` exactly as
+`MathTeXEngine.TeXChar` does, and `_block_bbox` pads `TeXBox.ascent`/`descent`
+the same way. Reporting the bare ink bounds would make `align = (:*, :center)`
+place `L"x"` and `L"M"` on different baselines and make `Axis` tick-label space
+depend on whether any label happens to have a descender.
+
+Layout itself is not cached by the handler. The upstream protocol treats any
+non-`nothing` handler as baking the display attributes into its layout (Makie
+dropped the overloadable `bakes_display_attributes` hook in
+[#5717](https://github.com/MakieOrg/Makie.jl/pull/5717) because a handler that
+opted out would leave its plot specs' colors stale), so a color change re-runs
+`layout_text`. Rule specs do carry `attributes.color`, so this is correct, just
+more work than the geometry strictly needs.
+
+### Legacy behavior
+
+`MathTeXEngineExt` still adds the historical, more-specific
+`generate_tex_elements(::LaTeXString)` method. When `MakieExt` reports that the
+public interface exists, this method uses `invoke` to call MathTeXEngine's
+original untyped fallback. This leaves Makie 0.25 unchanged until the user
+selects `TeXLayoutHandler`, while preserving automatic integration on 0.24.
 
 ---
 
@@ -1165,16 +1192,21 @@ increases are usually more actionable than nanosecond-scale timing movement.
   Consequently, the non-breaking property of `~` is not observable until a
   width-aware line-breaking pass is added.
 
-- **Makie type piracy** — the `MathTeXEngineExt` extension adds a method to a function
-  and argument type that TeXLayout does not own.  Alternative integration strategies
-  (a dedicated Makie recipe, or an upstream extension point in MathTeXEngine) are under
-  consideration.
+- **Makie 0.24 type piracy** — the legacy compatibility extension still adds a
+  method to a function and argument type TeXLayout does not own. Makie 0.25's
+  explicit handler path avoids it.
 
-- **Makie font-family argument ignored** — `generate_tex_elements(str, font_family)` in
-  the extension always uses `default_font_family()`.  Call
-  `set_default_font_family!(family)` to change the font used by Makie.
+- **Makie wrapping/justification mismatch** — the handler receives Makie's
+  per-block `word_wrap_width` and fractional justification, but TeXLayout has no
+  soft line breaker and only three document alignment values. Width sets the
+  document box without wrapping; justification snaps to left, centre, or right.
 
-- **Makie document options are session-wide** — Makie's fixed call site cannot pass
-  document `LayoutOptions` per render.  The extension reads `default_layout_options()`
-  for document-path renders; call `set_default_layout_options!` to change width,
-  alignment, and display alignment globally for the session.
+- **Makie display-only caching** — Makie's display-only fast path is restricted
+  to `text_handler === nothing`, so color and stroke changes call TeXLayout again
+  even though only the rule specs' color depends on them. This is a deliberate
+  upstream choice rather than an oversight: the overloadable
+  `bakes_display_attributes` hook was removed from
+  [Makie #5717](https://github.com/MakieOrg/Makie.jl/pull/5717) on the grounds
+  that opting out would leave a handler's plot specs stale. A handler-local cache
+  keyed on source, family, and options would recover most of the cost on
+  TeXLayout's side if it ever measures as a problem.
