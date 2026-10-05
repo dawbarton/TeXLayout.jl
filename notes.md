@@ -1607,3 +1607,21 @@
 - No stress image changes (no stress case exercises either path). The document
   layer does not support `\quad`/`\,` at all (`a\quad b` becomes "a b"); not
   changed.
+
+## 2026-10-05T21:35+01:00 Follow-up 3.2: math alphabets around \text
+
+- XeLaTeX with amsmath and unicode-math (bold and italic text fonts loaded, so
+  the controls `\mathbf{ab}` and `\textbf{a b}` do render bold):
+  `\mathbf{\text{a b}}` and `\boldsymbol{\text{a b}}` are regular "a b";
+  `\mathbf{x\text{ if }y}` is bold x, regular " if ", bold y. amstext's `\text`
+  uses the surrounding text font, which math alphabets do not change.
+- KaTeX deviates deliberately: `buildCommon.makeOrd` has
+  `useFont = mode === "math" || (mode === "text" && !!font)`, and plain `\text`
+  leaves `options.font` set, so `\mathbf{\text{a}}` is bold in KaTeX.
+- TeXLayout kept `font_variant` in `_with_text_mode`, drawing text with Unicode
+  math-alphabet letters and spaces as the math font's `space` glyph. Changed to
+  LaTeX's behaviour (reset the variant); opened as a draft because it reverses
+  KaTeX's choice.
+- Residual difference seen while checking: unicode-math's `\mathbf` uses the
+  bold text font (`\symbf` uses Unicode math bold), so bold letters differ
+  slightly in advance from TeXLayout's U+1D400-block glyphs.
