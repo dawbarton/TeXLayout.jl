@@ -1125,7 +1125,8 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The note is the smallest glyph; it must inherit the 1.2× sizing factor
         # like the body and brace rather than resetting to the bare script scale.
         note_scale(source) = minimum(b.scale for b in find_glyphs(layout(parse_latex(source), family, Text)))
-        for brace in (raw"\underbrace{x}_{n}", raw"\overbrace{x}^{n}")
+        # The last case also has a secondary (opposite-side) script.
+        for brace in (raw"\underbrace{x}_{n}", raw"\overbrace{x}^{n}", raw"\underbrace{x}_{n}^{m}")
             @test note_scale(raw"\large" * brace) ≈ 1.2 * note_scale(brace)
         end
     end
