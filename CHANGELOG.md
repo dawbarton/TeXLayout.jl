@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Explicit spaces and kerns (`\,`, `\quad`, `~`, `\kern`, …) no longer reset
+  automatic inter-atom spacing.  As in TeX and KaTeX, the atoms on either side
+  are spaced as if the explicit space were absent, and the explicit space is
+  added: `a\,+b` keeps the medium spaces around a binary `+`, `x,\quad y`
+  keeps the thin space after the comma, and `\int\!\!\int` nets one negative
+  thin space.  Spacing between ordinary atoms (`f(x)\,dx`) is unchanged.
 - `\binom`, `\dbinom`, and `\tbinom` follow TeX's Rule 15c for rule-less
   fractions with the OpenType MATH Stack* constants (`StackTopShiftUp`,
   `StackBottomShiftDown`, `StackGapMin`, and their display-style forms), as
