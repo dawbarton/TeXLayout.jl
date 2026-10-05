@@ -88,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   added: `a\,+b` keeps the medium spaces around a binary `+`, `x,\quad y`
   keeps the thin space after the comma, and `\int\!\!\int` nets one negative
   thin space.  Spacing between ordinary atoms (`f(x)\,dx`) is unchanged.
+- The parentheses of `\binom`, `\dbinom`, and `\tbinom` have TeX's fixed
+  sizes (Rule 15e): at least 2.39 em in Display style and 1.01 em otherwise,
+  whatever the content, as in TeX and KaTeX.  They were sized to the content.
 - `\binom`, `\dbinom`, and `\tbinom` follow TeX's Rule 15c for rule-less
   fractions with the OpenType MATH Stack* constants (`StackTopShiftUp`,
   `StackBottomShiftDown`, `StackGapMin`, and their display-style forms), as

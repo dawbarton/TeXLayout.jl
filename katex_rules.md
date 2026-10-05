@@ -258,10 +258,19 @@ as in LuaTeX.  (Until 2026-10 it used the Fraction* constants with separate
 clearances against the math axis, i.e. Rule 15d with zero rule thickness, on the
 mistaken premise that `num3` had no OpenType equivalent.)
 
-Rule 15e delimiters are **not** matched: TeX uses fixed sizes (`delim1` in
-Display style, `delim2` otherwise; XeTeX maps `delim1` to
-`DelimitedSubFormulaMinHeight` and `delim2` to `min(1.5 em, delim1)`), whereas
-TeXLayout sizes the parentheses of `\binom` to the content like `\left…\right`.
+Rule 15e is implemented for `\binom`: the delimiters have the fixed minimum
+size `delim1` in Display style and `delim2` otherwise, whatever the content
+(`_GENFRAC_DELIM_EM`).  The MATH table has no equivalent, so TeXLayout uses
+Computer Modern's values, 2.39 em and 1.01 em (cmsy10 `\fontdimen20`/`21`), as
+KaTeX does.  LuaTeX's luaotfload defaults to 2.40 and 1.01, which in New CM
+selects the next parenthesis variant (2.99 em rather than 2.39 em); XeTeX maps
+`delim1` to `DelimitedSubFormulaMinHeight` and `delim2` to
+`min(1.5 em, delim1)`.  Until 2026-10 the delimiters were sized to the content.
+
+TeX, amsmath, and KaTeX treat `\frac` and `\binom` as ordinary atoms (amsmath
+wraps them in a brace group; KaTeX builds an `mord`), but TeXLayout's
+`_atom_class` returns `:inner` for `NodeKind.Frac` and `NodeKind.Genfrac`, which
+adds thin spaces around them.  Not yet changed.
 
 Rule 15e (`\genfrac` arbitrary delimiters) and `\atop` (no-rule, no delimiters)
 are not implemented.
@@ -384,7 +393,7 @@ constants are noted for quick lookup.
 | Style switches (`\displaystyle`, …) | `NodeKind.StyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see AGENTS.md encoding note) |
 | Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
 | `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
-| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c with the Stack* constants and one mutual clearance; content-sized `()` delimiters via `_layout_delim!` (TeX uses fixed `delim1`/`delim2`) |
+| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c with the Stack* constants and one mutual clearance; Rule 15e delimiters of fixed size `delim1`/`delim2` (2.39/1.01 em) via `_layout_delim!` |
 | Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
 | `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed.  An enclosing math alphabet (`\mathbf`, `\boldsymbol`, …) does not restyle the text, as in LaTeX; KaTeX deviates (its `makeOrd` keeps the math font in text mode) |
 | Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |

@@ -1820,6 +1820,25 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "\\binom delimiters have TeX's fixed delim1/delim2 sizes" begin
+        # Rule 15e: the delimiters of a generalized fraction are sized from
+        # delim1 (Display style, 2.39 em in Computer Modern) or delim2 (1.01 em),
+        # not from the content.  The smallest variant at least that tall is used.
+        variants = mt.vert_constructions["parenleft"].variants
+        expected(size_em) = first(v.glyph_name for v in variants if v.advance >= size_em * FONT_UPM)
+        paren(source, style) = only(
+            filter(g -> startswith(g.element.glyph_name, "parenleft"), find_glyphs(layout(parse_latex(source), family, style)))
+        )
+        for source in (raw"\binom{n}{k}", raw"\binom{\frac{a}{b}}{\frac{c}{d}}", raw"\binom{1}{2}")
+            @test paren(source, Display).element.glyph_name == expected(2.39)
+            @test paren(source, Text).element.glyph_name == expected(1.01)
+        end
+        # In a superscript, delim2 at script size: the same variant, scaled.
+        p = paren(raw"x^{\binom{n}{k}}", Text)
+        @test p.element.glyph_name == expected(1.01)
+        @test p.scale ≈ mt.constants.script_percent_scale_down / 100
+    end
+
     @testset "\\binom{a}{b} contains no HRule (no fraction bar)" begin
         boxes = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
         @test isempty(find_hrules(boxes))

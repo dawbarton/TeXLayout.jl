@@ -1674,3 +1674,23 @@
   variants in the font); TeXLayout already matches, so unchanged.
 - Arrow length differs from amsmath's `\ext@arrow` sizing in all fonts
   (TeXLayout pads the widest label by 0.3 em each side); not changed.
+
+## 2026-10-05T22:08+01:00 Binomial delimiter sizes (Rule 15e)
+
+- TeX (`tex.web` make_fraction) sizes generalized-fraction delimiters with
+  `var_delimiter(…, delim1 or delim2)`, independent of the content. KaTeX's
+  `genfrac.ts` uses delim1 2.390 / delim2 1.010 (cmsy10 fontdimens). LuaTeX
+  uses `FractionDelimiter(DisplayStyle)Size`, which luaotfload defaults to 2.40
+  and 1.01 × size (`fontloader-font-con.lua`); it falls back to the content
+  height only if those are undefined. XeTeX maps delim1 to
+  `DelimitedSubFormulaMinHeight` and delim2 to `min(1.5 em, delim1)`.
+- Implemented TeX's 2.39/1.01 em (`_GENFRAC_DELIM_EM`). The 2.39 vs 2.40
+  rounding matters for New CM, whose paren variants include 2.393 em: TeX and
+  KaTeX pick it, LuaTeX picks 2.991 em. Overlays: STIX Two and Pagella display
+  and text binomials coincide with LuaLaTeX; New CM coincides with XeLaTeX in
+  display and with both engines in text style.
+- Found: amsmath wraps `\frac` and `\binom` in a brace group and KaTeX builds an
+  `mord`, so both are ordinary atoms, but `_atom_class` gives `:inner` for
+  Frac/Genfrac (thin spaces around fractions). Likewise `\underbrace` is
+  `\mathop…\limits` in LaTeX, and a bare `matrix` is an ordinary atom while
+  `pmatrix` and friends (`\left…\right`) are inner. Not changed.

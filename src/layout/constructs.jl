@@ -179,10 +179,9 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     return frac_w
 end
 
-# Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction wrapped
-# in auto-sized delimiters.  Implements Rule 15c (no-rule fraction) and sizes
-# the delimiters symmetrically around the math axis using the same algorithm as
-# NodeKind.Delimited (TeX instead uses the fixed sizes delim1/delim2).
+# Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction
+# between delimiters.  Implements Rule 15c (no-rule fraction) and Rule 15e
+# (delimiters of fixed size delim1/delim2, centred on the math axis).
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
@@ -195,8 +194,6 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     num_scale = _scale_for_child(scale, style, num_s, mc)
     den_s = frac_den_style(style)
     den_scale = _scale_for_child(scale, style, den_s, mc)
-
-    axis_h = mc.axis_height / upm * scale
 
     # Rule 15c (no fraction rule): TeX uses num1/denom1 in Display style and
     # num3/denom2 otherwise, with one mutual clearance of 7θ or 3θ.  The MATH
@@ -234,13 +231,9 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     inner_w = max(num_w, den_w)
 
-    # Compute the vertical extent of the fraction for delimiter sizing.
-    # Both measured relative to y0 (i.e. the formula baseline).
-    inner_top = num_shift + _boxes_top(boxes, num_start, num_stop, upm)
-    inner_bot = -den_shift + _boxes_bottom(boxes, den_start, den_stop, upm)
-    h_above = max(0.0, inner_top - axis_h)
-    h_below = max(0.0, axis_h - inner_bot)
-    required_du = 2.0 * max(h_above, h_below) / scale * upm
+    # Rule 15e: the delimiters have a fixed size, delim1 in Display style and
+    # delim2 otherwise, whatever the content (see _GENFRAC_DELIM_EM).
+    required_du = (is_display(style) ? _GENFRAC_DELIM_EM[1] : _GENFRAC_DELIM_EM[2]) * upm
 
     # Place left delimiter, fraction content (centred), right delimiter.
     cursor = x0
