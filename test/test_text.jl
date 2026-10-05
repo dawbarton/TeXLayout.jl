@@ -22,6 +22,7 @@
                 :default_layout_options,
                 :set_default_layout_options!,
                 :HarfBuzzShaper,
+                :TeXLayoutHandler,
             )
         )
     end

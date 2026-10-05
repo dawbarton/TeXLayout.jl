@@ -33,6 +33,7 @@ include("boxes.jl")
 include("shaping.jl")
 include("document.jl")
 include("compose.jl")
+include("render_support.jl")
 
 # Public API — configuration surface for typical Makie users.
 #
@@ -49,5 +50,30 @@ include("compose.jl")
 export font_family, default_font_family, set_default_font_family!
 export default_layout_options, set_default_layout_options!
 export HarfBuzzShaper
+export TeXLayoutHandler
+
+"""
+    TeXLayoutHandler(; family = nothing, options = nothing)
+
+Handler for Makie's `text_handler` interface. On Makie 0.25 and later, pass an
+instance as `text_handler = TeXLayoutHandler()` on a text plot or in a theme to
+lay out `LaTeXString` values with TeXLayout. Other text values fall through to
+Makie's built-in layout through normal dispatch.
+
+By default the handler reads [`default_font_family`](@ref) and
+[`default_layout_options`](@ref) when it lays out each block. Pass a `family` or
+`options` value to pin either setting for this handler.
+"""
+struct TeXLayoutHandler
+    family::Union{Nothing, FontFamily}
+    options::Union{Nothing, LayoutOptions}
+end
+
+function TeXLayoutHandler(;
+        family::Union{Nothing, FontFamily} = nothing,
+        options::Union{Nothing, LayoutOptions} = nothing,
+    )
+    return TeXLayoutHandler(family, options)
+end
 
 end

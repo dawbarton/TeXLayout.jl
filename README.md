@@ -121,41 +121,49 @@ coverage on both sides continues to change.
 
 ## Makie integration
 
-When both `TeXLayout` and `MathTeXEngine` are loaded in the same Julia session,
-TeXLayout automatically activates a package extension (`MathTeXEngineExt`) that
-replaces MathTeXEngine's layout engine with TeXLayout's.  No other code changes
-are required — LaTeX strings passed to `text!` in CairoMakie or GLMakie are
-rendered using TeXLayout's OpenType-aware pipeline.
+Makie 0.25 adds a public `text_handler` interface. TeXLayout implements it with
+`TeXLayoutHandler`, avoiding the type piracy required by older Makie releases.
+Select the handler on one plot or put it in a theme to route every
+`LaTeXString` through TeXLayout. Ordinary strings and rich text still fall
+through to Makie's built-in layout.
 
-The extension routes each `LaTeXString` by shape: a single inline-math span
+The handler routes each `LaTeXString` by shape: a single inline-math span
 (`"$…$"`, the usual `L"…"` form) is laid out as one formula in Display style, as
 before; anything else — surrounding text, several `$…$` spans, `\(…\)` inline
 math, or `$$…$$` / `\[…\]` display math — goes through `layout_document`, so a
 single `text!` call can render mixed text and math.  Width and alignment for that
-document path are controlled session-wide with `set_default_layout_options!`
-(e.g. `set_default_layout_options!(width = 40.0, align = :center)`).
+document path can be pinned on the handler or controlled session-wide with
+`set_default_layout_options!`.
 
 ```julia
-using TeXLayout       # activates MathTeXEngineExt automatically
+using TeXLayout
 using CairoMakie, LaTeXStrings
+
+handler = TeXLayoutHandler()
 
 fig = Figure()
 ax  = Axis(fig[1,1])
 text!(ax, 0.5, 0.5; text=L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
-      fontsize=32, align=(:center, :center))
+      text_handler=handler, fontsize=32, align=(:center, :center))
 save("output.png", fig)
 ```
 
-To use a different font for all math rendering (including via Makie), call
-`set_default_font_family!` before loading CairoMakie or GLMakie:
+Set the handler in a theme when axes, legends, and other recipes should all use
+TeXLayout:
 
 ```julia
-using TeXLayout
-set_default_font_family!(:stix_two)   # or any other bundled symbol / FontFamily
+using TeXLayout, CairoMakie, LaTeXStrings
 
-using CairoMakie, LaTeXStrings
-# All L"…" strings are now rendered with STIX Two Math.
+with_theme(text_handler = TeXLayoutHandler(family = font_family(:stix_two))) do
+    fig = Figure()
+    Axis(fig[1, 1]; xlabel = L"x", ylabel = L"f(x)")
+    fig
+end
 ```
+
+With `family = nothing` (the default), the handler reads
+`default_font_family()` at layout time. The analogous `options` keyword defaults
+to `default_layout_options()`.
 
 For a consistent appearance, set Makie's text fonts to the same files that
 TeXLayout uses for math.  `default_font_family()` returns the font paths for
@@ -172,7 +180,7 @@ set_theme!(fonts = (;
     bold       = ff.bold,
     italic     = ff.italic,
     bolditalic = ff.bolditalic,
-))
+), text_handler = TeXLayoutHandler(family = ff))
 
 fig = Figure(size = (800, 500))
 ax  = Axis(fig[1, 1]; xlabel = L"x", ylabel = L"f(x)")
@@ -183,13 +191,9 @@ axislegend(ax)
 save("output.png", fig)
 ```
 
-> **Note:** The extension works by adding a specialised
-> `MathTeXEngine.generate_tex_elements(::LaTeXString)` method from within a
-> package that owns neither the function nor the argument type — a form of
-> [type piracy](https://docs.julialang.org/en/v1/manual/style-guide/#Avoid-type-piracy).
-> This is pragmatic but not ideal.  Alternative integration strategies that avoid
-> type piracy (e.g. a dedicated Makie recipe or a proper upstream extension point)
-> will be investigated in future.
+Makie 0.24 remains supported through the legacy automatic MathTeXEngine adapter.
+That compatibility path is not used once Makie's public handler interface is
+available.
 
 ## Usage
 
@@ -315,6 +319,7 @@ exported.
 | `default_layout_options` | function | Return the session-wide default `LayoutOptions` used by `layout_document` and the Makie extension |
 | `set_default_layout_options!` | function | Override the session-wide default options (keyword form merges; positional `LayoutOptions` replaces) |
 | `HarfBuzzShaper` | struct | Optional HarfBuzz-backed text shaper, active when `HarfBuzz_jll` is loaded |
+| `TeXLayoutHandler` | struct | Opt-in adapter for Makie 0.25's `text_handler` interface; optionally pins a font family and layout options |
 
 Advanced entry points such as `TeXLayout.layout_document`,
 `TeXLayout.generate_tex_elements`, `TeXLayout.parse_latex`, and the concrete

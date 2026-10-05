@@ -1,9 +1,8 @@
-# Render a MathTeXEngine-style metric visualisation using CairoMakie.
+# Render a TeXLayout metric visualisation using CairoMakie.
 #
 # The expression is drawn via a normal Makie `text!` call on a `LaTeXString`.
-# The overlays are computed from the same MathTeXEngine TeXChar/HLine/VLine
-# stream that Makie uses internally, so the guides track the rendered glyphs
-# rather than an approximate parallel reconstruction.
+# The overlays are computed from the same TeXLayout boxes returned through
+# Makie's text-handler interface, so the guides track the rendered glyphs.
 #   - yellow: origin-to-left-ink gap
 #   - green: right-ink-to-advance gap
 #   - red:    ink above the baseline
@@ -20,7 +19,6 @@ Pkg.activate(@__DIR__; io = devnull)
 using CairoMakie
 import CairoMakie.Makie
 using LaTeXStrings: LaTeXString
-import MathTeXEngine
 using TeXLayout
 using TeXLayout: FontFamily, generate_tex_elements
 
@@ -59,6 +57,15 @@ function wrap_latex(expr::AbstractString)
     str = String(expr)
     length(str) >= 2 && first(str) == '$' && last(str) == '$' && return LaTeXString(str)
     return LaTeXString("\$" * str * "\$")
+end
+
+include("makie_handler.jl")
+
+function glyph_upm(element, family)
+    path = element isa TeXLayout.GlyphID ?
+        element.font_path :
+        TeXLayout._font_path_for_slot(family, element.font_slot)
+    return TeXLayout._font_upm(path)
 end
 
 @inline rect_points(x1, y1, x2, y2) = CairoMakie.Point2f[
@@ -106,54 +113,60 @@ function main()
     latex = wrap_latex(expr)
 
     mt = TeXLayout.load_math_table(family.math)
-    elements = MathTeXEngine.generate_tex_elements(latex)
-    isempty(elements) && @warn "No layout boxes produced for expression: $expr"
+    boxes = generate_tex_elements(expr, family)
+    isempty(boxes) && @warn "No layout boxes produced for expression: $expr"
+    handler_kwargs = makie_handler_kwargs()
 
-    rotation = Makie.to_rotation(0.0f0)
-    _, _, tex_offset = Makie.texelems_and_glyph_collection(
-        latex,
-        Vec2f(BASE_PX),
-        (:left, :baseline),
-        rotation,
-        RGBAf(0, 0, 0, 1),
-        RGBAf(0, 0, 0, 0),
-        0.0f0,
-        -1.0f0,
-    )
+    tex_offset = if isempty(handler_kwargs)
+        rotation = Makie.to_rotation(0.0f0)
+        _, _, offset = Makie.texelems_and_glyph_collection(
+            latex,
+            Vec2f(BASE_PX),
+            (:left, :baseline),
+            rotation,
+            RGBAf(0, 0, 0, 1),
+            RGBAf(0, 0, 0, 0),
+            0.0f0,
+            -1.0f0,
+        )
+        offset
+    else
+        Vec2f(0)
+    end
 
-    shift_x = -tex_offset[1]
-    shift_y = -tex_offset[2]
+    xmin = xmax = -tex_offset[1]
+    ymin = ymax = -tex_offset[2]
 
-    xmin = xmax = shift_x
-    ymin = ymax = shift_y
+    for box in boxes
+        elem = box.element
+        x0 = box.x * BASE_PX - tex_offset[1]
+        y0 = box.y * BASE_PX - tex_offset[2]
 
-    for (elem, pos, scale) in elements
-        x0 = pos[1] * BASE_PX - tex_offset[1]
-        y0 = pos[2] * BASE_PX - tex_offset[2]
-
-        if elem isa MathTeXEngine.TeXChar
-            s = scale * BASE_PX
-            left = MathTeXEngine.leftinkbound(elem) * s
-            right = MathTeXEngine.rightinkbound(elem) * s
-            top = MathTeXEngine.topinkbound(elem) * s
-            bottom = MathTeXEngine.bottominkbound(elem) * s
-            adv = MathTeXEngine.hadvance(elem) * s
+        if elem isa TeXLayout.Glyph || elem isa TeXLayout.GlyphID
+            s = box.scale * BASE_PX / glyph_upm(elem, family)
+            left = elem.x_min * s
+            right = elem.x_max * s
+            top = elem.y_max * s
+            bottom = elem.y_min * s
+            adv = elem.advance_width * s
             xmin = min(xmin, x0 + left, x0 + adv)
             xmax = max(xmax, x0 + right, x0 + adv)
             ymin = min(ymin, y0 + bottom)
             ymax = max(ymax, y0 + top)
-        elseif elem isa MathTeXEngine.HLine
-            half_t = elem.thickness * scale * BASE_PX / 2
+        elseif elem isa TeXLayout.HRule
+            half_t = elem.thickness * BASE_PX / 2
+            rule_y = (box.y + elem.thickness / 2) * BASE_PX - tex_offset[2]
             xmin = min(xmin, x0)
-            xmax = max(xmax, x0 + elem.width * scale * BASE_PX)
-            ymin = min(ymin, y0 - half_t)
-            ymax = max(ymax, y0 + half_t)
-        elseif elem isa MathTeXEngine.VLine
-            half_t = elem.thickness * scale * BASE_PX / 2
-            xmin = min(xmin, x0 - half_t)
-            xmax = max(xmax, x0 + half_t)
+            xmax = max(xmax, x0 + elem.width * BASE_PX)
+            ymin = min(ymin, rule_y - half_t)
+            ymax = max(ymax, rule_y + half_t)
+        elseif elem isa TeXLayout.VRule
+            half_t = elem.thickness * BASE_PX / 2
+            rule_x = (box.x + elem.thickness / 2) * BASE_PX - tex_offset[1]
+            xmin = min(xmin, rule_x - half_t)
+            xmax = max(xmax, rule_x + half_t)
             ymin = min(ymin, y0)
-            ymax = max(ymax, y0 + elem.height * scale * BASE_PX)
+            ymax = max(ymax, y0 + elem.height * BASE_PX)
         end
     end
 
@@ -174,6 +187,7 @@ function main()
     text!(
         ax, 0, 0;
         text = latex,
+        handler_kwargs...,
         fontsize = BASE_PX,
         align = (:left, :baseline),
         space = :data,
@@ -189,16 +203,17 @@ function main()
         color = AXIS,
     )
 
-    for (elem, pos, scale) in elements
-        if elem isa MathTeXEngine.TeXChar
-            s = scale * BASE_PX
-            x0 = pos[1] * BASE_PX - tex_offset[1]
-            y0 = pos[2] * BASE_PX - tex_offset[2]
-            left = MathTeXEngine.leftinkbound(elem) * s
-            right = MathTeXEngine.rightinkbound(elem) * s
-            top = MathTeXEngine.topinkbound(elem) * s
-            bottom = MathTeXEngine.bottominkbound(elem) * s
-            adv = MathTeXEngine.hadvance(elem) * s
+    for box in boxes
+        elem = box.element
+        if elem isa TeXLayout.Glyph || elem isa TeXLayout.GlyphID
+            s = box.scale * BASE_PX / glyph_upm(elem, family)
+            x0 = box.x * BASE_PX - tex_offset[1]
+            y0 = box.y * BASE_PX - tex_offset[2]
+            left = elem.x_min * s
+            right = elem.x_max * s
+            top = elem.y_max * s
+            bottom = elem.y_min * s
+            adv = elem.advance_width * s
             fill_rect!(ax, x0, y0 + bottom, x0 + left, y0 + top, YELLOW)
             fill_rect!(ax, x0 + right, y0 + bottom, x0 + adv, y0 + top, GREEN)
             fill_rect!(ax, x0 + left, y0, x0 + right, y0 + top, RED)
@@ -213,7 +228,7 @@ function main()
     save(outf, fig)
     return println(
         "Written $outf  ($(round(Int, xhi - xlo))x$(round(Int, yhi - ylo)) px, " *
-            "$(length(elements)) boxes)"
+            "$(length(boxes)) boxes)"
     )
 end
 

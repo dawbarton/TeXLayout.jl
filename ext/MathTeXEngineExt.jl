@@ -1,6 +1,9 @@
-# MathTeXEngineExt — add a MathTeXEngine.generate_tex_elements(::LaTeXString) method
-# that uses TeXLayout's OpenType-aware typesetter instead of MathTeXEngine's own
-# layout engine.
+# MathTeXEngineExt — legacy Makie integration for releases without the public
+# `Makie.layout_text` protocol (Makie 0.24 and earlier). It adds a
+# MathTeXEngine.generate_tex_elements(::LaTeXString) method that uses TeXLayout's
+# OpenType-aware typesetter instead of MathTeXEngine's own layout engine. On
+# Makie 0.25 that method steps aside and users select `TeXLayoutHandler` through
+# `MakieExt` instead; see the `generate_tex_elements` docstring below.
 #
 # Loaded automatically when TeXLayout, MathTeXEngine, GeometryBasics, and
 # LaTeXStrings are all in the same Julia session (e.g. when CairoMakie or
@@ -13,12 +16,13 @@
 #
 # We produce real MathTeXEngine.TeXChar / HLine / VLine instances so that
 # Makie's texelems_and_glyph_collection can consume them without modification.
+# Source routing and glyph resolution are shared with MakieExt; they live in
+# TeXLayout's `src/render_support.jl`.
 
 module MathTeXEngineExt
 
 import MathTeXEngine
 import TeXLayout
-using FreeTypeAbstraction: FreeTypeAbstraction
 using GeometryBasics: Point2f
 using LaTeXStrings: LaTeXString
 
@@ -26,7 +30,6 @@ using LaTeXStrings: LaTeXString
 
 const _MTEElement = Union{MathTeXEngine.TeXChar, MathTeXEngine.HLine, MathTeXEngine.VLine}
 const _MTEElementTuple = Tuple{_MTEElement, Point2f, Float64}
-const _RuntimeKey = NTuple{13, Union{String, Nothing}}
 const _REPRESENTED_CHAR_BY_GLYPH_NAME = Dict(
     "space" => ' ',
     "hyphen" => '-',
@@ -48,87 +51,6 @@ const _REPRESENTED_CHAR_BY_GLYPH_NAME = Dict(
     "Lambda" => 'Λ',
 )
 
-mutable struct _RuntimeBundle
-    fonts::Dict{String, FreeTypeAbstraction.FTFont}
-    mte_family::MathTeXEngine.FontFamily
-    slot_paths::Dict{TeXLayout.FontSlot.T, Vector{String}}
-    glyph_indices::Dict{Tuple{String, String}, Culong}
-end
-
-const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
-
-# Strip surrounding $ delimiters that LaTeXStrings add automatically.
-# L"x^2" stores "$x^2$" internally; TeXLayout's parser expects no delimiters.
-function _strip_math_delimiters(s::AbstractString)
-    str = String(s)
-    length(str) >= 2 && str[1] == '$' && str[end] == '$' && return str[2:(end - 1)]
-    return str
-end
-
-# Return already-tokenized inline math when the whole string is one `$…$` span,
-# or `nothing` when it must use document routing.  Reusing TeXLayout's lexer
-# keeps escaped-dollar and comment semantics in one place: `\$` is a command,
-# while an unescaped `$` inside the outer delimiters is a MathShift token.
-function _inline_math_tokens(s::AbstractString)
-    length(s) >= 2 || return nothing
-    (first(s) == '$' && last(s) == '$') || return nothing
-    tokens = TeXLayout.tokenize(_strip_math_delimiters(s))
-    any(token -> token.kind === TeXLayout.TokenKind.MathShift, tokens) && return nothing
-    return tokens
-end
-
-# True when the whole string is a single inline-math span.  This is the
-# canonical `L"…"` form (e.g. "$x^2$").  Anything else — surrounding text,
-# `$$…$$`/`\[…\]` display math, or several `$…$` spans — is routed through the
-# document layer instead.
-function _is_inline_math(s::AbstractString)::Bool
-    return _inline_math_tokens(s) !== nothing
-end
-
-# Return the single character encoded by `name`, or `nothing` if the string is
-# empty or contains multiple characters.
-@inline function _single_char(name::String)::Union{Char, Nothing}
-    isempty(name) && return nothing
-    i = firstindex(name)
-    ch = name[i]
-    next_i = nextind(name, i)
-    return next_i > lastindex(name) ? ch : nothing
-end
-
-# Resolve a PostScript glyph name to a FreeType glyph index.
-# Strategy: PS name lookup → single-char codepoint → uniXXXX encoding.
-function _glyph_index_uncached(font, name::String)::Culong
-    isempty(name) && return Culong(0)
-
-    # Primary: PS name lookup (covers standard names like "parenleft", "alpha").
-    gid = FreeTypeAbstraction.glyph_index(font, name)
-    gid > 0 && return Culong(gid)
-
-    # Single-character name: try as a Unicode codepoint.
-    ch = _single_char(name)
-    if ch !== nothing
-        gid = FreeTypeAbstraction.glyph_index(font, ch)
-        gid > 0 && return Culong(gid)
-    end
-
-    # "uni{HHHH}" or "uni{HHHHHH}" encoding used by some math fonts.
-    m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
-    if m !== nothing
-        gid = FreeTypeAbstraction.glyph_index(font, Char(parse(UInt32, m.captures[1], base = 16)))
-        gid > 0 && return Culong(gid)
-    end
-
-    return Culong(0)
-end
-
-@inline function _glyph_index(
-        cache::Dict{Tuple{String, String}, Culong}, font, path::String, name::String
-    )::Culong
-    return get!(cache, (path, name)) do
-        _glyph_index_uncached(font, name)
-    end
-end
-
 # Best-effort Unicode character for a PostScript glyph name.
 # Used as TeXChar.represented_char; mainly matters for word-wrap in Makie
 # (spaces/newlines), which does not apply inside math mode.
@@ -136,11 +58,10 @@ function _represented_char(name::String)::Char
     isempty(name) && return '?'
     mapped = get(_REPRESENTED_CHAR_BY_GLYPH_NAME, name, nothing)
     mapped !== nothing && return mapped
-    ch = _single_char(name)
+    ch = TeXLayout._single_char(name)
     ch !== nothing && return ch
-    m = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
-    m !== nothing && return Char(parse(UInt32, m.captures[1], base = 16))
-    return '?'
+    ch = TeXLayout._uni_glyph_codepoint(name)
+    return ch === nothing ? '?' : ch
 end
 
 # Build an MTE FontFamily whose slots all point to TeXLayout's chosen fonts.
@@ -163,47 +84,16 @@ function _mte_font_family(tl_family::TeXLayout.FontFamily)
     )
 end
 
-@inline _runtime_key(tl_family::TeXLayout.FontFamily) =
-    TeXLayout._font_family_key(tl_family)
+# Glyph resolution and face caching are shared with `MakieExt` (see
+# `src/render_support.jl`); only the derived MathTeXEngine font family is
+# specific to this adapter, so it gets its own small cache on the same key.
+const _MTE_FAMILY_CACHE = Dict{TeXLayout.FontFamilyKey, MathTeXEngine.FontFamily}()
 
-function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
-    return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
-        slot_paths = Dict(
-            TeXLayout.FontSlot.Math => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Math),
-            TeXLayout.FontSlot.Regular => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Regular),
-            TeXLayout.FontSlot.Bold => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Bold),
-            TeXLayout.FontSlot.Italic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Italic),
-            TeXLayout.FontSlot.BoldItalic => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.BoldItalic),
-        )
-        paths = unique!(reduce(vcat, values(slot_paths)))
-        fonts = Dict{String, FreeTypeAbstraction.FTFont}()
-        for path in paths
-            fonts[path], _ = TeXLayout._load_font(path)
-        end
-        _RuntimeBundle(
-            fonts,
-            _mte_font_family(tl_family),
-            slot_paths,
-            Dict{Tuple{String, String}, Culong}(),
-        )
-    end
-end
-
-function _glyph_index_for_slot(
-        runtime::_RuntimeBundle, slot::TeXLayout.FontSlot.T, name::String
-    )::Union{Tuple{Culong, FreeTypeAbstraction.FTFont}, Nothing}
-    for path in runtime.slot_paths[slot]
-        font = runtime.fonts[path]
-        gid = _glyph_index(runtime.glyph_indices, font, path, name)
-        gid > 0 && return (gid, font)
-    end
-    return nothing
-end
-
-function _font_for_path(runtime::_RuntimeBundle, path::String)::FreeTypeAbstraction.FTFont
-    return get!(runtime.fonts, path) do
-        font, _ = TeXLayout._load_font(path)
-        font
+# Named to stay clear of `generate_tex_elements`'s `_mte_family` argument, which
+# would otherwise shadow it at the one call site that matters.
+function _cached_mte_font_family(tl_family::TeXLayout.FontFamily)::MathTeXEngine.FontFamily
+    return get!(_MTE_FAMILY_CACHE, TeXLayout._font_family_key(tl_family)) do
+        _mte_font_family(tl_family)
     end
 end
 
@@ -215,25 +105,27 @@ end
 # left edges).  MathTeXEngine's `HLine` / `VLine` instead use centered line
 # positions, so the adapter must shift by half the rule thickness.
 function _box_to_mte(
-        box::TeXLayout.LayoutBox, runtime::_RuntimeBundle
+        box::TeXLayout.LayoutBox,
+        runtime::TeXLayout.GlyphRuntime,
+        mte_family::MathTeXEngine.FontFamily,
     )::Union{_MTEElementTuple, Nothing}
     pos = Point2f(box.x, box.y)
     scale = Float64(box.scale)
     el = box.element
 
     if el isa TeXLayout.Glyph
-        resolved = _glyph_index_for_slot(runtime, el.font_slot, el.glyph_name)
+        resolved = TeXLayout._resolve_glyph(runtime, el.font_slot, el.glyph_name)
         resolved === nothing && return nothing
-        gid, font = resolved
+        gid, font, _ = resolved
         tc = MathTeXEngine.TeXChar(
-            gid, font, runtime.mte_family, false,
+            Culong(gid), font, mte_family, false,
             _represented_char(el.glyph_name)
         )
         return (tc, pos, scale)
     elseif el isa TeXLayout.GlyphID
-        font = _font_for_path(runtime, el.font_path)
+        font = TeXLayout._runtime_font(runtime, el.font_path)
         tc = MathTeXEngine.TeXChar(
-            Culong(el.glyph_id), font, runtime.mte_family, false,
+            Culong(el.glyph_id), font, mte_family, false,
             el.represented_char,
         )
         return (tc, pos, scale)
@@ -263,7 +155,10 @@ end
 
 Specialisation of MathTeXEngine's `generate_tex_elements` for `LaTeXString`
 inputs.  Uses TeXLayout's OpenType-aware typesetter instead of MathTeXEngine's
-own layout engine.
+own layout engine on legacy Makie versions. When Makie 0.25's public
+`layout_text` interface is active, this compatibility method delegates to
+MathTeXEngine's original implementation and TeXLayout is selected explicitly
+with [`TeXLayout.TeXLayoutHandler`](@ref).
 
 This is a new method (not an overwrite), so the extension is fully precompiled.
 Makie always passes a `LaTeXString` at this call site, so this method takes
@@ -281,10 +176,26 @@ The `font_family` argument is accepted for API compatibility but is currently
 ignored; TeXLayout's `default_font_family()` is used instead.
 """
 function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = MathTeXEngine.FontFamily())
+    # Makie 0.25 has a first-class text-handler interface. Once that extension
+    # is active, leave MathTeXEngine's own public API alone and let users select
+    # TeXLayout explicitly with `text_handler = TeXLayoutHandler()`. The invoke
+    # targets MathTeXEngine's untyped fallback, bypassing this legacy
+    # LaTeXString specialization.
+    makie_ext = Base.get_extension(TeXLayout, :MakieExt)
+    if makie_ext !== nothing && makie_ext._HAS_LAYOUT_TEXT_INTERFACE
+        return invoke(
+            MathTeXEngine.generate_tex_elements,
+            Tuple{Any, Any},
+            str,
+            _mte_family,
+        )
+    end
+
     tl_family = TeXLayout.default_font_family()
-    runtime = _runtime_bundle(tl_family)
+    runtime = TeXLayout._glyph_runtime(tl_family)
+    mte_family = _cached_mte_font_family(tl_family)
     opts = TeXLayout.default_layout_options()
-    inline_tokens = _inline_math_tokens(str)
+    inline_tokens = TeXLayout._inline_math_tokens(str)
 
     boxes = if inline_tokens !== nothing
         node = TeXLayout.parse_latex(inline_tokens)
@@ -299,7 +210,7 @@ function MathTeXEngine.generate_tex_elements(str::LaTeXString, _mte_family = Mat
     result = Vector{_MTEElementTuple}()
     sizehint!(result, length(boxes))
     for box in boxes
-        t = _box_to_mte(box, runtime)
+        t = _box_to_mte(box, runtime, mte_family)
         t !== nothing && push!(result, t)
     end
     return result
