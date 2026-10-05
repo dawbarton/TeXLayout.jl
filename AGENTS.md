@@ -161,6 +161,18 @@ caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
 parsed `MathTable` values by math-font path, and `ext/MathTeXEngineExt.jl`
 caches the Makie-facing runtime bundle by effective `FontFamily`.
 
+**Thread safety.** The caches and the cached FreeType faces are shared between
+threads.  `Base.Dict` is not safe for concurrent use, so each module-level cache
+(`_FONT_CACHE`, `_UPM_CACHE`, `_MATH_TABLE_CACHE`, and the caches in both
+extensions) is guarded by its own `ReentrantLock`, and its values are built under
+that lock.  An `FT_Face` may be used by only one thread at a time, and
+`FT_Load_Glyph` writes the face's shared glyph slot, so every FreeType call on a
+cached face must hold that face's `FTFont.lock` (FreeTypeAbstraction's
+convention, which its own `glyph_index` follows).  Use `_load_glyph_metrics` and
+`_char_index` rather than calling FreeType directly.  Without these locks,
+concurrent layout crashed inside FreeType even with warm caches.
+`test/test_threads.jl` checks concurrent layout in a four-thread child process.
+
 ## Key types
 
 ### `Node` / `NodeKind` (`ast.jl`, `enums.jl`)
