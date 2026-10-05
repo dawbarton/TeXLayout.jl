@@ -631,9 +631,24 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
-    # Render each character of the operator name upright (roman).
+    # Render the operator name upright (roman).  When the node has children
+    # they spell the body (characters and explicit spaces, e.g. lim\,inf);
+    # otherwise the body is the name itself.
+    isempty(node.children) && return _layout_upright_chars!(node.value, ctx, x0, y0, scale, boxes)
     cursor = x0
-    for ch in node.value
+    for child in node.children
+        if child.kind === NodeKind.Space
+            cursor += _layout_space!(child, ctx, style, cursor, y0, scale, boxes)
+        else
+            cursor += _layout_upright_chars!(child.value, ctx, cursor, y0, scale, boxes)
+        end
+    end
+    return cursor - x0
+end
+
+function _layout_upright_chars!(text, ctx, x0, y0, scale, boxes)
+    cursor = x0
+    for ch in text
         g = _upright_glyph(ctx, ch)
         g === nothing && continue
         push!(boxes, LayoutBox(g, cursor, y0, scale))

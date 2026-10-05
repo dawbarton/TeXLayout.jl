@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `\large`.
 - A `makie_cairo` stress case for a non-ASCII character before the closing `$`
   (`L"$2π$"`).
+- `\injlim` and `\projlim` (amsmath), which take limits in Display style.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
@@ -39,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Makie extension no longer throws a `StringIndexError` for a
   `LaTeXString` whose last character before the closing `$` is non-ASCII
   (for example `L"$2π$"`).
+- `\liminf` and `\limsup` are set as "lim inf" and "lim sup" with amsmath's
+  3 mu thin space between the words, instead of as one word.
 - A `%` comment followed by a blank line keeps the paragraph break with Windows
   (CRLF) line endings, and when the blank line contains a form feed or vertical
   tab, matching the document parser's own blank-line rule.

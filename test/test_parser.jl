@@ -874,6 +874,19 @@
         end
     end
 
+    @testset "Two-word operator names carry a thin space: \\liminf, \\injlim" begin
+        for (name, spelling) in (
+                ("liminf", "lim inf"), ("limsup", "lim sup"),
+                ("injlim", "inj lim"), ("projlim", "proj lim"),
+            )
+            op = only(parse_latex("\\" * name).children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == name
+            @test join(c.kind === NodeKind.Space ? " " : c.value for c in op.children) == spelling
+            @test only(filter(c -> c.kind === NodeKind.Space, op.children)).width ≈ 3 / 18
+        end
+    end
+
     @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
         for (left, right, glyph) in (
                 (raw"\vert", raw"\vert", "bar"),

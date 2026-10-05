@@ -73,12 +73,15 @@ in Display style; inline (beside-base) placement is used in Text style.  Use
 
 Rendered upright using the companion regular font (or the math font's own codepoint
 mapping where no regular font is configured).  In Display style, the operators
-`\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`, `\min`, `\det`, `\gcd`, and
-`\Pr` automatically use limits placement.
+`\lim`, `\limsup`, `\liminf`, `\injlim`, `\projlim`, `\sup`, `\inf`, `\max`,
+`\min`, `\det`, `\gcd`, and `\Pr` automatically use limits placement.
+`\limsup`, `\liminf`, `\injlim`, and `\projlim` set their two words with a thin
+space, as amsmath does ("lim sup").
 
 `\sin`, `\cos`, `\tan`, `\cot`, `\sec`, `\csc`, `\arcsin`, `\arccos`, `\arctan`,
-`\sinh`, `\cosh`, `\tanh`, `\coth`, `\ln`, `\lg`, `\log`, `\exp`, `\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`,
-`\min`, `\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
+`\sinh`, `\cosh`, `\tanh`, `\coth`, `\ln`, `\lg`, `\log`, `\exp`, `\lim`,
+`\limsup`, `\liminf`, `\injlim`, `\projlim`, `\sup`, `\inf`, `\max`, `\min`,
+`\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
 
 For an operator name that is not in the list above, use `\operatorname{name}`.
 

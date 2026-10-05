@@ -662,6 +662,29 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Limits: two-word operator names have a thin space" begin
+        # amsopn defines \liminf as \qopname\relax m{lim\,inf} (likewise \limsup,
+        # \injlim, \projlim): a 3 mu thin space separates the words, and the
+        # operator takes limits in Display style.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        for (cmd, word1, word2) in (
+                ("\\liminf", "lim", "inf"), ("\\limsup", "lim", "sup"),
+                ("\\injlim", "inj", "lim"), ("\\projlim", "proj", "lim"),
+            )
+            for (source, scale) in ((cmd, 1.0), ("x_{" * cmd * "}", mt.constants.script_percent_scale_down / 100))
+                glyphs = sort(filter(g -> g.scale ≈ scale, find_glyphs(layout(parse_latex(source), family, Text))); by = g -> g.x)
+                @test length(glyphs) == length(word1) + length(word2)
+                last1, first2 = glyphs[length(word1)], glyphs[length(word1) + 1]
+                @test first2.x - (last1.x + advance(last1)) ≈ 3 / 18 * scale
+            end
+            # Limits placement in Display style is unchanged.
+            glyphs = find_glyphs(layout(parse_latex(cmd * "_{n}"), family, Display))
+            sub = only(filter(b -> b.scale < 0.9, glyphs))
+            @test sub.y < 0.0
+            @test sub.x > 0.0
+        end
+    end
+
     # ── Font switching ──────────────────────────────────────────────────────────
 
     @testset "FontSwitch: \\mathbf{x} renders one glyph" begin

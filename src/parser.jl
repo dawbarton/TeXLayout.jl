@@ -302,6 +302,18 @@ function _parse_optional_bracket!(p::_Parser, isstop)::Union{Node, Nothing}
     return Node(NodeKind.Group, children)
 end
 
+# A named operator such as \sin.  `value` is the name used for lookups (limits,
+# tests); children spell the rendered body when it is more than the name's
+# letters, e.g. `lim`, thin space, `inf` for \liminf.
+function _operator_node(name::String)::Node
+    words = get(_SPACED_OPERATOR_NAMES, name, nothing)
+    words === nothing && return Node(NodeKind.Operator, name)
+    children = Node[Node(NodeKind.Char, string(c)) for c in words[1]]
+    push!(children, space_node(_SPACE_WIDTHS["\\,"]))
+    append!(children, Node(NodeKind.Char, string(c)) for c in words[2])
+    return Node(NodeKind.Operator, name, children)
+end
+
 # Parse a single primary (no script decoration).
 function _parse_primary!(p::_Parser, isstop = _is_group_end)::Node
     tok = _current(p)
@@ -609,7 +621,7 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
 
     else
         bare = cmd[2:end]   # strip leading '\'
-        return bare ∈ _OPERATOR_NAMES ? Node(NodeKind.Operator, bare) : Node(NodeKind.Command, cmd)
+        return bare ∈ _OPERATOR_NAMES ? _operator_node(bare) : Node(NodeKind.Command, cmd)
     end
 end
 
