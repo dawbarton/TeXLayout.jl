@@ -1515,6 +1515,8 @@
   and XeTeX for display-style fractions on New CM, Pagella, Schola, Termes,
   Bonum, and Luciole (Fira Math and STIX Two match); LuaTeX clamps
   `RadicalKernAfterDegree` so the sign never starts left of the degree origin.
-- Correction to the Part 1 italic-correction note: with LuaLaTeX, STIX Two's
-  `x+y=z` matches TeXLayout exactly, so LuaTeX and XeTeX differ on italic
-  corrections after math characters; the drift is XeTeX-specific for some fonts.
+- Italic correction after math characters (Part 1 note), rechecked on the same
+  fonts under both engines: XeLaTeX and LuaLaTeX agree. `x+y=z` and `f(x) + d`
+  match TeXLayout exactly in STIX Two, and drift after `y`, `f`, and `d` in New CM
+  and Termes under both, so the difference depends on the font's italic
+  corrections, not on the engine.
