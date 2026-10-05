@@ -180,7 +180,7 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
         # Psi redistribution: if the superscript bottom falls below
         # SuperscriptBottomMaxWithSubscript, shift both scripts upward together
         # so that it reaches exactly that threshold (gap remains min_gap).
-        psi = mc.superscript_bottom_max_with_subscript * s - sup_bot
+        psi = y0 + mc.superscript_bottom_max_with_subscript * s - sup_bot
         if psi > 0.0
             y_sup += psi
             y_sub += psi

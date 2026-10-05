@@ -456,7 +456,7 @@ function _layout_horiz_brace!(
 
     # Primary note at the script style of the brace side.
     pri_s = is_over ? sup_style(style) : sub_style(style)
-    pri_scale = size_scale(pri_s, mc)
+    pri_scale = _scale_for_child(scale, style, pri_s, mc)
     pri_start = lastindex(boxes) + 1
     pri_w = 0.0
     if primary_node !== nothing
@@ -523,7 +523,7 @@ function _layout_horiz_brace!(
     # Secondary note: placed as a normal side script to the right of the stack.
     if secondary_node !== nothing
         sec_s = is_over ? sub_style(style) : sup_style(style)
-        sec_scale = size_scale(sec_s, mc)
+        sec_scale = _scale_for_child(scale, style, sec_s, mc)
         sec_start = lastindex(boxes) + 1
         sec_w = _layout_node!(secondary_node, ctx, sec_s, 0.0, 0.0, sec_scale, boxes)
         sec_stop = lastindex(boxes)

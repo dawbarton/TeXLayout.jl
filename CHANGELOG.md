@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
+  or `\limits` (`x ^2`, `\left(x\right) ^2`), after a control word that takes a
+  delimiter or dimension (`\left (`, `\bigl (`, `\kern 1em`), before the
+  argument of `\text`-style commands (`\text {a}`), and around the optional
+  argument of `\sqrt` and the extensible arrows (`\sqrt [3]{x}`,
+  `\sqrt[3 ]{x}`) no longer change how the expression is parsed.
+- `~` inside matrix and array cells is no longer silently dropped.
+- `\textbf {x}` and `\text {x}` in document text take the braced group as
+  their argument instead of applying the style to the rest of the input.
+- `\sinh`, `\cosh`, `\tanh`, `\coth`, and `\lg` render as upright operator
+  names instead of producing nothing.
+- `\vert`, `\Vert`, `\lvert`, `\rvert`, `\lVert`, and `\rVert` are accepted as
+  delimiters after `\left`, `\middle`, `\right`, and the `\big` family instead
+  of producing null delimiters.
+- `\begin{array}` cells stay in their source rows when the column spec
+  declares more columns than a row uses, and cells beyond the declared columns
+  are laid out instead of being dropped.
+- Notes on `\overbrace`/`\underbrace` now inherit sizing commands such as
+  `\large` and the `smallmatrix` scale.
+- The Makie extension no longer throws a `StringIndexError` for a
+  `LaTeXString` whose last character before the closing `$` is non-ASCII
+  (for example `L"$2π$"`).
+
 ## [v0.3.2] - 2026-07-26
 
 ### Fixed

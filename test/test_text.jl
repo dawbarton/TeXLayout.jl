@@ -494,6 +494,21 @@
             @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
         end
 
+        @testset "Space between a text command and its group is skipped" begin
+            # TeX drops the space after a control word: `\textbf {bold}` takes
+            # `{bold}` as its argument instead of emboldening the rest of the input.
+            for command in ("\\textbf", "\\text")
+                doc = TeXLayout.parse_document(command * " {bold} rest")
+                spans = doc[1].lines[1].runs[1].spans
+                @test join(getfield.(spans, :text)) == "bold rest"
+                @test spans[end].text == " rest"
+                @test spans[end].attrs.slot === TeXLayout.FontSlot.Regular
+            end
+            spans = TeXLayout.parse_document("\\textbf {bold} rest")[1].lines[1].runs[1].spans
+            @test spans[1].text == "bold"
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
+        end
+
         @testset "\\textit produces Italic span" begin
             doc = TeXLayout.parse_document("\\textit{hello}")
             spans = doc[1].lines[1].runs[1].spans

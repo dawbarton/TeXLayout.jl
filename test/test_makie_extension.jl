@@ -22,6 +22,10 @@ if all(package -> Base.find_package(package) !== nothing, _MAKIE_EXTENSION_PACKA
         @test !ext._is_inline_math(LaTeXString(raw"$x\\$$"))
         @test !ext._is_inline_math(LaTeXString(raw"$x$ and $y$"))
         @test !ext._is_inline_math(LaTeXString(raw"$$x$$"))
+        # A multi-byte character before the closing `$` must not produce an
+        # invalid string index when the delimiters are stripped.
+        @test ext._strip_math_delimiters("\$2π\$") == "2π"
+        @test ext._is_inline_math(LaTeXString("\$2π\$"))
 
         texchars(elements) = [
             first(item) for item in elements
@@ -57,6 +61,10 @@ if all(package -> Base.find_package(package) !== nothing, _MAKIE_EXTENSION_PACKA
                 @test length(chars) == 1
                 @test only(chars).glyph_id > 0
             end
+
+            chars = texchars(MathTeXEngine.generate_tex_elements(LaTeXString("\$2π\$")))
+            @test length(chars) == 2
+            @test all(char -> char.glyph_id > 0, chars)
         finally
             TeXLayout.set_default_font_family!(previous_family)
         end

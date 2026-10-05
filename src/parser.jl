@@ -12,11 +12,22 @@ mutable struct _Parser
     pos::Int
 end
 
+# Characters that may start or continue the number of a TeX dimension.
+const _DIMEN_NUMBER_CHARS = "0123456789.+-"
+
 # Parse a TeX dimension after \kern / \mkern / \hskip / \mskip and return its
 # value in em units.  Supports a braced form (\kern{1em}) and an unbraced form
 # (\kern1em).  Only "em" and "mu" units are recognised; anything else yields 0.
 # One math unit (mu) = 1/18 em by the standard TeX convention.
 function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
+    # `\kern 1em`: TeX drops the space after a control word.  Look past it only
+    # when a dimension follows, so letters in malformed `\kern x` stay content.
+    n = _ignorable_space_run(p)
+    next_tok = _peek(p, n)
+    if next_tok.kind === TokenKind.LBrace ||
+            (next_tok.kind === TokenKind.Char && only(next_tok.value) ∈ _DIMEN_NUMBER_CHARS)
+        p.pos += n
+    end
     braced = _current(p).kind === TokenKind.LBrace
     braced && _advance!(p)   # consume '{'
 
@@ -24,7 +35,7 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
     num = Char[]
     while _current(p).kind === TokenKind.Char
         c = only(_current(p).value)
-        c ∈ "0123456789.+-" || break
+        c ∈ _DIMEN_NUMBER_CHARS || break
         push!(num, c); _advance!(p)
     end
 
@@ -62,6 +73,24 @@ end
 # and instead emitted as a normal interword space by `_parse_primary!`.
 @inline _is_ignorable_space(tok::Token) = tok.kind === TokenKind.Space && tok.value != "~"
 
+function _skip_ignorable_spaces!(p::_Parser)
+    while _is_ignorable_space(_current(p))
+        _advance!(p)
+    end
+    return nothing
+end
+
+# Number of ignorable Space tokens starting at the current position.  Used to
+# look past whitespace without consuming it when the following token decides
+# whether the whitespace is significant.
+function _ignorable_space_run(p::_Parser)::Int
+    n = 0
+    while _is_ignorable_space(_peek(p, n))
+        n += 1
+    end
+    return n
+end
+
 # Expression parsers leave their boundary token unconsumed for the caller that
 # owns it. Explicit braced groups always establish a fresh `}` boundary, while
 # implicit declaration bodies inherit the surrounding expression boundary.
@@ -69,7 +98,9 @@ end
 
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
+# Whitespace before the delimiter is skipped, so `\left (` matches `\left(`.
 function _parse_delim_name!(p::_Parser)::String
+    _skip_ignorable_spaces!(p)
     _current(p).kind === TokenKind.EOF && return ""
     tok = _advance!(p)
     return get(_DELIM_GLYPH_NAMES, tok.value, "")
@@ -105,9 +136,7 @@ end
 function _parse_argument!(p::_Parser, isstop = _is_group_end)::Node
     # Ignorable whitespace before an argument is skipped, so `x^ 2` and `\frac 1 2`
     # bind to the following token rather than capturing the space.
-    while _is_ignorable_space(_current(p))
-        _advance!(p)
-    end
+    _skip_ignorable_spaces!(p)
     if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_sequence_children!(p)
@@ -172,8 +201,10 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     return children
 end
 
-# Parse the braced argument of \text{} or \mbox{}, preserving spaces.
+# Parse the braced argument of \text{} or \mbox{}, preserving spaces.  Spaces
+# before the argument are math-mode whitespace, so `\text {a}` matches `\text{a}`.
 function _parse_text_argument!(p::_Parser)::Node
+    _skip_ignorable_spaces!(p)
     if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_text_sequence_children!(p)
@@ -186,20 +217,34 @@ function _parse_text_argument!(p::_Parser)::Node
     end
 end
 
+@inline _is_limits_modifier(tok::Token) =
+    tok.kind === TokenKind.Command && (tok.value == "\\limits" || tok.value == "\\nolimits")
+
+# Skip whitespace between a base and its scripts (`x ^2`, `\sum \limits_{i}`),
+# which TeX ignores in math mode.  The whitespace is consumed only when a script
+# or limits modifier follows, so significant spaces in \text{…} bodies survive.
+function _skip_spaces_before_script!(p::_Parser)
+    n = _ignorable_space_run(p)
+    n == 0 && return nothing
+    tok = _peek(p, n)
+    if tok.kind === TokenKind.Sup || tok.kind === TokenKind.Sub || _is_limits_modifier(tok)
+        p.pos += n
+    end
+    return nothing
+end
+
 # Parse a single "atom": a primary optionally decorated with ^ and/or _.
 function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
     # Ordinary whitespace is ignored at the atom level; `~` falls through to
     # _parse_primary! and becomes a normal interword space.
-    while _is_ignorable_space(_current(p))
-        _advance!(p)
-    end
+    _skip_ignorable_spaces!(p)
 
     base = _parse_primary!(p, isstop)
 
     # Consume an explicit \limits or \nolimits modifier immediately after the primary,
     # wrapping the base so the script branches can dispatch on it.
-    if _current(p).kind === TokenKind.Command &&
-            (_current(p).value == "\\limits" || _current(p).value == "\\nolimits")
+    _skip_spaces_before_script!(p)
+    if _is_limits_modifier(_current(p))
         flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
         base = Node(NodeKind.LimitsOverride, flag, [base])
     end
@@ -209,6 +254,7 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
 
     # Collect at most one ^ and one _, in either order.
     for _ in 1:2
+        _skip_spaces_before_script!(p)
         k = _current(p).kind
         if k === TokenKind.Sup && !has_sup
             _advance!(p)
@@ -232,6 +278,28 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
     else
         return base
     end
+end
+
+@inline _is_close_bracket(tok::Token) = tok.kind === TokenKind.Char && tok.value == "]"
+
+# Parse an optional `[…]` argument (\sqrt[n]{…}, \xrightarrow[below]{…}) and
+# return it as a NodeKind.Group, or `nothing` when no `[` follows.  Like LaTeX's
+# \@ifnextchar, whitespace before the `[` is skipped; whitespace inside it is
+# ordinary math whitespace and must not hide the closing `]`.
+function _parse_optional_bracket!(p::_Parser, isstop)::Union{Node, Nothing}
+    n = _ignorable_space_run(p)
+    tok = _peek(p, n)
+    (tok.kind === TokenKind.Char && tok.value == "[") || return nothing
+    p.pos += n + 1   # skip the whitespace and consume '['
+    children = Node[]
+    while true
+        _skip_ignorable_spaces!(p)
+        tok = _current(p)
+        (tok.kind === TokenKind.EOF || isstop(tok) || _is_close_bracket(tok)) && break
+        push!(children, _parse_atom!(p, isstop))
+    end
+    _is_close_bracket(_current(p)) && _advance!(p)   # consume ']'
+    return Node(NodeKind.Group, children)
 end
 
 # Parse a single primary (no script decoration).
@@ -347,8 +415,8 @@ function _parse_matrix_body!(
             end
             finish_row!()
 
-        elseif tok.kind === TokenKind.Space
-            _advance!(p)   # skip whitespace in matrix bodies (math mode)
+        elseif _is_ignorable_space(tok)
+            _advance!(p)   # skip whitespace in matrix bodies (math mode); `~` is kept
 
         else
             push!(current_cell, _parse_atom!(p, is_cell_end))
@@ -470,39 +538,16 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
 
     elseif cmd ∈ _XARROW_COMMANDS
         # \xrightarrow[below]{above}: optional below label, mandatory above label.
-        below_node = nothing
-        if _current(p).kind === TokenKind.Char && _current(p).value == "["
-            _advance!(p)   # consume '['
-            below_children = Node[]
-            while _current(p).kind !== TokenKind.EOF &&
-                    _current(p).value != "]" && !isstop(_current(p))
-                push!(below_children, _parse_atom!(p, isstop))
-            end
-            _current(p).value == "]" && _advance!(p)   # consume ']'
-            below_node = Node(NodeKind.Group, below_children)
-        end
+        below_node = _parse_optional_bracket!(p, isstop)
         above_node = _parse_argument!(p, isstop)
         children = below_node === nothing ? [above_node] : [above_node, below_node]
         return Node(NodeKind.XArrow, cmd, children)
 
     elseif cmd == "\\sqrt"
         # Optional degree: \sqrt[3]{x}
-        if _current(p).kind === TokenKind.Char && _current(p).value == "["
-            # Consume the degree argument up to the matching ']'.
-            _advance!(p)   # consume '['
-            deg_children = Node[]
-            while _current(p).kind !== TokenKind.EOF &&
-                    _current(p).value != "]" && !isstop(_current(p))
-                push!(deg_children, _parse_atom!(p, isstop))
-            end
-            _current(p).value == "]" && _advance!(p)  # consume ']'
-            degree = Node(NodeKind.Group, deg_children)
-            body = _parse_argument!(p, isstop)
-            return Node(NodeKind.Sqrt, [degree, body])
-        else
-            body = _parse_argument!(p, isstop)
-            return Node(NodeKind.Sqrt, [body])
-        end
+        degree = _parse_optional_bracket!(p, isstop)
+        body = _parse_argument!(p, isstop)
+        return degree === nothing ? Node(NodeKind.Sqrt, [body]) : Node(NodeKind.Sqrt, [degree, body])
 
     elseif cmd == "\\left"
         # \left<delim> … \right<delim>
