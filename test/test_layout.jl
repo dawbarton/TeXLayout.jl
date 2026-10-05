@@ -1507,15 +1507,15 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes_long = layout(parse_latex(raw"\xrightarrow{\text{long label}}"), family, Text)
         w_short = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_short
+            ) for b in boxes_short
         )
         w_long = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_long
+            ) for b in boxes_long
         )
         @test w_long > w_short
     end
