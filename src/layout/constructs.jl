@@ -537,7 +537,8 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     # glyph with a known attachment point, align the attachment x of the accent
     # to the attachment x of the base.  Fall back to centering when attachment
     # data is unavailable.
-    base_attach_du = if base_start == base_stop && boxes[base_start].element isa Glyph
+    single_glyph = base_start == base_stop && boxes[base_start].element isa Glyph
+    base_attach_du = if single_glyph
         get(ctx.top_accent_attachments, (boxes[base_start].element::Glyph).glyph_name, nothing)
     else
         nothing
@@ -547,9 +548,13 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
         x0 + (base_attach_du - accent_attach_du) * scale / upm
     else
-        # Centre by ink midpoint rather than advance_width/2: handles zero-advance
-        # combining characters (adv_w=0, x_min/x_max negative).
-        x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
+        # A single glyph is centred on its advance, excluding the italic
+        # correction in base_w, as HarfBuzz's default attachment is (XeTeX); a
+        # longer base on its whole width.  Centre the accent by its ink midpoint
+        # rather than advance_width/2: handles zero-advance combining characters
+        # (adv_w=0, x_min/x_max negative).
+        base_mid = single_glyph ? (boxes[base_start].element::Glyph).advance_width * scale / (2.0 * upm) : base_w / 2
+        x0 + base_mid - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
     end
 
     push!(

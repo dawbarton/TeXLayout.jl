@@ -164,8 +164,9 @@ The overbar is top-anchored to the radical glyph.
 Standard TeX notation: `x^{sup}`, `x_{sub}`, `x_{sub}^{sup}`.  The source order of
 `_` and `^` does not matter.
 
-Italic correction is applied to subscripts on slanted single-glyph bases such as
-`\int`, matching KaTeX behaviour.  For large operators with automatic limits
+As in TeX, a math character is followed by its italic correction, so `f(x)` and
+`f^2` clear the overhang of the `f`.  A subscript sits at the uncorrected advance,
+tucked under the slanted stroke (`f_i`, `\int_0`).  For large operators with automatic limits
 placement, use `\limits` to force stacked placement or `\nolimits` to force
 beside-base placement regardless of the current style.
 

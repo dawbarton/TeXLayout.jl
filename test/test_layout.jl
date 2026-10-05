@@ -89,6 +89,55 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Italic correction after math characters (TeX, XeTeX, LuaTeX)" begin
+        # tex.web make_ord: a math character with no subscript is followed by a
+        # kern of its italic correction; with a subscript the kern is omitted, the
+        # subscript sits at the advance, and a superscript sits the italic
+        # correction further right.  XeTeX and LuaTeX keep this for OpenType math
+        # fonts, using the MATH table's italic corrections.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        ic(g) = get(mt.italic_corrections, g.element.glyph_name, 0) / FONT_UPM * g.scale
+        glyphs_of(source) = sort(find_glyphs(layout(parse_latex(source), family, Text)); by = g -> g.x)
+        f = first(glyphs_of("f"))
+        @test ic(f) > 0.0   # the test relies on a slanted f with an italic correction
+
+        g = glyphs_of("f(x)")   # f, (, x, )
+        @test g[2].x ≈ advance(f) + ic(f)
+        g = glyphs_of("f^2")
+        @test g[2].x ≈ advance(f) + ic(f)
+        g = glyphs_of("f_i")
+        @test g[2].x ≈ advance(f)
+        g = glyphs_of("f_i^2")
+        sub = only(filter(b -> b.y < 0.0, g)); sup = only(filter(b -> b.y > 0.0, g))
+        @test sub.x ≈ advance(f)
+        @test sup.x ≈ advance(f) + ic(f)
+        # A one-character group behaves as the character (TeX simplifies {f}).
+        @test glyphs_of("{f}_i")[2].x ≈ advance(f)
+        # A longer group ends with its last character's correction.
+        g = glyphs_of("{ff}_i")
+        @test g[3].x ≈ 2 * (advance(f) + ic(f))
+        # Upright text and operator names get no correction.
+        @test glyphs_of(raw"\text{f}(")[2].x ≈ advance(glyphs_of(raw"\text{f}")[1])
+        # Large operators keep TeX's operator rule: subscript at the advance
+        # less the correction, superscript at the advance.
+        int = first(glyphs_of(raw"\int"))
+        g = glyphs_of(raw"\int_0^1")
+        sub = only(filter(b -> b.y < int.y, g[2:end])); sup = only(filter(b -> b.y > 0.0, g[2:end]))
+        @test sub.x ≈ advance(int) - ic(int)
+        @test sup.x ≈ advance(int)
+        # Inline math in a document measures to its full advance, so a trailing
+        # correction (a kern in TeX, not a box) still separates it from text.
+        width_of(source) = layout_document("\$" * source * "\$"; family).width
+        @test width_of("f") ≈ advance(f) + ic(f)
+        # Scripts end at the further script plus SpaceAfterScript; the
+        # correction taken back for the subscript is not added again.
+        sas = mt.constants.space_after_script / FONT_UPM
+        for source in ("f_i", "f^2", "f_i^2", raw"\int_0", raw"\int^1", raw"\int_0^1")
+            g = glyphs_of(source)
+            @test width_of(source) ≈ maximum(b.x + advance(b) for b in g[2:end]) + sas
+        end
+    end
+
     @testset "Superscript is above baseline" begin
         # In x^2, the '2' must have a positive y offset.
         boxes = layout(parse_latex("x^2"), family, Text)
@@ -369,8 +418,9 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test gaps(raw"a\,+b", Text) ≈ [thin + medium, medium]
         @test gaps(raw"x \quad = y", Text) ≈ [1.0 + thick, thick]
         @test gaps(raw"a~=b", Text) ≈ [TeXLayout._NORMAL_SPACE_EM + thick, thick]
-        # Ordinary atoms: only the explicit space.
-        @test gaps(raw"f\,d", Text) ≈ [thin]
+        # Ordinary atoms: only the explicit space, after f's italic correction.
+        ic_f = mt.italic_corrections[TeXLayout.glyph_name_by_codepoint(family, UInt32(0x0001D453))] / FONT_UPM   # 𝑓
+        @test gaps(raw"f\,d", Text) ≈ [ic_f + thin]
         # op-op is a thin space, so \int\!\!\int nets one negative thin space.
         @test only(gaps(raw"\int\!\!\int", Text)) ≈ -thin
         # In script styles bin spacing is absent; only the explicit space remains.
@@ -765,16 +815,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             @test g[end] ≈ 5 / 18 * s
         end
         # b (mod n): 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n.
+        # The kern follows b's italic correction.
+        ic_b = mt.italic_corrections[TeXLayout.glyph_name_by_codepoint(family, UInt32(0x0001D44F))] / FONT_UPM   # 𝑏
         for (style, kern) in ((Display, 18), (Text, 8))
             g = gaps(raw"b \pmod{n}", style)   # b ( m o d n )
-            @test g[1] ≈ kern / 18
+            @test g[1] ≈ ic_b + kern / 18
             @test g[5] ≈ 6 / 18
-            @test gaps(raw"b \pod{n}", style)[1] ≈ kern / 18
+            @test gaps(raw"b \pod{n}", style)[1] ≈ ic_b + kern / 18
         end
         # b mod n: 18 mu (Display) or 12 mu before "mod", then two thin spaces.
         for (style, kern) in ((Display, 18), (Text, 12))
             g = gaps(raw"b \mod{n}", style)   # b m o d n
-            @test g[1] ≈ kern / 18
+            @test g[1] ≈ ic_b + kern / 18
             @test g[4] ≈ 6 / 18
         end
     end
@@ -1192,9 +1244,11 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes_over = layout(parse_latex("\\overline{xy}"), family, Text)
         boxes_plain = layout(parse_latex("xy"), family, Text)
         hrule = find_hrules(boxes_over)[1]
-        # Width of overline rule should match the body advance.
+        # Width of overline rule should match the body advance, which ends
+        # with y's italic correction.
         plain_w = maximum(
-            b.x + b.element.advance_width / Float64(mt.upm) * b.scale
+            b.x + (b.element.advance_width + get(mt.italic_corrections, b.element.glyph_name, 0)) /
+                Float64(mt.upm) * b.scale
                 for b in find_glyphs(boxes_plain)
         )
         @test (hrule.element::HRule).width ≈ plain_w atol = 0.01

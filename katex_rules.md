@@ -296,8 +296,54 @@ subShift = base.depth  + subDrop × script_size_multiplier
 **Status — matches KaTeX.**  The `_is_char_box` helper mirrors KaTeX's
 `isCharacterBox`: true for `NodeKind.Char`, for `NodeKind.Command` nodes that are not large
 operators (Greek letters, etc.), and recursively for `NodeKind.FontSwitch` wrapping a
-single character.  Large operators (`\int`, `\sum`, …), named operators (`\sin`,
-…), fractions, and groups all return false, triggering the supDrop/subDrop clamp.
+single character.  A group holding exactly one such node (`{x}`) also returns
+true, because TeX replaces a one-atom group by the atom (tex.web §1186).  Large
+operators (`\int`, `\sum`, …), named operators (`\sin`, …), fractions, and
+longer groups return false, triggering the supDrop/subDrop clamp.
+
+### Italic correction after math characters
+
+**Source:** tex.web §752–§756 (`make_ord`, `make_scripts`), §749 (`make_op`);
+xetex.web keeps both rules for OpenType math fonts.
+
+TeX appends a kern of the character's italic correction after every math
+character that has no subscript.  With a subscript, the kern is omitted and the
+correction δ is passed to `make_scripts`: the subscript sits at the uncorrected
+advance and the superscript δ to its right.  The script box's width is
+`max(sub, δ + sup)` plus the space after the script.
+
+**Status — matches LuaTeX and XeTeX.**  `_layout_char!` and the ordinary-symbol
+path of `_layout_command!` return the advance plus the MATH-table italic
+correction, for `FontSlot.Math` glyphs in math mode only; upright text,
+`\text{…}`, and operator names get none.  `_subscript_italic_correction_em`
+takes the correction back for a subscript on a character base (as decided by
+`_is_char_box`) or a large operator.  Large operators keep XeTeX's OpenType
+`make_op` rule: the operator's width excludes δ, the subscript sits at
+advance − δ, and the superscript at the advance.  Measured with LuaLaTeX and
+XeLaTeX (New CM Math, 10 pt), `$f$`, `$fg$`, `$VW$`, `$\sqrt{f}$`,
+`$\overline{fy}$`, and `$b \pmod{n}$` now have exactly TeX's widths.  Both
+engines keep the kern inside fraction parts, radicands, accents, overlines,
+and scripts: `\overline{f}` and `\overline{f\kern0pt}` measure the same, and
+likewise for the other constructs.  Classic TeX's `clean_box` drops the kern
+from a box holding one character and its kern.  XeTeX's OpenType glyphs are
+not character nodes, so that simplification never applies; LuaTeX's
+`clean_box` (mlist.c) still contains it, but LuaLaTeX measures the same as
+XeLaTeX.  Why it does not fire there was not traced.
+
+Upright, sans-serif, and monospace math-alphabet letters (`\mathrm`,
+`\mathsf`, `\mathtt`) also take the MATH table's correction where the font
+gives one (New CM Math: up to 0.079 em for upright, 0.04 em for monospace), as
+LuaTeX does for unicode-math's `\symup` and `\symtt`.  unicode-math's default
+`\mathrm` and `\mathtt` use the text fonts instead, which carry no correction.
+
+KaTeX differs: it adds the italic correction as a right margin only to the
+characters it marks as needing it and shifts subscripts left by it
+(`supsub.ts`).  TeXLayout follows TeX here.
+
+**Not implemented:** OpenType math kerning (`MathKernInfo`) between a base and
+its scripts, and the `ssty` script-size glyph variants.  TeX's script glyphs
+are wider (New CM Math `i.st` has an advance of 404 units against 345 for
+`i`), so TeXLayout's scripts are narrower than LuaTeX's.
 
 ### 18b — Subscript only
 

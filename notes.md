@@ -1694,3 +1694,46 @@
   Frac/Genfrac (thin spaces around fractions). Likewise `\underbrace` is
   `\mathop…\limits` in LaTeX, and a bare `matrix` is an ordinary atom while
   `pmatrix` and friends (`\left…\right`) are inner. Not changed.
+
+## 2026-10-05T22:36+01:00 Italic correction after math characters
+
+- TeX appends the italic correction as a kern after every math character
+  without a subscript (tex.web §755); with a subscript, δ goes to
+  `make_scripts`: subscript at the uncorrected advance, superscript δ further
+  right, width `max(sub, δ + sup)` plus script space.  LuaTeX's mlist.c keeps
+  the kern for OpenType math fonts ("assume_new_math") but adds it only when
+  there are no scripts at all; the resulting positions are the same.
+- Implemented in `_layout_char!` and the ordinary-symbol path of
+  `_layout_command!` (Math-slot glyphs in math mode only).
+  `_subscript_italic_correction_em` takes it back for a subscript on a
+  character base or a large operator (large operators keep XeTeX's OpenType
+  `make_op` rule: width excludes δ).  `_is_char_box` now treats a one-atom group
+  as its atom (TeX's §1186 simplification), so `{f}_i` behaves like `f_i`.
+- Fixed in passing: scripted atoms counted the correction taken back for the
+  subscript in their width (`\int_0`, `V_i` too wide), and `hlayout_math`
+  measured inline math by box extents, dropping a trailing kern (italic
+  correction, SpaceAfterScript after `$x_i$`).  It now takes
+  `max(advance, extent)`.  Single-glyph accent fallback centres on the glyph
+  advance, as HarfBuzz's default attachment does, not on the corrected width.
+- Measured with LuaLaTeX and XeLaTeX (New CM Math, 10 pt, `\wd` of
+  `\hbox{$…$}`): `f`, `V`, `VW`, `fg`, `\sqrt{f}`, `\overline{fy}`,
+  `b \pmod{n}`, `\beta(t)` now match exactly.  Both engines keep the kern
+  inside fractions, radicals, accents, overlines, and scripts (`\overline{f}`
+  measures the same as `\overline{f\kern0pt}`), although LuaTeX's `clean_box`
+  source contains classic TeX's "unneeded italic correction" removal; why it
+  does not fire was not traced.
+- Remaining width differences are constant per script glyph: TeX uses `ssty`
+  variants (New CM `i.st` 404 units vs `i` 345; `two.st` 569 vs 500).  Also not
+  implemented: `MathKernInfo` kerning, `\nulldelimiterspace` around `\frac`
+  (1.2 pt in LaTeX; `\frac{e}{f}` is 2.4 pt narrower), and accent boxes count
+  the accent glyph's advance (`\hat{f}` 7.14 pt vs TeX's 5.80 pt).
+- Upright/sans/mono math-alphabet letters also get the MATH table's correction
+  (New CM upright `f` 79 units, monospace up to 40), so `\mathrm`/`\mathtt`
+  letters move slightly; this matches LuaTeX's `\symup`/`\symtt`, not
+  unicode-math's default text-font `\mathrm`.  Stress suite (all fonts, with
+  Makie): 1060 changed, 356 identical, none missing; inspected samples show
+  only correction shifts and wider inline math.
+- Seven snapshot hashes re-baselined after diffing the serialised layouts:
+  every change is a trailing correction (`y`, `d`, `b`, `f`, `B`, `C`) or the
+  inline-math width (SpaceAfterScript after `x_i`; the align display recentred
+  by `f`'s correction).
