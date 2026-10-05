@@ -438,7 +438,10 @@ _base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx, scale::Flo
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).
 function _use_limits(base::Node, style::TexStyle)::Bool
-    base.kind === NodeKind.LimitsOverride && return base.value == "limits"
+    if base.kind === NodeKind.LimitsOverride
+        base.value == "displaylimits" && return is_display(style)
+        return base.value == "limits"
+    end
     if base.kind === NodeKind.Operator
         return base.value ∈ _LIMITS_OPERATORS && is_display(style)
     end

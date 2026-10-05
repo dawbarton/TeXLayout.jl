@@ -167,8 +167,8 @@ space_node(w)                     # NodeKind.Space with given width in em
 | `NodeKind.Command` | — | full token including `\` | unrecognised command or atom-producing symbol |
 | `NodeKind.Space` | — | `""` | explicit horizontal space; width carried in `.width` field (em) |
 | `NodeKind.Text` | `[body]` | empty for `\text`/`\mbox`; text-style command otherwise | text-mode fragment, including nested `\textsc`/`\textbf` styles |
-| `NodeKind.Operator` | — | bare operator name e.g. `"sin"` | `\sin`, `\operatorname{…}` |
-| `NodeKind.LimitsOverride` | `[base]` | `"limits"` or `"nolimits"` | `\limits` / `\nolimits` override |
+| `NodeKind.Operator` | spelling (`[]` unless the body has spaces) | bare operator name e.g. `"sin"`, `"liminf"` | `\sin`, `\liminf` (children `l i m`, thin space, `i n f`), `\operatorname{…}` |
+| `NodeKind.LimitsOverride` | `[base]` | `"limits"`, `"nolimits"`, or `"displaylimits"` | `\limits` / `\nolimits` / `\displaylimits` override; `\operatorname*` |
 | `NodeKind.FontSwitch` | `[body]` | variant name e.g. `"mathbf"` | `\mathbf{…}`, `\mathbb{…}`, … |
 | `NodeKind.HorizBrace` | `[body]` | bare command name e.g. `"overbrace"` | `\overbrace`, `\underbrace`, … |
 | `NodeKind.Matrix` | flat row-major list of `NodeKind.Group` cells | `"env\x00nrow\x00colspec"` | `\begin{env}…\end{env}` |
@@ -228,7 +228,8 @@ The key internal functions and their roles are:
   atoms until it sees `}` or `TokenKind.EOF`, returning a `Vector{Node}`.
 - **`_parse_atom!`** — parses one primary expression, then optionally attaches `_` and
   `^` tokens to produce `NodeKind.Subscript`, `NodeKind.Superscript`, or `NodeKind.Decorated`.  Also handles
-  `\limits`/`\nolimits` by wrapping the preceding base in a `NodeKind.LimitsOverride` node.
+  `\limits`/`\nolimits`/`\displaylimits` by wrapping the preceding base in a
+  `NodeKind.LimitsOverride` node; a later modifier replaces the flag rather than nesting.
 - **`_parse_primary!`** — dispatches on the current token kind:
   - `TokenKind.Char` → `NodeKind.Char`
   - `TokenKind.Command` → `_parse_command!`
@@ -598,10 +599,11 @@ The three cases are:
 1. The base is a large operator (`NodeKind.Command` with a key in `_DISPLAY_OP_CODEPOINTS`
    from `src/tables/layout_symbols.jl` or in `_LIMITS_OP_COMMANDS`) and the current style is Display.
 2. The base is a named operator (`NodeKind.Operator`) whose name is in `_LIMITS_OPERATORS`
-   (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
+   (`lim`, `limsup`, `liminf`, `injlim`, `projlim`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
    current style is Display.
 3. A `NodeKind.LimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
-   of style.
+   of style, or a `NodeKind.LimitsOverride("displaylimits")` node wraps it (explicit
+   `\displaylimits`, or `\operatorname*`) and the current style is Display.
 
 A `NodeKind.LimitsOverride("nolimits")` node forces beside-base placement regardless of style
 and operator type.

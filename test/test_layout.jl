@@ -685,6 +685,30 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Limits: \\operatorname* and \\displaylimits take limits in Display only" begin
+        # \displaylimits (TeX's default for \mathop, and amsopn's flag for
+        # \operatorname*) behaves as \limits in Display style and as \nolimits
+        # otherwise.
+        positions(source, style) = [(b.x, b.y, b.scale) for b in layout(parse_latex(source), family, style)]
+        for (base, starred) in (
+                (raw"\operatorname{arg\,max}", raw"\operatorname*{arg\,max}"),
+                (raw"\int", raw"\int\displaylimits"),
+            )
+            limits, nolimits = base * raw"\limits_{x}", base * raw"\nolimits_{x}"
+            @test positions(limits, Display) != positions(nolimits, Display)   # not vacuous
+            @test positions(starred * "_{x}", Display) == positions(limits, Display)
+            @test positions(starred * "_{x}", Text) == positions(nolimits, Text)
+        end
+        # The unstarred form never takes limits.
+        @test positions(raw"\operatorname{arg\,max}_{x}", Display) ==
+            positions(raw"\operatorname{arg\,max}\nolimits_{x}", Display)
+        # The thin space in arg\,max is kept.
+        glyphs = sort(find_glyphs(layout(parse_latex(raw"\operatorname{arg\,max}"), family, Text)); by = g -> g.x)
+        @test length(glyphs) == 6
+        g, m = glyphs[3], glyphs[4]
+        @test m.x - (g.x + g.element.advance_width / FONT_UPM * g.scale) ≈ 3 / 18
+    end
+
     # ── Font switching ──────────────────────────────────────────────────────────
 
     @testset "FontSwitch: \\mathbf{x} renders one glyph" begin

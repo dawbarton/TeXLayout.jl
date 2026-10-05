@@ -323,7 +323,7 @@ constants are noted for quick lookup.
 | Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
 | Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
 | Limits placement | `NodeKind.Decorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
-| `\limits`/`\nolimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch |
+| `\limits`/`\nolimits`/`\displaylimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch.  `"displaylimits"` (also produced by `\operatorname*`) means limits in Display style only; the last modifier wins |
 | Horizontal extensibles (`\widehat`, `\widetilde`) | `NodeKind.Accent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | `NodeKind.HorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
 | Extensible arrows (`\xrightarrow`, …) | `NodeKind.XArrow` | 18 commands; arrow stretched to cover labels; labels at `_XARROW_KERN` (0.111 em) clearance |

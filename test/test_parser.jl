@@ -887,6 +887,46 @@
         end
     end
 
+    @testset "\\operatorname* takes \\displaylimits; spaces in the name are kept" begin
+        for source in (raw"\operatorname*{arg\,max}", raw"\operatorname *{arg\,max}")
+            node = only(parse_latex(source).children)
+            @test node.kind === NodeKind.LimitsOverride
+            @test node.value == "displaylimits"
+            op = only(node.children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == "argmax"
+            @test [c.kind for c in op.children] == [
+                NodeKind.Char, NodeKind.Char, NodeKind.Char, NodeKind.Space,
+                NodeKind.Char, NodeKind.Char, NodeKind.Char,
+            ]
+            @test op.children[4].width ≈ 3 / 18
+        end
+        # Unstarred: a plain operator, and no stray `*`.
+        op = only(parse_latex(raw"\operatorname{arg\,max}").children)
+        @test op.kind === NodeKind.Operator
+        @test op.value == "argmax"
+        @test length(op.children) == 7
+        @test isempty(only(parse_latex(raw"\operatorname{ker}").children).children)
+    end
+
+    @testset "\\limits, \\nolimits, \\displaylimits: the last modifier wins" begin
+        node = only(parse_latex(raw"\operatorname*{f}\nolimits_x").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Operator
+
+        node = only(parse_latex(raw"\sum\limits \nolimits_i").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Command
+
+        node = only(parse_latex(raw"\int\displaylimits_0^1").children)
+        @test node.kind === NodeKind.Decorated
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "displaylimits"
+    end
+
     @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
         for (left, right, glyph) in (
                 (raw"\vert", raw"\vert", "bar"),

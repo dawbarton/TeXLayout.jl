@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `makie_cairo` stress case for a non-ASCII character before the closing `$`
   (`L"$2π$"`).
 - `\injlim` and `\projlim` (amsmath), which take limits in Display style.
+- `\operatorname*{…}` (amsmath), which takes limits in Display style only, and
+  the TeX primitive `\displaylimits`.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
@@ -42,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (for example `L"$2π$"`).
 - `\liminf` and `\limsup` are set as "lim inf" and "lim sup" with amsmath's
   3 mu thin space between the words, instead of as one word.
+- `\operatorname*{…}` no longer renders a literal `*` followed by the name in
+  math italic, and explicit spaces in an operator name (`\operatorname{arg\,max}`)
+  are kept instead of dropped.
+- When several of `\limits`, `\nolimits`, and `\displaylimits` follow one base,
+  the last one wins, as in TeX; previously the second was parsed as an empty atom
+  that captured the scripts.
 - A `%` comment followed by a blank line keeps the paragraph break with Windows
   (CRLF) line endings, and when the blank line contains a form feed or vertical
   tab, matching the document parser's own blank-line rule.

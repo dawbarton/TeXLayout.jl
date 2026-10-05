@@ -63,7 +63,9 @@ In Display style, large operators are automatically enlarged using the font's
 `\prod`, `\coprod`, `\bigcap`, `\bigcup`, and all `\bigXxx` variants, limits
 placement (sub/superscript stacked above/below the operator) is used automatically
 in Display style; inline (beside-base) placement is used in Text style.  Use
-`\limits` or `\nolimits` to override this decision.
+`\limits` or `\nolimits` to override this decision, or `\displaylimits` to
+restore the automatic rule (limits in Display style only).  When several of
+these follow one base, the last one wins, as in TeX.
 
 `\sum`, `\prod`, `\coprod`, `\int`, `\iint`, `\iiint`, `\iiiint`, `\oint`,
 `\oiint`, `\oiiint`, `\bigcap`, `\bigcup`, `\bigsqcup`, `\bigsqcap`, `\bigwedge`,
@@ -84,6 +86,9 @@ space, as amsmath does ("lim sup").
 `\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
 
 For an operator name that is not in the list above, use `\operatorname{name}`.
+The starred form `\operatorname*{name}` takes limits in Display style, like
+`\lim`.  Explicit spaces in the name are kept, so `\operatorname*{arg\,max}`
+renders "arg max".
 
 ## Delimiters
 

@@ -44,7 +44,7 @@ EnumX.@enumx NodeKind begin
     Space         # explicit space token (\, \; \quad etc.)
     Text          # \text{…} / \mbox{…}: text-mode fragment; children[1] = body
     Operator      # named math operator rendered upright: \sin, \cos, \operatorname{…}
-    LimitsOverride # \limits / \nolimits: wraps a base; value is "limits" or "nolimits"
+    LimitsOverride # \limits / \nolimits / \displaylimits: wraps a base; value is "limits", "nolimits", or "displaylimits"
     FontSwitch    # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     HorizBrace    # \overbrace / \underbrace / …; value = command name; children[1] = body
     Matrix        # \begin{env}…\end{env}: value encoded by _MatrixPayload; children = flat row-major cells

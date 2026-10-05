@@ -217,8 +217,15 @@ function _parse_text_argument!(p::_Parser)::Node
     end
 end
 
-@inline _is_limits_modifier(tok::Token) =
-    tok.kind === TokenKind.Command && (tok.value == "\\limits" || tok.value == "\\nolimits")
+# \limits, \nolimits, and \displaylimits (limits in Display style only, TeX's
+# default for \mathop) map to the NodeKind.LimitsOverride flag.
+const _LIMITS_MODIFIERS = Dict{String, String}(
+    "\\limits" => "limits",
+    "\\nolimits" => "nolimits",
+    "\\displaylimits" => "displaylimits",
+)
+
+@inline _is_limits_modifier(tok::Token) = tok.kind === TokenKind.Command && haskey(_LIMITS_MODIFIERS, tok.value)
 
 # Skip whitespace between a base and its scripts (`x ^2`, `\sum \limits_{i}`),
 # which TeX ignores in math mode.  The whitespace is consumed only when a script
@@ -241,12 +248,16 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
 
     base = _parse_primary!(p, isstop)
 
-    # Consume an explicit \limits or \nolimits modifier immediately after the primary,
-    # wrapping the base so the script branches can dispatch on it.
+    # Consume explicit \limits / \nolimits / \displaylimits modifiers after the
+    # primary, wrapping the base so the script branches can dispatch on it.  As
+    # in TeX the last modifier wins; it replaces an existing override (including
+    # the \displaylimits of \operatorname*) instead of nesting another wrapper.
     _skip_spaces_before_script!(p)
-    if _is_limits_modifier(_current(p))
-        flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
-        base = Node(NodeKind.LimitsOverride, flag, [base])
+    while _is_limits_modifier(_current(p))
+        flag = _LIMITS_MODIFIERS[_advance!(p).value]
+        inner = base.kind === NodeKind.LimitsOverride ? base.children[1] : base
+        base = Node(NodeKind.LimitsOverride, flag, [inner])
+        _skip_spaces_before_script!(p)
     end
 
     has_sup = false; has_sub = false
@@ -312,6 +323,21 @@ function _operator_node(name::String)::Node
     push!(children, space_node(_SPACE_WIDTHS["\\,"]))
     append!(children, Node(NodeKind.Char, string(c)) for c in words[2])
     return Node(NodeKind.Operator, name, children)
+end
+
+# Flatten the argument of \operatorname into its rendered spelling: upright
+# characters and explicit spaces (`arg\,max`).  Commands contribute their bare
+# names, as in `_node_text`.
+function _operator_body!(out::Vector{Node}, node::Node)::Vector{Node}
+    k = node.kind
+    if k === NodeKind.Char || k === NodeKind.Space
+        push!(out, node)
+    elseif k === NodeKind.Command
+        append!(out, Node(NodeKind.Char, string(c)) for c in _node_text(node))
+    elseif k === NodeKind.Sequence || k === NodeKind.Group
+        foreach(c -> _operator_body!(out, c), node.children)
+    end
+    return out
 end
 
 # Parse a single primary (no script decoration).
@@ -575,8 +601,16 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
         return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
     elseif cmd == "\\operatorname"
+        # amsopn: \operatorname* is \qopname\newmcodes@ m, i.e. limits in
+        # Display style only (\displaylimits); \@ifstar skips spaces before `*`.
+        n = _ignorable_space_run(p)
+        starred = _peek(p, n).kind === TokenKind.Char && _peek(p, n).value == "*"
+        starred && (p.pos += n + 1)
         arg = _parse_argument!(p, isstop)
-        return Node(NodeKind.Operator, _node_text(arg))
+        body = _operator_body!(Node[], arg)
+        children = any(c -> c.kind === NodeKind.Space, body) ? body : Node[]
+        op = Node(NodeKind.Operator, _node_text(arg), children)
+        return starred ? Node(NodeKind.LimitsOverride, "displaylimits", [op]) : op
 
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
         body = _parse_argument!(p, isstop)
