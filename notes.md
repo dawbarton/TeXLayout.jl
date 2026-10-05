@@ -1417,3 +1417,37 @@
     are unsupported or approximated.
   - Global caches (`_FONT_CACHE`, `_MATH_TABLE_CACHE`, HarfBuzz caches) and the
     shared FreeType face `glyph` slot are not thread-safe.
+
+## 2026-10-05T15:21+01:00 PR #42 validation (Part 0 of the follow-up)
+
+- Stress comparison of `39867cf` (base) against PR #42 head `f59d869`, with
+  `--include-makie`: 1,344/1,344 images identical (1,024 `math_freetype`, 256
+  `text_freetype`, 64 `makie_cairo`). No regressions; snapshot hashes unchanged.
+- Tests on the PR branch: full suite 1,663/1,663 (HarfBuzz and Makie
+  extensions loaded), core `test/runtests.jl` 1,576/1,576. Every new PR testset
+  fails on the base source except the `\text{a b}` guard, which is meant to pass
+  on both.
+- Local `Pkg.test()` on Julia 1.13.0 fails before running any test with
+  "`MathTeXEngine` is a direct dependency, but does not appear in the manifest"
+  once a root `Manifest.toml` exists (sandbox issue, not a test failure). A
+  separate environment with TeXLayout developed plus the `[extras]` runs the
+  same suite.
+- Parse benchmark (BenchmarkTools, 3 s per case, minimum times): allocations
+  unchanged everywhere; time +0–8% on typical cases, +12% on the `cases`
+  matrix, +29% on a 26-letter space-separated string (about 12 ns per atom,
+  from the extra space lookahead in `_parse_atom!`). Layout dominates
+  `generate_tex_elements` by one to two orders of magnitude, so the end-to-end
+  effect is below noise.
+- `makie_cairo` stress images were unreadable before this session: the RGBA
+  PNG was reinterpreted as rows, and Makie aligns a `LaTeXString` by the bottom
+  of its glyph bounding box (`:baseline` falls back to `:bottom` in Makie's
+  `get_yshift`), so tall formulae lost their tops. Fixed in the stress tool;
+  every `makie_cairo` image changes.
+- Added stress section 38 (spaced/aliased spellings beside canonical forms) and
+  a Makie `2π` case; all render identically pairwise on all eight fonts.
+- Pre-existing issues seen while inspecting (identical on base, not PR #42):
+  Fira Math draws no extensible arrows (`\xrightarrow` and family) and does not
+  stretch `\widehat`/`\widetilde`; `\underbrace{x+y}_{n}^{m}` sets `m` as a side
+  superscript, whereas LaTeX defines `\underbrace` as `\mathop{…}\limits`, so
+  `m` should be a limit above; `\textbf\n\n{x}` drops the paragraph break
+  (TeX raises "Paragraph ended before … was complete" there).
