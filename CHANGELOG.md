@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Radical degrees (`\sqrt[n]{…}`) are raised from the bottom of the radical
+  sign, as LuaTeX does, rather than from the baseline.  `RadicalDegreeBottomRaisePercent`
+  is a proportion of the sign's total height, so measuring it from the baseline
+  placed the degree too high, and above the sign altogether for deep radicands
+  such as `\sqrt[3]{\frac{a}{b}}`.  The degree's baseline, not its ink bottom,
+  is now placed at that height, as in LuaTeX, XeTeX, and KaTeX.
 - A `%` comment followed by a blank line keeps the paragraph break with Windows
   (CRLF) line endings, and when the blank line contains a form feed or vertical
   tab, matching the document parser's own blank-line rule.

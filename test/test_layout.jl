@@ -217,12 +217,29 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test radical.x < degree.x < body.x
         @test body.x - radical.x ≈ radical.element.advance_width / FONT_UPM * radical.scale atol = 1.0e-6
 
-        degree_bottom = degree.y + degree.element.y_min / FONT_UPM * degree.scale
+        # RadicalDegreeBottomRaisePercent is a proportion of the sign's height
+        # (ascender + descender), measured from the bottom of the sign; as in
+        # LuaTeX's make_radical, it sets the degree's baseline.
         radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
         radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
-        expected_bottom = mt.constants.radical_degree_bottom_raise_percent / 100 *
+        expected = radical_bottom + mt.constants.radical_degree_bottom_raise_percent / 100 *
             (radical_top - radical_bottom)
-        @test degree_bottom ≈ expected_bottom atol = 1.0e-6
+        @test degree.y ≈ expected atol = 1.0e-6
+    end
+
+    @testset "Sqrt degree is measured from the bottom of a deep radical sign" begin
+        percent = mt.constants.radical_degree_bottom_raise_percent / 100
+        for (source, style) in ((raw"\sqrt[3]{\frac{a}{b}}", Display), (raw"\sqrt[n]{y}", Text))
+            glyphs = find_glyphs(layout(parse_latex(source), family, style))
+            degree = argmin(b -> b.scale, glyphs)   # the ScriptScript-size index
+            radical = only(filter(b -> startswith(b.element.glyph_name, "radical"), glyphs))
+            radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
+            radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
+            @test radical_bottom < 0.0
+            @test degree.y ≈ radical_bottom + percent * (radical_top - radical_bottom) atol = 1.0e-6
+            # The index sits within the sign's height rather than above it.
+            @test degree.y + degree.element.y_max / FONT_UPM * degree.scale < radical_top
+        end
     end
 
     @testset "Nested sqrt: radicand starts at radical advance width" begin
