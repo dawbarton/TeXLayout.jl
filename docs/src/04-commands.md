@@ -122,7 +122,7 @@ to cover the enclosed expression.  The size is selected from the font's
 | `\left[` | `\right]` |
 | `\left\{` | `\right\}` |
 | `\left\|`, `\left\vert`, or `\left\lvert` | `\right\|`, `\right\vert`, or `\right\rvert` |
-| `\left\|`, `\left\Vert`, or `\left\lVert` | `\right\|`, `\right\Vert`, or `\right\rVert` |
+| `\left\\|`, `\left\Vert`, or `\left\lVert` | `\right\\|`, `\right\Vert`, or `\right\rVert` |
 | `\left/` | `\right/` |
 | `\left\backslash` | `\right\backslash` |
 | `\left\langle` | `\right\rangle` |

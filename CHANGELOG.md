@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When several of `\limits`, `\nolimits`, and `\displaylimits` follow one base,
   the last one wins, as in TeX; previously the second was parsed as an empty atom
   that captured the scripts.
+- The command reference's delimiter table shows `\left\|` for the double bar;
+  Markdown table escaping had rendered it as `\left|`, the same as the single bar.
 - A `%` comment followed by a blank line keeps the paragraph break with Windows
   (CRLF) line endings, and when the blank line contains a form feed or vertical
   tab, matching the document parser's own blank-line rule.
