@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Explicit spaces (`\quad`, `\,`, `\kern`, …) inside a math `\text{…}` keep
+  their width when the text is styled (`\text{\textbf{a}\quad b}`) or shaped
+  with `HarfBuzzShaper`; they were shaped as a single interword space.
 - Laying out from several threads at once no longer crashes inside FreeType or
   returns wrong glyph metrics.  The module-level caches (fonts, units per em,
   MATH tables, and the HarfBuzz and Makie extensions' caches) are locked, and
