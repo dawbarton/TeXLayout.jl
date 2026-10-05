@@ -85,6 +85,26 @@ end
 # Per-path cache: FTFont handle + hmtx table (Vector of (advance, lsb) by GID).
 const _FONT_CACHE = Dict{String, Tuple{FreeTypeAbstraction.FTFont, Vector{Tuple{Int, Int}}}}()
 
+# Thread safety.  Base.Dict is not safe for concurrent use (even a read during
+# another task's insertion can fail), so every module-level cache has a lock and
+# its values are built under it.  An FT_Face may only be used by one thread at
+# a time, and FT_Load_Glyph writes the face's shared glyph slot, so every
+# FreeType call on a cached face holds that face's own lock: FreeTypeAbstraction
+# documents `FTFont.lock` as the lock for any FT operation on the face, and takes
+# it in its own functions such as `glyph_index`.
+const _FONT_CACHE_LOCK = ReentrantLock()
+
+# Glyph-slot metrics (design units) for glyph `gid`, loaded under the face lock.
+function _load_glyph_metrics(face::FreeTypeAbstraction.FTFont, gid::Integer)
+    return @lock face.lock begin
+        _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
+        unsafe_load(face.glyph).metrics
+    end
+end
+
+_char_index(face::FreeTypeAbstraction.FTFont, cp::Integer)::Int =
+    Int(@lock face.lock _FT.FT_Get_Char_Index(face, UInt32(cp)))
+
 # Parse the hmtx table from raw font bytes.
 # Returns a 1-indexed vector where index GID+1 gives (advance_width, lsb).
 function _parse_hmtx_table(data::Vector{UInt8})::Vector{Tuple{Int, Int}}
@@ -116,7 +136,7 @@ function _parse_hmtx_table(data::Vector{UInt8})::Vector{Tuple{Int, Int}}
 end
 
 function _load_font(path::String)
-    return get!(_FONT_CACHE, path) do
+    return @lock _FONT_CACHE_LOCK get!(_FONT_CACHE, path) do
         face = FreeTypeAbstraction.FTFont(path)
         hmtx = _parse_hmtx_table(read(path))
         (face, hmtx)
@@ -139,8 +159,7 @@ function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetri
 
     adv, lsb = hmtx[gid + 1]   # hmtx is 1-indexed; GID is 0-based
 
-    _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
-    m = unsafe_load(face.glyph).metrics
+    m = _load_glyph_metrics(face, gid)
     x_min = Int(m.horiBearingX)
     y_max = Int(m.horiBearingY)
     x_max = Int(m.horiBearingX) + Int(m.width)
@@ -162,12 +181,11 @@ Returns `nothing` if the glyph is absent from the chosen font.
 function glyph_metrics_upright(family::FontFamily, ch::Char)::Union{GlyphMetrics, Nothing}
     font_path = family.regular !== nothing ? family.regular : family.math
     face, hmtx = _load_font(font_path)
-    gid = Int(_FT.FT_Get_Char_Index(face, UInt32(ch)))
+    gid = _char_index(face, UInt32(ch))
     gid == 0 && return nothing
 
     adv, lsb = hmtx[gid + 1]
-    _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
-    m = unsafe_load(face.glyph).metrics
+    m = _load_glyph_metrics(face, gid)
     return GlyphMetrics(
         adv, lsb,
         Int(m.horiBearingX),
@@ -183,11 +201,10 @@ function _codepoint_glyph(
         path::String, cp::UInt32
     )::Union{Tuple{UInt32, GlyphMetrics}, Nothing}
     face, hmtx = _load_font(path)
-    gid = Int(_FT.FT_Get_Char_Index(face, cp))
+    gid = _char_index(face, cp)
     gid == 0 && return nothing
     adv, lsb = hmtx[gid + 1]
-    _FT.FT_Load_Glyph(face, UInt32(gid), _FT.FT_LOAD_NO_SCALE)
-    m = unsafe_load(face.glyph).metrics
+    m = _load_glyph_metrics(face, gid)
     return (
         UInt32(gid),
         GlyphMetrics(
@@ -343,11 +360,12 @@ end
 
 # Per-path UPM cache — avoids re-reading the file on every shape_span call.
 const _UPM_CACHE = Dict{String, Int}()
+const _UPM_CACHE_LOCK = ReentrantLock()
 
 """Units-per-em of the font at `path` (cached)."""
 function _font_upm(path::String)::Float64
     return Float64(
-        get!(_UPM_CACHE, path) do
+        @lock _UPM_CACHE_LOCK get!(_UPM_CACHE, path) do
             _parse_upm(read(path))
         end
     )
@@ -560,10 +578,10 @@ end
 # file by path.  Used by _upright_glyph to query the regular font directly.
 function glyph_name_by_codepoint(font_path::String, cp::UInt32)::String
     face, _ = _load_font(font_path)
-    gid = Int(_FT.FT_Get_Char_Index(face, cp))
+    gid = _char_index(face, cp)
     gid == 0 && return ""
     buf = zeros(UInt8, 128)
-    ret = _FT.FT_Get_Glyph_Name(face, UInt32(gid), buf, UInt32(length(buf)))
+    ret = @lock face.lock _FT.FT_Get_Glyph_Name(face, UInt32(gid), buf, UInt32(length(buf)))
     ret != 0 && return ""
     i = findfirst(==(0x00), buf)
     return i === nothing ? "" : String(buf[1:(i - 1)])

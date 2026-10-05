@@ -1566,3 +1566,28 @@
   `f(x)\,dx`, `x = 1,\ y`, `\sin\,x` now coincide.
 - Interaction with 1.4: `\bmod` was built as an ordinary group [5 mu, mod, 5 mu]
   so that it is correct both before and after this change; its tests pass.
+
+## 2026-10-05T21:07+01:00 Follow-up 3.1: thread safety of caches and FreeType faces
+
+- Reproducer (scratch `threads_repro.jl`): all 69 stress expressions on four
+  fonts plus two HarfBuzz documents, under `Threads.@threads`, compared with a
+  serial reference. One thread: clean. Two threads: wrong layouts (4 per trial,
+  no exception) and then a segfault. Eight threads: SIGSEGV/SIGILL/SIGABRT on
+  every run, inside FreeType's CFF loader (`cf2_builder_lineTo`), **even with
+  warm caches**, so sharing FT_Face objects is enough; cold caches add unlocked
+  `Dict` mutation.
+- Cause: `glyph_metrics*` and `_codepoint_glyph` call `FT_Load_Glyph` and read the
+  face's shared glyph slot without a lock; `_FONT_CACHE`, `_UPM_CACHE`,
+  `_MATH_TABLE_CACHE`, HarfBuzzExt's two caches, and MathTeXEngineExt's runtime
+  caches use unlocked `get!`. FreeTypeAbstraction's `FTFont.lock` is documented
+  as the lock "for the duration of any FT operation on ft_ptr" and is already
+  taken by its own `glyph_index`.
+- Fix (draft PR): a `ReentrantLock` per module-level cache (values built under
+  it) and `face.lock` around every FreeType call. After: 0 exceptions and 0
+  mismatches over 20 trials × 552 jobs at 2 and 8 threads, cold and warm.
+- Cost: single-thread `layout` minimum time +3–6% (x+y=z 7.13 → 7.58 µs);
+  `layout_document` +1%; allocations unchanged. Cheaper design if needed:
+  resolve the font handles once per `_LayoutCtx` so glyph lookups do not take
+  the cache lock each time.
+- Regression test `test/test_threads.jl` runs a child Julia with four threads
+  (about 3.5 s); it fails on the old code (5/5 crashes) and passes now.

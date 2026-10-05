@@ -134,6 +134,7 @@ end
 # Parsed MATH tables are immutable and depend only on the math-font path, so
 # repeated layouts can safely reuse them across calls.
 const _MATH_TABLE_CACHE = Dict{String, MathTable}()
+const _MATH_TABLE_CACHE_LOCK = ReentrantLock()   # see the thread-safety note in fonts.jl
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Parser implementation
@@ -760,7 +761,7 @@ Parse the MATH table from an OpenType font file, caching the result by path.
 """
 function load_math_table(font_path::AbstractString)::MathTable
     path = String(font_path)
-    return get!(_MATH_TABLE_CACHE, path) do
+    return @lock _MATH_TABLE_CACHE_LOCK get!(_MATH_TABLE_CACHE, path) do
         data = read(path)
         upm = _parse_upm(data)
         glyph_names = _parse_glyph_names(data)

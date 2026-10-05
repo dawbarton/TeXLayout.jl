@@ -46,6 +46,10 @@ end
 
 const _FONT_CACHE = Dict{String, _HBFont}()
 const _FEATURE_CACHE = Dict{Tuple{String, UInt32}, Bool}()
+# Guards both caches (Base.Dict is not safe for concurrent use).  Reentrant
+# because a feature lookup builds the font entry it needs.  HarfBuzz font
+# objects are immutable once created and safe to share between threads.
+const _CACHE_LOCK = ReentrantLock()
 
 _hb_blob_create_from_file(path::String) =
     ccall((:hb_blob_create_from_file_or_fail, _HB), Ptr{Cvoid}, (Cstring,), path)
@@ -142,7 +146,7 @@ function _destroy_font!(hbf::_HBFont)
 end
 
 function _hb_font(path::String)::_HBFont
-    return get!(_FONT_CACHE, path) do
+    return @lock _CACHE_LOCK get!(_FONT_CACHE, path) do
         blob = _hb_blob_create_from_file(path)
         blob == C_NULL && error("HarfBuzz could not read font file: $path")
         face = _hb_face_create(blob)
@@ -264,7 +268,7 @@ function _hb_ot_layout_table_feature_tags(
 end
 
 function _font_supports_feature(path::String, feature_tag::UInt32)::Bool
-    return get!(_FEATURE_CACHE, (path, feature_tag)) do
+    return @lock _CACHE_LOCK get!(_FEATURE_CACHE, (path, feature_tag)) do
         hbf = _hb_font(path)
         feature_tag in _hb_ot_layout_table_feature_tags(hbf.face, _hb_tag("GSUB"))
     end

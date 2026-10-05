@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Laying out from several threads at once no longer crashes inside FreeType or
+  returns wrong glyph metrics.  The module-level caches (fonts, units per em,
+  MATH tables, and the HarfBuzz and Makie extensions' caches) are locked, and
+  FreeType calls on a cached face hold that face's lock.  Single-threaded
+  layout is about 3–6% slower.
 - Explicit spaces and kerns (`\,`, `\quad`, `~`, `\kern`, …) no longer reset
   automatic inter-atom spacing.  As in TeX and KaTeX, the atoms on either side
   are spaced as if the explicit space were absent, and the explicit space is
