@@ -31,5 +31,10 @@ stress-reference-compare reference="stress_test_reference_github.tar":
 stress-reference-download:
     curl -L {{STRESS_TEST_REFERENCE}} -o stress_test_reference_github.tar
 
+# Overlay TeXLayout on LuaLaTeX output, e.g. just compare-tex --fonts=new_cm,stix_two '\sqrt[3]{x}'
+[positional-arguments]
+compare-tex *args:
+    julia --project=tools tools/compare_tex.jl "$@"
+
 stress-clean:
     rm -rf stress_outputs stress_test_reference.tar
