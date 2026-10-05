@@ -1451,3 +1451,43 @@
   superscript, whereas LaTeX defines `\underbrace` as `\mathop{…}\limits`, so
   `m` should be a limit above; `\textbf\n\n{x}` drops the paragraph break
   (TeX raises "Paragraph ended before … was complete" there).
+
+## 2026-10-05T15:56+01:00 Follow-up Part 1: small fixes
+
+- Comparison harness (scratch, not committed): XeLaTeX + unicode-math with the
+  bundled font files themselves (`\setmathfont{math.otf}[Path=…]`, regular font
+  as `\setmainfont`/`\setmathrm`), with TeXLayout's boxes overlaid in the same
+  PDF via `\XeTeXglyph <gid>` at the box positions (TikZ, multiply blend: cyan
+  XeTeX, magenta TeXLayout, dark where they agree). Two corrections make it
+  like-for-like: XeTeX uses `\scriptspace` (LaTeX 0.5pt) after scripts where
+  OpenType MATH, LuaTeX, and TeXLayout use `SpaceAfterScript`, so set
+  `\scriptspace` from the font; and Display cases need `\@displaytrue`
+  (amsmath's `\if@display`), because `$\displaystyle…$` is still inline mode.
+  `tools/stress_test_latex.jl` cannot do this: it loads no OpenType math font.
+- 1.1 CRLF: the lexer's blank-line peek after `%` now uses the same filler set
+  as `_BLANK_LINE_RE` (space, tab, `\r`, `\f`, `\v`).
+- 1.2 amsopn (`amsopn.dtx`, TL 2026): `\liminf` = `\qopname\relax m{lim\,inf}`,
+  likewise `\limsup`, `\injlim`, `\projlim`; `m` means `\displaylimits`.
+  Operators now carry spelling children (characters and spaces) when the body
+  is more than the name; `value` stays the lookup name. Added `\injlim`,
+  `\projlim`; not the `\var…lim` family (`\varinjlim`/`\varprojlim` need
+  `\underrightarrow`/`\underleftarrow`, which TeXLayout lacks).
+- 1.3 `\operatorname*` = `\qopname\newmcodes@ m`: new `"displaylimits"`
+  `LimitsOverride` flag (also the TeX primitive). Consecutive modifiers now
+  replace the flag (last wins) instead of the second one becoming an empty atom.
+- 1.4 `amsmath.dtx` lines 2110–2117: `\bmod` nets 5 mu either side in every
+  style, so it is an ordinary group [5 mu, mod, 5 mu], independent of whether
+  spaces are transparent to atom spacing. `\pod`/`\pmod`/`\mod` use
+  `\if@display` (display *mode*); implemented with a new `\mathchoice`
+  (`NodeKind.MathChoice`, spliced before spacing as in `mlist_to_hlist`), keyed
+  on display *style* as KaTeX does. The follow-up brief's recollection of
+  `\pmod` (always 18 mu) is the plain TeX definition, not amsmath's.
+- 1.5 In Markdown table cells `\|` is an escaped pipe even inside code; Julia's
+  Markdown also renders `<!-- … -->` as visible text, so no explanatory comment.
+- Found while comparing, not fixed (pre-existing): TeXLayout never appends the
+  italic correction after a math character, which TeX does when no subscript
+  follows (visible as drift after `f` in `f(x)`, `y` in `x+y=z`, `d` in New CM);
+  explicit spaces reset inter-atom spacing (Part 2.3), visible after `,\ `.
+- Parse-time cost: a `Dict` lookup in `_is_limits_modifier` slowed every atom
+  (x+y=z 178 → ~205 ns); plain string comparisons restore 181 ns. Layout
+  timings and all allocations unchanged.
