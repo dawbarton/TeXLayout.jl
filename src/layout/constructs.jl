@@ -90,8 +90,14 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
         arrow_bot = arrow_y - 0.3 * scale
     end
 
-    # Place the extensible arrow body.
-    _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
+    # Place the extensible arrow body: the font's horizontal construction, or
+    # glyph pieces when the font has none for this arrow.
+    if hc !== nothing
+        _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
+    else
+        extent = _layout_arrow_from_pieces!(ctx, cp, arrow_w, x0, y0, scale, boxes)
+        extent === nothing || ((arrow_top, arrow_bot) = extent)
+    end
 
     # Place the above label: bottom of ink at arrow_top + kern.
     if above_start <= above_stop

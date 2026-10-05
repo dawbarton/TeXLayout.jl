@@ -18,8 +18,8 @@
 # from the font; and both engines get \@displaytrue for Display-style cases,
 # because $\displaystyle ...$ is still inline mode for amsmath's \if@display.
 #
-# Requirements: lualatex or xelatex with unicode-math, fontspec, and TikZ
-# (TeX Live), and ImageMagick (`magick`) for the PNGs.
+# Requirements: lualatex or xelatex with unicode-math, fontspec, mathtools,
+# extarrows, and TikZ (TeX Live), and ImageMagick (`magick`) for the PNGs.
 #
 # Usage:
 #   julia --project=tools tools/compare_tex.jl [options] EXPR [EXPR ...]
@@ -193,7 +193,8 @@ function write_tex(path::String, font::Symbol, opts::Options)
     end
     open(path, "w") do io
         println(io, raw"\documentclass[border=6pt,varwidth=40cm]{standalone}")
-        println(io, raw"\usepackage{amsmath}")
+        println(io, raw"\usepackage{mathtools}")   # amsmath plus \xRightarrow, \xmapsto, …
+        println(io, raw"\usepackage{extarrows}")   # \xlongequal
         println(io, raw"\usepackage{unicode-math}")
         println(io, "\\setmainfont{$regfile}[$(join(fontspec, ", "))]")
         println(io, "\\setmathrm{$regfile}[Path=$regdir/]")

@@ -58,6 +58,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Extensible arrows (`\xrightarrow` and family) are drawn in fonts whose MATH
+  table has no horizontal construction for them: Fira Math (all of them),
+  Luciole, and STIX Two (harpoons, two-headed arrows, `\xlongequal`) drew only
+  the labels.  The arrow is built from glyph pieces, as amsmath does, or shown
+  at natural width when it has no piece decomposition (hooks, mapsto).
 - Unbraced text commands in document text take one token as their argument, as
   in TeX: `\textbf x rest` makes only "x" bold, where the style used to run to
   the end of the input.  A paragraph break between a text command and its

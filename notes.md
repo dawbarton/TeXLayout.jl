@@ -1655,3 +1655,22 @@
   `align` do not).
 - Seen while testing the tool: display-style `\sum` differs in size from
   LuaTeX's in New CM and STIX Two (operator variant selection); not investigated.
+
+## 2026-10-05T22:01+01:00 Extensible arrows without MATH constructions
+
+- Fira Math's MATH table has only six horizontal constructions (over/under
+  braces, brackets, parens): none for arrows or the wide-accent bases. Luciole
+  lacks 9 of the 18 xarrow constructions and STIX Two 5 (paired and single
+  harpoons, two-headed arrows, `\xlongequal`). `_layout_xarrow!` then drew only
+  the labels, because `_layout_wide_accent!` returns without a construction.
+- LuaLaTeX and XeLaTeX both draw these arrows: amsmath's `\arrowfill@` builds
+  them from `\relbar`/`\Relbar` and the arrowhead, which works in any font.
+  TeXLayout now does the same (`_XARROW_PIECES`, `_layout_arrow_from_pieces!`):
+  left piece, minus or equals extenders with a quarter-width overlap, right
+  piece, all on the baseline so shafts line up. Hooks, mapsto, and paired
+  harpoons keep their base glyph at natural width. Verified with
+  `tools/compare_tex.jl` on Fira Math, Luciole, and STIX Two.
+- Fira's `\widehat`/`\widetilde` do not stretch in either TeX engine either (no
+  variants in the font); TeXLayout already matches, so unchanged.
+- Arrow length differs from amsmath's `\ext@arrow` sizing in all fonts
+  (TeXLayout pads the widest label by 0.3 em each side); not changed.
