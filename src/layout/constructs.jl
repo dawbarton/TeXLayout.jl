@@ -174,9 +174,9 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 # Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction wrapped
-# in auto-sized delimiters.  Implements Rule 15c (no-rule gap clamping, i.e.
-# rule_thickness = 0) and sizes the delimiters symmetrically around the math
-# axis using the same algorithm as NodeKind.Delimited.
+# in auto-sized delimiters.  Implements Rule 15c (no-rule fraction) and sizes
+# the delimiters symmetrically around the math axis using the same algorithm as
+# NodeKind.Delimited (TeX instead uses the fixed sizes delim1/delim2).
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
@@ -192,17 +192,19 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     axis_h = mc.axis_height / upm * scale
 
-    # Initial shifts and gap minima from the MATH table (same constants as \frac).
+    # Rule 15c (no fraction rule): TeX uses num1/denom1 in Display style and
+    # num3/denom2 otherwise, with one mutual clearance of 7θ or 3θ.  The MATH
+    # Stack* constants are those parameters (LuaTeX's make_fraction uses them
+    # for rule-less fractions; the spec suggests 3× and 7× the rule thickness
+    # for the gaps).  XeTeX keeps the Fraction* shifts except for num3.
     if is_display(style)
-        num_shift = mc.fraction_numerator_display_style_shift_up / upm * scale
-        den_shift = mc.fraction_denominator_display_style_shift_down / upm * scale
-        num_gap = mc.fraction_num_display_style_gap_min / upm * scale
-        den_gap = mc.fraction_denom_display_style_gap_min / upm * scale
+        num_shift = mc.stack_top_display_style_shift_up / upm * scale
+        den_shift = mc.stack_bottom_display_style_shift_down / upm * scale
+        gap_min = mc.stack_display_style_gap_min / upm * scale
     else
-        num_shift = mc.fraction_numerator_shift_up / upm * scale
-        den_shift = mc.fraction_denominator_shift_down / upm * scale
-        num_gap = mc.fraction_numerator_gap_min / upm * scale
-        den_gap = mc.fraction_denominator_gap_min / upm * scale
+        num_shift = mc.stack_top_shift_up / upm * scale
+        den_shift = mc.stack_bottom_shift_down / upm * scale
+        gap_min = mc.stack_gap_min / upm * scale
     end
 
     # Lay out numerator and denominator at origin to measure ink extents.
@@ -213,11 +215,16 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
     den_stop = lastindex(boxes)
 
-    # Rule 15c: gap clamping with no rule (rule_thickness = 0).
+    # Rule 15c: if the clearance between the numerator's bottom and the
+    # denominator's top is below the minimum, add half the shortfall to each
+    # shift.  Box depth and height are non-negative, as in TeX.
     num_depth = max(0.0, -_boxes_bottom(boxes, num_start, num_stop, upm))
     den_height = max(0.0, _boxes_top(boxes, den_start, den_stop, upm))
-    num_shift = max(num_shift, axis_h + num_gap + num_depth)
-    den_shift = max(den_shift, den_height - axis_h + den_gap)
+    shortfall = gap_min - ((num_shift - num_depth) - (den_height - den_shift))
+    if shortfall > 0.0
+        num_shift += shortfall / 2
+        den_shift += shortfall / 2
+    end
 
     inner_w = max(num_w, den_w)
 

@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- `\binom`, `\dbinom`, and `\tbinom` follow TeX's Rule 15c for rule-less
+  fractions with the OpenType MATH Stack* constants (`StackTopShiftUp`,
+  `StackBottomShiftDown`, `StackGapMin`, and their display-style forms), as
+  LuaTeX does: one minimum clearance between numerator and denominator, with
+  half of any shortfall added to each shift.  They previously used the fraction
+  constants with separate clearances against the math axis.
 - Radical degrees (`\sqrt[n]{…}`) are raised from the bottom of the radical
   sign, as LuaTeX does, rather than from the baseline.  `RadicalDegreeBottomRaisePercent`
   is a proportion of the sign's total height, so measuring it from the baseline

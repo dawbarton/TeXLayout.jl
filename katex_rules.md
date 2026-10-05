@@ -194,9 +194,22 @@ starts left of the degree's origin (`-ar > wr + br`); TeXLayout does not.
 | Display | `num1`, `denom1`, clearance=3×rule | `num1`, `denom1`, clearance=7×rule |
 | Non-display | `num2`, `denom2`, clearance=1×rule | `num3`, `denom2`, clearance=3×rule |
 
-OpenType equivalents: `num1`/`num2` → `FractionNumeratorDisplayStyleShiftUp` /
+OpenType equivalents with a rule: `num1`/`num2` → `FractionNumeratorDisplayStyleShiftUp` /
 `FractionNumeratorShiftUp`; `denom1`/`denom2` → `FractionDenominatorDisplayStyleShiftDown` /
 `FractionDenominatorShiftDown`.
+
+Without a rule, the MATH table has a separate family, the Stack* constants:
+`num1` → `StackTopDisplayStyleShiftUp`, `num3` → `StackTopShiftUp`,
+`denom1` → `StackBottomDisplayStyleShiftDown`, `denom2` → `StackBottomShiftDown`,
+7θ → `StackDisplayStyleGapMin`, 3θ → `StackGapMin`.  Sources: the spec suggests
+3× and 7× the default rule thickness for the two gaps and the same values as the
+display-style Fraction* shifts for the display-style Stack* shifts; LuaTeX's
+`make_fraction` (`mlist.c`) uses exactly these for rule-less fractions, and fills
+them from `num3`/`num1`/`denom2`/`denom1` for TFM fonts.  XeTeX
+(`XeTeXOTMath.cpp`, `TeX_sym_to_OT_map`) maps only `num3` and the gaps to Stack*,
+and keeps the Fraction* shifts for `num1`, `denom1`, and `denom2`.  The two
+engines agree for fonts whose Stack* and Fraction* shifts are equal (New CM,
+Pagella, Schola, Termes, Bonum, Fira Math), and differ for STIX Two and Luciole.
 
 ### 15c — Fraction without rule: minimum gap clamp
 
@@ -234,10 +247,15 @@ Rules 15b and 15d are implemented using the OpenType MATH table constants
 variants, which encode the clearance directly.
 
 Rule 15c is implemented for `NodeKind.Genfrac` (`\binom`/`\dbinom`/`\tbinom`) via
-`_layout_genfrac!`.  KaTeX uses `num3` (no-rule non-display shift) which has no
-OpenType equivalent; TeXLayout uses `FractionNumeratorShiftUp` (`num2`) instead.
-The visual difference is negligible because the gap clamping still guarantees a
-reasonable minimum gap via `FractionNumeratorGapMin`.
+`_layout_genfrac!` with the Stack* constants and TeX's single mutual clearance,
+as in LuaTeX.  (Until 2026-10 it used the Fraction* constants with separate
+clearances against the math axis, i.e. Rule 15d with zero rule thickness, on the
+mistaken premise that `num3` had no OpenType equivalent.)
+
+Rule 15e delimiters are **not** matched: TeX uses fixed sizes (`delim1` in
+Display style, `delim2` otherwise; XeTeX maps `delim1` to
+`DelimitedSubFormulaMinHeight` and `delim2` to `min(1.5 em, delim1)`), whereas
+TeXLayout sizes the parentheses of `\binom` to the content like `\left…\right`.
 
 Rule 15e (`\genfrac` arbitrary delimiters) and `\atop` (no-rule, no delimiters)
 are not implemented.
@@ -360,7 +378,7 @@ constants are noted for quick lookup.
 | Style switches (`\displaystyle`, …) | `NodeKind.StyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see AGENTS.md encoding note) |
 | Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
 | `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
-| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
+| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c with the Stack* constants and one mutual clearance; content-sized `()` delimiters via `_layout_delim!` (TeX uses fixed `delim1`/`delim2`) |
 | Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
 | `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
 | Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |
