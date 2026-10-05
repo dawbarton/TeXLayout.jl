@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Makie extension no longer throws a `StringIndexError` for a
   `LaTeXString` whose last character before the closing `$` is non-ASCII
   (for example `L"$2π$"`).
+- A `%` comment followed by a blank line keeps the paragraph break with Windows
+  (CRLF) line endings, and when the blank line contains a form feed or vertical
+  tab, matching the document parser's own blank-line rule.
 - `makie_cairo` stress images are legible again.  The CairoMakie PNG was
   reinterpreted byte by byte, stretching each image fourfold vertically and
   striping it with the alpha channel, and Makie aligns a `LaTeXString` by the
