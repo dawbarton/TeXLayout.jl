@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `\kern 1em`) beside their canonical forms, plus hyperbolic operator names, an
   `array` colspec declaring more columns than are used, and brace notes under
   `\large`.
+- A `makie_cairo` stress case for a non-ASCII character before the closing `$`
+  (`L"$2π$"`).
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
@@ -37,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Makie extension no longer throws a `StringIndexError` for a
   `LaTeXString` whose last character before the closing `$` is non-ASCII
   (for example `L"$2π$"`).
+- `makie_cairo` stress images are legible again.  The CairoMakie PNG was
+  reinterpreted byte by byte, stretching each image fourfold vertically and
+  striping it with the alpha channel, and Makie aligns a `LaTeXString` by the
+  bottom of its glyph bounding box rather than its baseline, which pushed the
+  tops of tall formulae off the canvas.  Every `makie_cairo` image changes, so
+  references that include them must be regenerated.
 
 ## [v0.3.2] - 2026-07-26
 
