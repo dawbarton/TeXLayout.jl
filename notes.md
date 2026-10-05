@@ -1547,7 +1547,7 @@
   DelimitedSubFormulaMinHeight and min(1.5 em, delim1)); TeXLayout sizes them to
   the content. `\atop`, `\choose`, and `\genfrac` remain unsupported.
 
-## 2026-10-05T16:33+01:00 Follow-up 2.3: explicit spaces and inter-atom spacing
+## 2026-10-05T16:27+01:00 Follow-up 2.3: explicit spaces and inter-atom spacing
 
 - tex.web, `mlist_to_hlist`: in the first pass glue and kern nodes
   `goto done_with_node`, skipping `r_type:=type(r)`; in the second pass they
