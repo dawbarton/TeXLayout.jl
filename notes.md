@@ -1608,7 +1608,7 @@
   layer does not support `\quad`/`\,` at all (`a\quad b` becomes "a b"); not
   changed.
 
-## 2026-10-05T21:35+01:00 Follow-up 3.2: math alphabets around \text
+## 2026-10-05T21:26+01:00 Follow-up 3.2: math alphabets around \text
 
 - XeLaTeX with amsmath and unicode-math (bold and italic text fonts loaded, so
   the controls `\mathbf{ab}` and `\textbf{a b}` do render bold):
