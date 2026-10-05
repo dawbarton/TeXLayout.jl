@@ -1546,3 +1546,23 @@
 - Not changed: TeX sizes binomial delimiters with delim1/delim2 (XeTeX:
   DelimitedSubFormulaMinHeight and min(1.5 em, delim1)); TeXLayout sizes them to
   the content. `\atop`, `\choose`, and `\genfrac` remain unsupported.
+
+## 2026-10-05T16:33+01:00 Follow-up 2.3: explicit spaces and inter-atom spacing
+
+- tex.web, `mlist_to_hlist`: in the first pass glue and kern nodes
+  `goto done_with_node`, skipping `r_type:=type(r)`; in the second pass they
+  are appended to the hlist and `goto done`, skipping `r_type:=t`. So the
+  previous atom type survives explicit glue and kerns, and the automatic glue
+  is inserted before the next atom (after the explicit space).
+- KaTeX `buildHTML.ts` `traverseNonSpaceNodes`: "Ignore explicit spaces (e.g.,
+  \;, \,) when determining what implicit spacing should go between atoms";
+  it inserts the glue after the previous atom instead (same total width).
+- TeXLayout's reset was deliberate (2026-05 notes: "neutral explicit spaces
+  reset the context preventing double-spacing") but contradicts both. Removed
+  it; binary reclassification already skipped spaces.
+- Snapshot hashes unchanged; 264 stress images change (33 cases × 8 fonts), all
+  explicit spaces next to bin, rel, op, punct, or inner atoms. Overlays against
+  LuaLaTeX and XeLaTeX for `a\,+b`, `x \quad = y`, `a~=b`, `\int\!\!\int`,
+  `f(x)\,dx`, `x = 1,\ y`, `\sin\,x` now coincide.
+- Interaction with 1.4: `\bmod` was built as an ordinary group [5 mu, mod, 5 mu]
+  so that it is correct both before and after this change; its tests pass.
