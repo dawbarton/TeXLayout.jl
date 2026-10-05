@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Stress section "38. PARSER WHITESPACE & DELIMITER ALIASES", which sets spaced
+  or aliased spellings (`x ^2`, `\sqrt [3]{x}`, `\left\lvert`, `\bigl\vert`,
+  `\kern 1em`) beside their canonical forms, plus hyperbolic operator names, an
+  `array` colspec declaring more columns than are used, and brace notes under
+  `\large`.
+
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
   or `\limits` (`x ^2`, `\left(x\right) ^2`), after a control word that takes a

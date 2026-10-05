@@ -514,4 +514,29 @@ const STRESS_SECTIONS = [
                 raw"{\scriptscriptstyle \binom{a}{b}}",
         ]
     ),
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Parser whitespace and delimiter aliases: each case sets a spaced (or
+    # aliased) spelling beside its canonical form, so the two halves must
+    # render identically.  Covers spaces before scripts and \limits, after
+    # \left/\big/\kern, around \sqrt's optional degree, the \vert family as
+    # delimiters, hyperbolic operator names, an array colspec that declares
+    # more columns than are used, and brace notes under \large.
+    # ─────────────────────────────────────────────────────────────────────────
+    "38. PARSER WHITESPACE & DELIMITER ALIASES" => _D(
+        [
+            raw"x ^2 \quad x^2 \qquad \left( \frac{a}{b} \right) ^2" *
+                raw" \quad \left(\frac{a}{b}\right)^2",
+            raw"\sum \limits_{i=1}^n i \quad \sum\limits_{i=1}^n i",
+            raw"\left\lvert x \right\rvert \quad \left| x \right|" *
+                raw" \qquad \left\lVert v \right\rVert \quad \left\| v \right\|",
+            raw"\bigl\vert x \bigr\vert \quad \bigl| x \bigr|" *
+                raw" \qquad \Bigl\Vert y \Bigr\Vert \quad \Bigl\| y \Bigr\|",
+            raw"\sinh x + \cosh y + \tanh z + \coth w + \lg n",
+            raw"\sqrt [3]{x} \quad \sqrt[3]{x} \qquad \sqrt[ n ]{x}" *
+                raw" \quad \sqrt[n]{x} \qquad a \kern 1em b \quad a\kern1em b",
+            raw"\begin{array}{|c|c|c|} 1 & 2 \\ 3 & 4 \end{array}",
+            raw"{\large\underbrace{x+y}_{n}^{m}} \quad \underbrace{x+y}_{n}^{m}",
+        ]
+    ),
 ]
