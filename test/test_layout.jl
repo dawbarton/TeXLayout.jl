@@ -709,6 +709,48 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test m.x - (g.x + g.element.advance_width / FONT_UPM * g.scale) ≈ 3 / 18
     end
 
+    @testset "\\bmod, \\pmod, \\mod, \\pod spacing follows amsmath" begin
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        # Gap between the end of glyph i and the start of glyph i + 1, sorted by x.
+        function gaps(source, style)
+            glyphs = sort(find_glyphs(layout(parse_latex(source), family, style)); by = g -> g.x)
+            return [glyphs[i + 1].x - (glyphs[i].x + advance(glyphs[i])) for i in 1:(length(glyphs) - 1)]
+        end
+        sscale = mt.constants.script_percent_scale_down / 100
+        # a mod b: 5 mu either side in every style (glyphs a m o d b).
+        for (source, style, s) in ((raw"a \bmod b", Display, 1.0), (raw"a \bmod b", Text, 1.0), (raw"x_{a \bmod b}", Text, sscale))
+            g = gaps(source, style)
+            @test g[end - 3] ≈ 5 / 18 * s
+            @test g[end] ≈ 5 / 18 * s
+        end
+        # b (mod n): 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n.
+        for (style, kern) in ((Display, 18), (Text, 8))
+            g = gaps(raw"b \pmod{n}", style)   # b ( m o d n )
+            @test g[1] ≈ kern / 18
+            @test g[5] ≈ 6 / 18
+            @test gaps(raw"b \pod{n}", style)[1] ≈ kern / 18
+        end
+        # b mod n: 18 mu (Display) or 12 mu before "mod", then two thin spaces.
+        for (style, kern) in ((Display, 18), (Text, 12))
+            g = gaps(raw"b \mod{n}", style)   # b m o d n
+            @test g[1] ≈ kern / 18
+            @test g[4] ≈ 6 / 18
+        end
+    end
+
+    @testset "\\mathchoice selects its argument by style" begin
+        chosen(source, style) = [g.element.glyph_name for g in find_glyphs(layout(parse_latex(source), family, style))]
+        choice = raw"\mathchoice{a}{b}{c}{d}"
+        @test chosen(choice, Display) == chosen("a", Display)
+        @test chosen(choice, Text) == chosen("b", Text)
+        @test chosen("x_{" * choice * "}", Text) == chosen("x_{c}", Text)
+        @test chosen("x_{y_{" * choice * "}}", Text) == chosen("x_{y_{d}}", Text)
+        # The chosen list is spliced into the surrounding list for spacing:
+        # a + \mathchoice{+}{+}{+}{+} b has the same layout as a + + b.
+        positions(source) = [(b.x, b.y) for b in layout(parse_latex(source), family, Text)]
+        @test positions(raw"a \mathchoice{+}{+}{+}{+} b") == positions(raw"a + b")
+    end
+
     # ── Font switching ──────────────────────────────────────────────────────────
 
     @testset "FontSwitch: \\mathbf{x} renders one glyph" begin

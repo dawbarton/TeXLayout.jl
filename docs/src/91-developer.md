@@ -176,6 +176,7 @@ space_node(w)                     # NodeKind.Space with given width in em
 | `NodeKind.StyleOverride` | `[body]` | style name e.g. `"Display"` | `\dfrac`, `\tfrac`, `\displaystyle`, … |
 | `NodeKind.Sizing` | `[body NodeKind.Sequence]` | Float64 multiplier as string | `\large`, `\tiny`, … |
 | `NodeKind.XArrow` | `[above]` or `[above, below]` | command string | `\xrightarrow`, `\xleftarrow`, … |
+| `NodeKind.MathChoice` | `[display, text, script, scriptscript]` | `""` | `\mathchoice{…}{…}{…}{…}`; also the style-dependent kerns of `\pmod`, `\mod`, `\pod` |
 
 A few notes on specific kinds:
 

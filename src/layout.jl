@@ -478,6 +478,28 @@ end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
 
+# The branch of a \mathchoice for `style`: Display, Text, Script, ScriptScript.
+function _math_choice_branch(node::Node, style::TexStyle)::Node
+    i = is_display(style) ? 1 : is_script_script(style) ? 4 : is_script(style) ? 3 : 2
+    return node.children[i]
+end
+
+# TeX resolves \mathchoice before inter-atom spacing and splices the chosen list
+# into the surrounding one (mlist_to_hlist), so spacing sees the chosen atoms.
+function _splice_math_choices(nodes::AbstractVector{Node}, style::TexStyle)::Vector{Node}
+    out = Node[]
+    for node in nodes
+        if node.kind === NodeKind.MathChoice
+            branch = _math_choice_branch(node, style)
+            grouped = branch.kind === NodeKind.Group || branch.kind === NodeKind.Sequence
+            append!(out, _splice_math_choices(grouped ? branch.children : [branch], style))
+        else
+            push!(out, node)
+        end
+    end
+    return out
+end
+
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
 # Returns the total advance width.  Used by NodeKind.Sequence, NodeKind.Group, and the inner
 # content loop of NodeKind.Delimited so spacing is consistent in all three contexts.
@@ -495,6 +517,7 @@ function _layout_children!(
         boxes::Vector{LayoutBox},
     )::Float64
     isempty(nodes) && return 0.0
+    any(n -> n.kind === NodeKind.MathChoice, nodes) && (nodes = _splice_math_choices(nodes, style))
 
     # Emit nodes with inter-atom spacing using the reclassified classes.
     cursor = x0
@@ -705,6 +728,8 @@ function _layout_node!(
     k === NodeKind.StyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
     k === NodeKind.Sizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
     k === NodeKind.XArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.MathChoice     &&
+        return _layout_node!(_math_choice_branch(node, style), ctx, style, x0, y0, scale, boxes)
     # NodeKind.Middle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end

@@ -325,6 +325,31 @@ function _operator_node(name::String)::Node
     return Node(NodeKind.Operator, name, children)
 end
 
+# A kern of `display_mu` in Display style and `other_mu` otherwise.  amsmath
+# tests display *mode* (\if@display); like KaTeX, this approximates it with
+# display *style*, which differs only inside sub-formulae of a display.
+function _display_kern(display_mu::Real, other_mu::Real)::Node
+    branch(mu) = Node(NodeKind.Group, [space_node(mu / 18)])
+    return Node(NodeKind.MathChoice, [branch(display_mu), branch(other_mu), branch(other_mu), branch(other_mu)])
+end
+
+# amsmath's \pod, \pmod, and \mod, expanded around the parsed argument:
+#   \pod{#1}  = \if@display\mkern18mu\else\mkern8mu\fi(#1)
+#   \pmod{#1} = \pod{{\operator@font mod}\mkern6mu#1}
+#   \mod{#1}  = \if@display\mkern18mu\else\mkern12mu\fi{\operator@font mod}\,\,#1
+function _mod_node(cmd::String, arg::Node)::Node
+    body = arg.kind === NodeKind.Group || arg.kind === NodeKind.Sequence ? arg.children : [arg]
+    mod = Node(NodeKind.Group, [Node(NodeKind.Operator, "mod")])
+    thin = _SPACE_WIDTHS["\\,"]
+    children = if cmd == "\\mod"
+        Node[_display_kern(18, 12), mod, space_node(thin), space_node(thin), body...]
+    else
+        inner = cmd == "\\pmod" ? Node[mod, space_node(6 / 18), body...] : body
+        Node[_display_kern(18, 8), Node(NodeKind.Char, "("), inner..., Node(NodeKind.Char, ")")]
+    end
+    return Node(NodeKind.Group, children)
+end
+
 # Flatten the argument of \operatorname into its rendered spelling: upright
 # characters and explicit spaces (`arg\,max`).  Commands contribute their bare
 # names, as in `_node_text`.
@@ -599,6 +624,19 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
             right_name = _parse_delim_name!(p)
         end
         return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
+
+    elseif cmd == "\\mathchoice"
+        # \mathchoice{D}{T}{S}{SS}: four math lists, one per style family.
+        return Node(NodeKind.MathChoice, [_parse_argument!(p, isstop) for _ in 1:4])
+
+    elseif cmd == "\\bmod"
+        # amsmath: \nonscript\mskip-\medmuskip\mkern5mu\mathbin{mod}\mkern5mu
+        # \nonscript\mskip-\medmuskip.  The negative glue cancels the automatic
+        # binary spacing, so the net effect is 5 mu either side in every style.
+        return Node(NodeKind.Group, [space_node(5 / 18), Node(NodeKind.Operator, "mod"), space_node(5 / 18)])
+
+    elseif cmd == "\\pod" || cmd == "\\pmod" || cmd == "\\mod"
+        return _mod_node(cmd, _parse_argument!(p, isstop))
 
     elseif cmd == "\\operatorname"
         # amsopn: \operatorname* is \qopname\newmcodes@ m, i.e. limits in

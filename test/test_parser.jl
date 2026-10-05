@@ -927,6 +927,41 @@
         @test node.children[1].value == "displaylimits"
     end
 
+    @testset "\\bmod, \\pmod, \\mod, \\pod expand to their amsmath spelling" begin
+        kinds(node) = [c.kind for c in node.children]
+        # \bmod: 5 mu, upright "mod", 5 mu, as one ordinary group.
+        a, bmod, b = parse_latex(raw"a \bmod b").children
+        @test bmod.kind === NodeKind.Group
+        @test kinds(bmod) == [NodeKind.Space, NodeKind.Operator, NodeKind.Space]
+        @test bmod.children[2].value == "mod"
+        @test all(c -> c.width ≈ 5 / 18, bmod.children[[1, 3]])
+        # \pod{n}: choice of 18 mu (display) or 8 mu, then (n).
+        pod = only(parse_latex(raw"\pod{n}").children)
+        @test kinds(pod) == [NodeKind.MathChoice, NodeKind.Char, NodeKind.Char, NodeKind.Char]
+        @test [c.value for c in pod.children[2:4]] == ["(", "n", ")"]
+        @test [only(c.children).width for c in pod.children[1].children] ≈ [18, 8, 8, 8] ./ 18
+        # \pmod{n} is \pod{{mod}\mkern6mu n}.
+        pmod = only(parse_latex(raw"\pmod{n}").children)
+        @test kinds(pmod) == [
+            NodeKind.MathChoice, NodeKind.Char, NodeKind.Group, NodeKind.Space, NodeKind.Char, NodeKind.Char,
+        ]
+        @test only(pmod.children[3].children).value == "mod"
+        @test pmod.children[4].width ≈ 6 / 18
+        # \mod{n}: 18 mu (display) or 12 mu, {mod}, \,\, n.
+        mod = only(parse_latex(raw"\mod {n+1}").children)
+        @test kinds(mod) == [
+            NodeKind.MathChoice, NodeKind.Group, NodeKind.Space, NodeKind.Space,
+            NodeKind.Char, NodeKind.Char, NodeKind.Char,
+        ]
+        @test [only(c.children).width for c in mod.children[1].children] ≈ [18, 12, 12, 12] ./ 18
+    end
+
+    @testset "\\mathchoice takes four arguments" begin
+        node = only(parse_latex(raw"\mathchoice{a}{b} {c}d").children)
+        @test node.kind === NodeKind.MathChoice
+        @test length(node.children) == 4
+    end
+
     @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
         for (left, right, glyph) in (
                 (raw"\vert", raw"\vert", "bar"),

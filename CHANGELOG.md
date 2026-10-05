@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `\injlim` and `\projlim` (amsmath), which take limits in Display style.
 - `\operatorname*{…}` (amsmath), which takes limits in Display style only, and
   the TeX primitive `\displaylimits`.
+- `\bmod`, `\pmod`, `\mod`, and `\pod` with amsmath's spacing (previously
+  `\bmod` rendered nothing and `\pmod{n}` dropped its argument), and the TeX
+  primitive `\mathchoice`.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,

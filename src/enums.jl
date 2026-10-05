@@ -52,6 +52,7 @@ EnumX.@enumx NodeKind begin
     StyleOverride # \dfrac / \displaystyle etc.; value = style name; children[1] = body
     Sizing        # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body
     XArrow        # \xrightarrow etc.; value = command name; children = [above] or [above, below]
+    MathChoice    # \mathchoice{D}{T}{S}{SS}: children = the four branches; layout picks one by style
 end
 
 """Categories of token produced by the lexer."""

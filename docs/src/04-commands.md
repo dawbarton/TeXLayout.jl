@@ -90,6 +90,24 @@ The starred form `\operatorname*{name}` takes limits in Display style, like
 `\lim`.  Explicit spaces in the name are kept, so `\operatorname*{arg\,max}`
 renders "arg max".
 
+### Modular arithmetic
+
+`\bmod`, `\pmod`, `\mod`, and `\pod` follow amsmath:
+
+| Command | Output | Spacing |
+|---------|--------|---------|
+| `a \bmod b` | a mod b | 5 mu either side of "mod" |
+| `a \equiv b \pmod{n}` | a ≡ b (mod n) | 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n |
+| `a \equiv b \mod{n}` | a ≡ b mod n | 18 mu before "mod" in Display style, 12 mu otherwise; 6 mu before n |
+| `a \equiv b \pod{n}` | a ≡ b (n) | as `\pmod` |
+
+amsmath chooses the wider spaces in display *mode*; TeXLayout, like KaTeX, uses
+them in Display *style*, so the two differ only inside sub-formulae of a
+display, such as a fraction.
+
+`\mathchoice{D}{T}{S}{SS}` typesets one of its four arguments according to the
+current style (Display, Text, Script, ScriptScript), as in TeX.
+
 ## Delimiters
 
 ### Auto-sized pairs

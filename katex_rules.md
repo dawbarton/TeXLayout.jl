@@ -320,7 +320,9 @@ constants are noted for quick lookup.
 | `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` that clears the inner content height; centred on math axis |
 | `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
 | `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
-| Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
+| Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 34 operators; Display-style limits for operators in `_LIMITS_OPERATORS`; two-word names (`\liminf`, `\injlim`, …) carry spelling children with amsopn's 3 mu thin space (`_SPACED_OPERATOR_NAMES`) |
+| `\bmod`, `\pmod`, `\mod`, `\pod` | `NodeKind.Group` (expanded in the parser) | amsmath definitions: `\bmod` is 5 mu, upright "mod", 5 mu (net effect of its `\nonscript\mskip-\medmuskip` glue in every style); `\pod`/`\pmod`/`\mod` open with 18 mu in Display style and 8/8/12 mu otherwise via `NodeKind.MathChoice`.  amsmath decides by display *mode* (`\if@display`), TeXLayout and KaTeX by display *style* |
+| `\mathchoice{D}{T}{S}{SS}` | `NodeKind.MathChoice` | Branch chosen by style and spliced into the surrounding list before inter-atom spacing, as in TeX's `mlist_to_hlist` |
 | Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
 | Limits placement | `NodeKind.Decorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
 | `\limits`/`\nolimits`/`\displaylimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch.  `"displaylimits"` (also produced by `\operatorname*`) means limits in Display style only; the last modifier wins |
