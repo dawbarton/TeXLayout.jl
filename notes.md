@@ -1625,3 +1625,19 @@
 - Residual difference seen while checking: unicode-math's `\mathbf` uses the
   bold text font (`\symbf` uses Unicode math bold), so bold letters differ
   slightly in advance from TeXLayout's U+1D400-block glyphs.
+
+## 2026-10-05T21:33+01:00 Follow-up 3.4: unbraced text commands in document text
+
+- `\textbf x rest` applied bold to everything up to the next unmatched `}` or
+  the end of input: `_parse_text_group!` parsed a group body even without `{`.
+  TeX takes the next token (after the spaces following the control word) as an
+  undelimited argument; XeLaTeX renders `\textbf x rest`, `\textbf xy rest`,
+  and `\textbf\%x y` with only `x`, `x`, and `%` bold.
+- Now: the unbraced form parses exactly one item (`_parse_text_body!` with
+  `single = true`). A nested text command is taken with its own group, where TeX
+  would stop with an error; a paragraph break, `}`, or end of input leaves the
+  argument empty.
+- Also fixed the PR #42 review nit: `_skip_space_before_group!` no longer skips a
+  blank line, so `a \textbf\n\n{x} y` keeps its paragraph break (TeX would report
+  "Paragraph ended before \textbf was complete").
+- No stress image changes.

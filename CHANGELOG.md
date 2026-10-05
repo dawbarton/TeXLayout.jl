@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Unbraced text commands in document text take one token as their argument, as
+  in TeX: `\textbf x rest` makes only "x" bold, where the style used to run to
+  the end of the input.  A paragraph break between a text command and its
+  `{…}` argument is no longer swallowed.
 - Math alphabets (`\mathbf`, `\boldsymbol`, `\mathit`, …) no longer restyle a
   nested `\text{…}`, matching LaTeX: `\mathbf{\text{a b}}` is regular "a b".
   Previously the text was drawn with Unicode math-alphabet letters and its
