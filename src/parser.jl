@@ -217,15 +217,19 @@ function _parse_text_argument!(p::_Parser)::Node
     end
 end
 
-# \limits, \nolimits, and \displaylimits (limits in Display style only, TeX's
-# default for \mathop) map to the NodeKind.LimitsOverride flag.
-const _LIMITS_MODIFIERS = Dict{String, String}(
-    "\\limits" => "limits",
-    "\\nolimits" => "nolimits",
-    "\\displaylimits" => "displaylimits",
-)
+# The NodeKind.LimitsOverride flag for \limits, \nolimits, or \displaylimits
+# (limits in Display style only, TeX's default for \mathop), else `nothing`.
+# Plain comparisons: this runs after every atom.
+@inline function _limits_flag(tok::Token)::Union{String, Nothing}
+    tok.kind === TokenKind.Command || return nothing
+    v = tok.value
+    v == "\\limits" && return "limits"
+    v == "\\nolimits" && return "nolimits"
+    v == "\\displaylimits" && return "displaylimits"
+    return nothing
+end
 
-@inline _is_limits_modifier(tok::Token) = tok.kind === TokenKind.Command && haskey(_LIMITS_MODIFIERS, tok.value)
+@inline _is_limits_modifier(tok::Token) = _limits_flag(tok) !== nothing
 
 # Skip whitespace between a base and its scripts (`x ^2`, `\sum \limits_{i}`),
 # which TeX ignores in math mode.  The whitespace is consumed only when a script
@@ -253,8 +257,8 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
     # in TeX the last modifier wins; it replaces an existing override (including
     # the \displaylimits of \operatorname*) instead of nesting another wrapper.
     _skip_spaces_before_script!(p)
-    while _is_limits_modifier(_current(p))
-        flag = _LIMITS_MODIFIERS[_advance!(p).value]
+    while (flag = _limits_flag(_current(p))) !== nothing
+        _advance!(p)
         inner = base.kind === NodeKind.LimitsOverride ? base.children[1] : base
         base = Node(NodeKind.LimitsOverride, flag, [inner])
         _skip_spaces_before_script!(p)
