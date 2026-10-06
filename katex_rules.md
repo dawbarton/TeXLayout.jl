@@ -38,6 +38,12 @@ A `mbin` atom is demoted to `mord` if:
 - Two-pass reclassification in `_layout_children!`: left-to-right (Rule 5) then
   right-to-left (Rule 6). ✓
 - Neutral atoms (`:neutral` — spaces, `NodeKind.Space`) are transparent to both passes. ✓
+- Neutral atoms are also transparent when inter-atom spacing is emitted: the
+  previous atom class survives an explicit space or kern, so `a\,+b` gets a
+  thin space, a medium space, `+`, and a medium space.  This matches TeX
+  (`mlist_to_hlist` skips glue and kern nodes without updating `r_type`) and
+  KaTeX (`traverseNonSpaceNodes`).  Until 2026-10 explicit spaces reset the
+  spacing context. ✓
 - `_BIN_LEFT_CANCEL = (:bin, :open, :rel, :op, :punct)` and
   `_BIN_RIGHT_CANCEL = (:rel, :close, :punct)` defined as module-level constants. ✓
 

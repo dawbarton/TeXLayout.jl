@@ -191,7 +191,7 @@ function _atom_class(node::Node)::Symbol
     elseif k === NodeKind.XArrow
         return :rel   # extensible arrows are relation atoms
     elseif k === NodeKind.Space
-        return :neutral   # explicit spaces reset the spacing context
+        return :neutral   # explicit spaces are transparent to inter-atom spacing
     else
         return :ord   # NodeKind.Sequence, NodeKind.Group: braced sub-expressions are ordinary
     end
@@ -526,8 +526,10 @@ function _layout_children!(
     for i in eachindex(nodes)
         raw_cls = _atom_class(nodes[i])
         if raw_cls === :neutral
+            # Explicit spaces and kerns are transparent: as in TeX's
+            # mlist_to_hlist, they do not change the previous atom class, so
+            # automatic spacing still applies across them (a\,+b).
             cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
-            prev_emit_class = :nothing
         else
             left_cls = _left_reclassified_atom_class(raw_cls, prev_left_class)
             next_cls = _next_left_reclassified_atom_class(nodes, i, left_cls)

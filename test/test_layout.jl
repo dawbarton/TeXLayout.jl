@@ -348,12 +348,36 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(spaces) == 0
     end
 
-    @testset "Inter-atom: explicit space resets context, no double gap" begin
-        # 'a \quad b': the \quad is neutral; spacing context is reset after it,
-        # so 'b' gets no additional auto-space.  Exactly 1 Space element (the \quad).
+    @testset "Inter-atom: explicit space between ordinary atoms adds no auto-space" begin
+        # 'a \quad b': ord-ord spacing is zero, so the \quad is the only Space.
         boxes = layout(parse_latex("a\\quad b"), family, Text)
         spaces = find_spaces(boxes)
         @test length(spaces) == 1
+    end
+
+    @testset "Inter-atom: explicit spaces are transparent to automatic spacing" begin
+        # TeX's mlist_to_hlist skips glue and kern nodes when tracking the
+        # previous atom type (r_type), and KaTeX's traverseNonSpaceNodes ignores
+        # explicit spaces, so automatic spacing still applies across them.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        function gaps(source, style)
+            glyphs = sort(find_glyphs(layout(parse_latex(source), family, style)); by = g -> g.x)
+            return [glyphs[i + 1].x - (glyphs[i].x + advance(glyphs[i])) for i in 1:(length(glyphs) - 1)]
+        end
+        thin, medium, thick = 3 / 18, 4 / 18, 5 / 18
+        # a, thin, medium, +, medium, b: the + stays binary.
+        @test gaps(raw"a\,+b", Text) ≈ [thin + medium, medium]
+        @test gaps(raw"x \quad = y", Text) ≈ [1.0 + thick, thick]
+        @test gaps(raw"a~=b", Text) ≈ [TeXLayout._NORMAL_SPACE_EM + thick, thick]
+        # Ordinary atoms: only the explicit space.
+        @test gaps(raw"f\,d", Text) ≈ [thin]
+        # op-op is a thin space, so \int\!\!\int nets one negative thin space.
+        @test only(gaps(raw"\int\!\!\int", Text)) ≈ -thin
+        # In script styles bin spacing is absent; only the explicit space remains.
+        s = mt.constants.script_percent_scale_down / 100
+        @test gaps(raw"x_{a\,+b}", Text)[2:end] ≈ [thin * s, 0.0]
+        # A leading binary atom is still ordinary (Rule 5), even after a space.
+        @test gaps(raw"\,+b", Text) ≈ [0.0]
     end
 
     @testset "\\quad produces a Space element of width 1 em" begin
