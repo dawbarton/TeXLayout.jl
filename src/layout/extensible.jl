@@ -339,6 +339,48 @@ end
 # pre-built variant whose advance width covers the base; if none exists, assembles
 # the glyph from parts using the same helpers used for vertical assemblies.
 # Falls back to the largest variant (or the base glyph) if the assembly is empty.
+# Lay out an extensible arrow `w` em wide from glyph pieces, for a font whose MATH
+# table has no horizontal construction for it (see _XARROW_PIECES).  As in
+# amsmath's \arrowfill@, the pieces sit on the baseline so their shafts line
+# up, and extenders fill the space between the end pieces with some overlap.
+# Arrows without pieces get their base glyph, centred, at natural width.
+# Returns the ink (top, bottom) of the emitted glyphs, or `nothing` if none.
+function _layout_arrow_from_pieces!(
+        ctx::_LayoutCtx, cp::UInt32, w::Float64, x0::Float64, y0::Float64,
+        scale::Float64, boxes::Vector{LayoutBox},
+    )
+    upm = ctx.upm
+    em(du) = du / upm * scale
+    start = lastindex(boxes) + 1
+    pieces = get(_XARROW_PIECES, cp, nothing)
+    if pieces === nothing
+        g = _char_glyph(ctx, Char(cp))
+        g === nothing && return nothing
+        push!(boxes, LayoutBox(g, x0 + (w - em(g.advance_width)) / 2, y0, scale))
+    else
+        left, ext, right = (_char_glyph(ctx, Char(c)) for c in pieces)
+        (left === nothing || ext === nothing || right === nothing) && return nothing
+        right_x = x0 + w - em(right.advance_width)
+        push!(boxes, LayoutBox(left, x0, y0, scale))
+        # Fill the ink gap between the end pieces, overlapping each neighbour.
+        ext_w = em(ext.x_max - ext.x_min)
+        overlap = ext_w / 4
+        a = x0 + em(left.x_max) - overlap
+        b = right_x + em(right.x_min) + overlap
+        if b > a && ext_w > overlap
+            n = 1 + ceil(Int, max(0.0, b - a - ext_w) / (ext_w - overlap))
+            step = n == 1 ? 0.0 : (b - a - ext_w) / (n - 1)
+            for i in 0:(n - 1)
+                ink_left = n == 1 ? (a + b - ext_w) / 2 : a + i * step
+                push!(boxes, LayoutBox(ext, ink_left - em(ext.x_min), y0, scale))
+            end
+        end
+        push!(boxes, LayoutBox(right, right_x, y0, scale))
+    end
+    stop = lastindex(boxes)
+    return (_boxes_top(boxes, start, stop, upm), _boxes_bottom(boxes, start, stop, upm))
+end
+
 function _layout_wide_accent!(
         ctx::_LayoutCtx,
         accent_ps::String,

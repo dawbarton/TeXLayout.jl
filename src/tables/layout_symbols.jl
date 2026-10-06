@@ -99,6 +99,26 @@ const _XARROW_CODEPOINTS = Dict{String, UInt32}(
     "\\xlongequal" => 0x003D,  # = (plain equals; extensible via horiz_constructions)
 )
 
+# Pieces (left, extender, right) for building an extensible arrow when the font's
+# MATH table has no horizontal construction for it, as amsmath's \arrowfill@
+# does with \relbar (minus) and \Relbar (equals).  Arrows not listed here (hooks,
+# mapsto, paired harpoons) keep their base glyph at its natural width.
+const _XARROW_PIECES = Dict{UInt32, NTuple{3, UInt32}}(
+    0x2192 => (0x2212, 0x2212, 0x2192),  # →
+    0x2190 => (0x2190, 0x2212, 0x2212),  # ←
+    0x2194 => (0x2190, 0x2212, 0x2192),  # ↔
+    0x21D2 => (0x003D, 0x003D, 0x21D2),  # ⇒
+    0x21D0 => (0x21D0, 0x003D, 0x003D),  # ⇐
+    0x21D4 => (0x21D0, 0x003D, 0x21D2),  # ⇔
+    0x003D => (0x003D, 0x003D, 0x003D),  # =
+    0x21C0 => (0x2212, 0x2212, 0x21C0),  # ⇀
+    0x21C1 => (0x2212, 0x2212, 0x21C1),  # ⇁
+    0x21BC => (0x21BC, 0x2212, 0x2212),  # ↼
+    0x21BD => (0x21BD, 0x2212, 0x2212),  # ↽
+    0x21A0 => (0x2212, 0x2212, 0x21A0),  # ↠
+    0x219E => (0x219E, 0x2212, 0x2212),  # ↞
+)
+
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
 # (notably FiraMath) name using the "uni{HHHH}" convention instead of the
 # traditional Adobe Glyph List (AGL) name.  Used in two places:

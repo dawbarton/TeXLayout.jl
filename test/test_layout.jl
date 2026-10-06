@@ -1666,6 +1666,40 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
 
     # ── Extensible arrows ──────────────────────────────────────────────────────
 
+    @testset "Extensible arrows without a MATH construction are built from pieces" begin
+        # Fira Math has no horizontal constructions for arrows (Luciole and STIX
+        # Two lack some).  Like amsmath's \arrowfill@, TeXLayout then builds the
+        # arrow from a left piece, repeated extenders, and a right piece.
+        fira = font_family(:fira_math)
+        name(cp) = TeXLayout.glyph_name_by_codepoint(fira, UInt32(cp))
+        ink_left(g) = g.x + g.element.x_min / 1000 * g.scale
+        ink_right(g) = g.x + g.element.x_max / 1000 * g.scale
+        upm = TeXLayout.load_math_table(fira.math).upm
+        @test upm == 1000
+        for (source, pieces) in (
+                (raw"\xrightarrow{abcdef}", (0x2212, 0x2192)),
+                (raw"\xleftarrow{abcdef}", (0x2190, 0x2212)),
+                (raw"\xleftrightarrow{abcdef}", (0x2190, 0x2192)),
+                (raw"\xRightarrow{abcdef}", (0x003D, 0x21D2)),
+            )
+            glyphs = find_glyphs(layout(parse_latex(source), fira, Text))
+            labels = filter(g -> g.scale < 0.9, glyphs)
+            arrow = sort(filter(g -> g.scale ≈ 1.0, glyphs); by = g -> g.x)
+            @test length(arrow) >= 3
+            @test arrow[1].element.glyph_name == name(pieces[1])
+            @test arrow[end].element.glyph_name == name(pieces[2])
+            # The arrow spans the labels and sits below them, on the baseline.
+            @test ink_left(arrow[1]) < minimum(ink_left, labels)
+            @test ink_right(arrow[end]) > maximum(ink_right, labels)
+            @test all(g -> g.y == 0.0, arrow)
+            # Consecutive pieces overlap, so the shaft is continuous.
+            @test all(i -> ink_left(arrow[i + 1]) < ink_right(arrow[i]), 1:(length(arrow) - 1))
+        end
+        # An arrow with no piece decomposition keeps its glyph at natural width.
+        glyphs = find_glyphs(layout(parse_latex(raw"\xmapsto{abc}"), fira, Text))
+        @test count(g -> g.element.glyph_name == name(0x21A6), glyphs) == 1
+    end
+
     @testset "\\xrightarrow{f} lays out without error" begin
         boxes = layout(parse_latex(raw"\xrightarrow{f}"), family, Text)
         @test !isempty(boxes)
