@@ -877,6 +877,20 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
+    @testset "Math alphabets do not restyle \\text (LaTeX semantics)" begin
+        # \mathbf, \boldsymbol, \mathit, … select math fonts; \text sets its body
+        # in the surrounding text font, so it is unaffected (XeLaTeX with amsmath
+        # and unicode-math renders \mathbf{\text{a b}} as regular "a b").
+        layout_of(source) = [(b.element, b.x, b.y, b.scale) for b in layout(parse_latex(source), family, Text)]
+        plain = layout_of(raw"\text{a b}")
+        for cmd in (raw"\mathbf", raw"\boldsymbol", raw"\mathit", raw"\mathsf", raw"\mathbb", raw"\mathcal")
+            @test layout_of(cmd * raw"{\text{a b}}") == plain
+        end
+        # Math outside the \text keeps the alphabet: bold x and y, plain " if ".
+        names(source) = [b.element.glyph_name for b in sort(find_glyphs(layout(parse_latex(source), family, Text)); by = b -> b.x)]
+        @test names(raw"\mathbf{x\text{ if }y}") == [names(raw"\mathbf{x}"); names(raw"\text{if}"); names(raw"\mathbf{y}")]
+    end
+
     @testset "\\text{if } preserves trailing space" begin
         # A space at the end of a \text{} argument must survive as a Space element.
         boxes = layout(parse_latex(raw"\text{if }"), family, Text)

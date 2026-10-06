@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Math alphabets (`\mathbf`, `\boldsymbol`, `\mathit`, …) no longer restyle a
+  nested `\text{…}`, matching LaTeX: `\mathbf{\text{a b}}` is regular "a b".
+  Previously the text was drawn with Unicode math-alphabet letters and its
+  spaces with the math font's `space` glyph.  KaTeX keeps the math font here.
 - Inside a math `\text{…}`, spaces after a control word that takes no argument
   are dropped, as in TeX (`\text{a\quad b}` no longer adds an interword space
   after the quad); spaces after a control symbol such as `\,` are kept.

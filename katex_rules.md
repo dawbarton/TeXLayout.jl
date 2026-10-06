@@ -386,7 +386,7 @@ constants are noted for quick lookup.
 | `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
 | `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c with the Stack* constants and one mutual clearance; content-sized `()` delimiters via `_layout_delim!` (TeX uses fixed `delim1`/`delim2`) |
 | Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
-| `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
+| `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed.  An enclosing math alphabet (`\mathbf`, `\boldsymbol`, …) does not restyle the text, as in LaTeX; KaTeX deviates (its `makeOrd` keeps the math font in text mode) |
 | Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |
 | Escaped literal characters (`\#`, `\$`, `\%`, …) | `NodeKind.Char` in math; text buffer characters in documents | Shared special-character table plus mode-specific math/text aliases in `parser_tables.jl`; escaped dollars are excluded from Makie's math-shift count |
 | `default_font_family()` / `set_default_font_family!()` | — | Session-wide default; lazy artifact download; Makie extension picks up changes automatically |

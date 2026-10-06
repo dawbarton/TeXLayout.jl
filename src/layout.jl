@@ -139,13 +139,15 @@ end
 ) =
     scale * (size_scale(child_s, mc) / size_scale(parent_s, mc))
 
-# Return a copy of `ctx` with mode set to :text, preserving all other fields.
-# Used by NodeKind.Text so that character lookup uses upright (regular-font) glyphs and
-# math-mode italic remapping and inter-atom spacing are suppressed.
+# Return a copy of `ctx` with mode set to :text and no math alphabet.  Used by
+# NodeKind.Text so that character lookup uses upright (regular-font) glyphs and
+# math-mode italic remapping and inter-atom spacing are suppressed.  As in LaTeX,
+# an enclosing \mathbf, \boldsymbol, … does not restyle the text (KaTeX differs:
+# it keeps the math font inside \text).
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    LayoutMode.Text, ctx.font_variant, ctx.text_shaper,
+    LayoutMode.Text, :default, ctx.text_shaper,
 )
 
 # Return the TeX atom class for a given AST node.
