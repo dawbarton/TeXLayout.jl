@@ -263,9 +263,13 @@ function hlayout_math(
         style::TexStyle;
         shaper::TextShaper = MetricShaper(),
     )::TeXBox
-    boxes = layout(node, family, style; shaper)
+    boxes, advance = _layout_with_advance(node, family, style; shaper)
     upm = Float64(load_math_table(family.math).upm)
-    return measure(boxes, upm)
+    box = measure(boxes, upm)
+    # A trailing italic correction or space after a script has no box, but TeX
+    # counts it in the width of the math, so take the advance when it is larger.
+    advance > box.width || return box
+    return TeXBox(box.boxes, advance, box.ascent, box.descent)
 end
 
 function hlayout_run(run::Run, family::FontFamily, opts::LayoutOptions, base_scale::Float64)::TeXBox

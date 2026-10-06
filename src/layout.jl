@@ -428,8 +428,7 @@ function _base_italic_correction_em(
     for i in start:stop
         b = boxes[i]
         b.element isa Glyph || continue
-        ic = get(ctx.italic_corrections, b.element.glyph_name, 0)
-        return ic * scale / ctx.upm
+        return _math_italic_correction_em(ctx, b.element, scale)
     end
     return 0.0
 end
@@ -475,7 +474,30 @@ function _is_char_box(node::Node)::Bool
     # NodeKind.FontSwitch is constructed with exactly one body child by the parser, so the
     # recursion is unconditional.
     n.kind === NodeKind.FontSwitch && return _is_char_box(n.children[1])
+    # TeX replaces a group holding one ordinary atom by that atom, so `{x}` is a
+    # character box like `x`.
+    (n.kind === NodeKind.Group || n.kind === NodeKind.Sequence) && length(n.children) == 1 &&
+        return _is_char_box(n.children[1])
     return false
+end
+
+# Italic correction of a math-font glyph from the MATH table, in em at `scale`.
+# Glyphs from the text font slots (operator names, \text) get none.
+@inline _math_italic_correction_em(ctx::_LayoutCtx, g::Glyph, scale::Float64)::Float64 =
+    g.font_slot === FontSlot.Math ? get(ctx.italic_corrections, g.glyph_name, 0) * scale / ctx.upm : 0.0
+
+# The italic correction to take back from a base's advance when placing a
+# subscript.  A math character's advance includes its italic correction (see
+# _layout_char!), and TeX sets the subscript at the uncorrected advance and a
+# superscript at the corrected one (tex.web make_ord).  A large operator's
+# advance excludes it, and TeX removes it from the width when there is a
+# subscript (make_op), so the subscript sits under the slanted stroke.  Any
+# other base already ends with its last character's correction.
+function _subscript_italic_correction_em(
+        base::Node, boxes::Vector{LayoutBox}, start::Int, stop::Int, ctx::_LayoutCtx, scale::Float64
+    )::Float64
+    (_is_char_box(base) || _is_large_op(base)) || return 0.0
+    return _base_italic_correction_em(boxes, start, stop, ctx, scale)
 end
 
 # ── Recursive layout ──────────────────────────────────────────────────────────
@@ -595,7 +617,12 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     end
     g === nothing && return 0.0
     push!(boxes, LayoutBox(g, x0, y0, scale))
-    return g.advance_width / ctx.upm * scale
+    # A math character is followed by its italic correction (tex.web make_ord;
+    # XeTeX and LuaTeX keep this for OpenType math fonts).  Script placement
+    # takes it back for subscripts (_subscript_italic_correction_em).
+    w = g.advance_width / ctx.upm * scale
+    ctx.mode === LayoutMode.Math && (w += _math_italic_correction_em(ctx, g, scale))
+    return w
 end
 
 function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
@@ -657,7 +684,8 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         m.x_min, m.y_min, m.x_max, m.y_max
     )
     push!(boxes, LayoutBox(g, x0, y0, scale))
-    return g.advance_width / upm * scale
+    # Followed by its italic correction, like any math character (_layout_char!).
+    return g.advance_width / upm * scale + _math_italic_correction_em(ctx, g, scale)
 end
 
 function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
@@ -752,6 +780,17 @@ function layout(
         style::TexStyle;
         shaper = MetricShaper(),
     )::Vector{LayoutBox}
+    return first(_layout_with_advance(node, family, style; shaper))
+end
+
+# Lay out `node` and also return its total advance in em, which can exceed the
+# boxes' extent: a trailing italic correction is a kern, not a box.
+function _layout_with_advance(
+        node::Node,
+        family::FontFamily,
+        style::TexStyle;
+        shaper = MetricShaper(),
+    )::Tuple{Vector{LayoutBox}, Float64}
     mt = load_math_table(family.math)
     ctx = _LayoutCtx(
         family, mt.constants, Float64(mt.upm), mt.vert_constructions,
@@ -760,8 +799,8 @@ function layout(
         mt.min_connector_overlap, LayoutMode.Math, :default, shaper
     )
     boxes = LayoutBox[]
-    _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
-    return boxes
+    advance = _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
+    return boxes, advance
 end
 
 # ── Makie interface ────────────────────────────────────────────────────────────

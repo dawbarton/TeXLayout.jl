@@ -112,6 +112,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bottom of its glyph bounding box rather than its baseline, which pushed the
   tops of tall formulae off the canvas.  Every `makie_cairo` image changes, so
   references that include them must be regenerated.
+- Math characters are followed by their italic correction, as in TeX, so
+  `f(x)`, `f^2`, `fg`, and `y=` no longer crowd the overhang of a slanted
+  letter.  A subscript still sits at the uncorrected advance, under the slant
+  (`f_i`), and a one-character group (`{f}_i`) is treated as the character, as
+  TeX does.  Upright text and operator names get no correction.  The width of
+  a scripted atom no longer counts the correction taken back for its subscript,
+  which made `\int_0` and `V_i` too wide.  Inline math in documents now
+  measures to its full advance, so a trailing correction or the space after a
+  final script (`$x_i$ word`) separates it from the following text, as in TeX.
+  Widths of `$f$`, `$VW$`, `$\sqrt{f}$`, `$\overline{fy}$`, and `$b \pmod{n}$`
+  now equal LuaLaTeX's and XeLaTeX's.  Seven layout snapshots change for these
+  reasons alone.
 
 ## [v0.3.2] - 2026-07-26
 
