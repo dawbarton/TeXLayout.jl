@@ -1701,6 +1701,53 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test maximum(g.y for g in glyphs) > minimum(g.y for g in glyphs)
     end
 
+    @testset "\\binom: TeX Rule 15c with the MATH Stack* constants" begin
+        # A rule-less fraction uses num1/denom1 (Display) or num3/denom2 and one
+        # mutual clearance, 7θ or 3θ, between numerator and denominator, adding
+        # half of any shortfall to each shift (tex.web, make_fraction).  The
+        # OpenType equivalents are the Stack* constants (LuaTeX make_fraction).
+        c = mt.constants
+        ink_top(g) = g.y + g.element.y_max / FONT_UPM * g.scale
+        ink_bottom(g) = g.y + g.element.y_min / FONT_UPM * g.scale
+        for (style, up, down, gap) in (
+                (Display, c.stack_top_display_style_shift_up, c.stack_bottom_display_style_shift_down, c.stack_display_style_gap_min),
+                (Text, c.stack_top_shift_up, c.stack_bottom_shift_down, c.stack_gap_min),
+            )
+            up, down, gap = up / FONT_UPM, down / FONT_UPM, gap / FONT_UPM
+            # Vertical shift of an operand inside the binomial: match its glyphs
+            # against the same operand laid out alone in its own style.
+            function operand_shift(boxes, source, operand_style)
+                alone = find_glyphs(layout(parse_latex(source), family, operand_style))
+                return only(
+                        unique(
+                            round(b.y - a.y; digits = 9) for a in alone for b in boxes
+                            if b.element == a.element && b.scale ≈ a.scale
+                        )
+                    ), alone
+            end
+
+            # Shallow operands: the standard shifts apply (no shortfall in New CM).
+            boxes = find_glyphs(layout(parse_latex(raw"\binom{n}{k}"), family, style))
+            num_shift, _ = operand_shift(boxes, "n", frac_num_style(style))
+            den_shift, _ = operand_shift(boxes, "k", frac_den_style(style))
+            @test num_shift ≈ up atol = 1.0e-9
+            @test -den_shift ≈ down atol = 1.0e-9
+
+            # Deep operands force the mutual clamp: both shifts grow by the same
+            # amount, and the clearance becomes exactly the gap minimum.
+            num_src, den_src = raw"\frac{a}{\frac{b}{c}}", raw"\frac{\frac{d}{e}}{f}"
+            boxes = find_glyphs(layout(parse_latex("\\binom{" * num_src * "}{" * den_src * "}"), family, style))
+            num_shift, num_alone = operand_shift(boxes, num_src, frac_num_style(style))
+            den_shift, den_alone = operand_shift(boxes, den_src, frac_den_style(style))
+            Δnum, Δden = num_shift - up, -den_shift - down
+            @test Δnum > 0.0
+            @test Δnum ≈ Δden atol = 1.0e-9
+            num_depth = -minimum(ink_bottom, num_alone)
+            den_height = maximum(ink_top, den_alone)
+            @test (num_shift - num_depth) - (den_height + den_shift) ≈ gap atol = 1.0e-9
+        end
+    end
+
     @testset "\\binom{a}{b} contains no HRule (no fraction bar)" begin
         boxes = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
         @test isempty(find_hrules(boxes))

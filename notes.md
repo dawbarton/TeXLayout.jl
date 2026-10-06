@@ -1520,3 +1520,29 @@
   match TeXLayout exactly in STIX Two, and drift after `y`, `f`, and `d` in New CM
   and Termes under both, so the difference depends on the font's italic
   corrections, not on the engine.
+
+## 2026-10-05T16:21+01:00 Follow-up 2.1: \binom and the Stack* constants
+
+- tex.web `make_fraction` (§§743–748): without a rule, display uses num1/denom1
+  and clearance 7θ, otherwise num3/denom2 and 3θ; `delta = half(clr - actual)`
+  is added to both shifts. Delimiters use the fixed sizes delim1/delim2.
+- OpenType spec: `stackGapMin` "Suggested: 3 × default rule thickness",
+  `stackDisplayStyleGapMin` "7 × default rule thickness";
+  `fractionNumeratorDisplayStyleShiftUp` "Suggested: same value as
+  stackTopDisplayStyleShiftUp" (likewise the display denominator).
+- LuaTeX `mlist.c`: rule-less fractions use `stack_num_up`/`stack_denom_down`/
+  `stack_vgap` = StackTop(Display)ShiftUp / StackBottom(Display)ShiftDown /
+  Stack(Display)GapMin; for TFM fonts these are filled from num3, num1, denom2,
+  denom1 (lines ~820–826). XeTeX (`XeTeXOTMath.cpp`, `TeX_sym_to_OT_map`) maps
+  num1/num2/denom1/denom2 to Fraction* and only num3 to StackTopShiftUp; its
+  `make_fraction` uses Stack(Display)GapMin for the clearance.
+- Bundled fonts: Stack* equals Fraction* except New CM text numerator (444 vs
+  394, i.e. CM's num3 vs num2), STIX Two (every shift differs, e.g. StackTopDisplay
+  780 vs 640, StackBottom 385 vs 585), and Luciole's display numerator (580 vs 300).
+- Implemented LuaTeX's mapping. Overlays isolate the shifts by comparing
+  `{num \atop den}` (`\nulldelimiterspace=0pt`) with TeXLayout's binomial minus
+  its delimiters: matches LuaLaTeX on all eight fonts; XeLaTeX agrees except STIX
+  Two and Luciole, as the constants predict.
+- Not changed: TeX sizes binomial delimiters with delim1/delim2 (XeTeX:
+  DelimitedSubFormulaMinHeight and min(1.5 em, delim1)); TeXLayout sizes them to
+  the content. `\atop`, `\choose`, and `\genfrac` remain unsupported.
