@@ -145,11 +145,14 @@ delimiters with `{num \atop den}`, isolating the vertical shifts.
 - **Display mode is not display style.**  `$\displaystyle …$` is still inline
   mode, so amsmath's `\if@display` (used by `\pmod` and friends) is false; the
   tool sets `\@displaytrue` for Display-style cases.
-- **Known residual differences**, not caused by the change under test: TeXLayout
-  adds no italic correction after math characters (visible after `f` or `y` in
-  New CM and Termes); unicode-math's `\mathbf` uses the bold text font, while
-  TeXLayout uses Unicode math-alphabet letters; LaTeX adds an italic correction
-  after `\textit{…}`.
+- **Known residual differences**, not caused by the change under test:
+  TeXLayout does not use the `ssty` script-size glyph variants, so its scripts
+  are narrower than TeX's (New CM `i.st` is 404 units wide against 345 for `i`);
+  it has no OpenType math kerning (`MathKernInfo`) between a base and its
+  scripts; it adds no `\nulldelimiterspace` (1.2 pt in LaTeX) either side of
+  `\frac`; unicode-math's `\mathbf` uses the bold text font, while TeXLayout
+  uses Unicode math-alphabet letters; LaTeX adds an italic correction after
+  `\textit{…}`.
 
 ### Stress references
 

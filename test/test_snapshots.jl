@@ -1,21 +1,21 @@
 using SHA
 
 const SNAPSHOT_MATH_CASES = [
-    ("simple_atom", raw"x+y=z", "c406b97f98f6af05b1c4ebd3799146c83cbb0d3954eb459706ac6e10e213c3f4"),
+    ("simple_atom", raw"x+y=z", "e6602eacd72a905048cffc0c2ec8ad9bcbd7a1df29ae4fe2b0de981fd31ddf84"),
     ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "8590527a7489dd33a2f7c5ae9db6cdf8c42ccc64dd8f89b0b5e4268cf1f88aca"),
-    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "413d86661ebf097751806d50b9f63148fd8758d5b880d113fe41b15cf7880716"),
-    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "d9e0cafba1bfb7f18ec3a45d3e2d576b8b20639919ad8c41953afbf705633f8b"),
-    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "e5733c68ddfc5dd66a8ca3e69387c56e7d26062f05fe985cb889d1c8901828be"),
+    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "2157c21643a4090b28bb59bd15166e0589e08bb0c64676c7a883709273052467"),
+    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "68f95243cb51d3f6846e121840d2d7c0eaf6b318955258833f9379dd8c12f6a0"),
+    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "ea1a16135a9433bb0356309eaec3607e1587c8ee538ba95cc6c67d5760dd9289"),
     ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "e1950914fa964ae4c7f30c182137d7750da18a2de46ed0be1aa5440b0828b075"),
     # Display alignment environments typeset cells in Display style: fractions and
     # scripts keep full display size (contrast with the text-sized matrix cells above).
-    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "aa578c377988691ecc2fa19c38bb2458c9b6805ddf58bc33016c4be598309a70"),
+    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "6ada751677923d5bb91b2218afe62822c1dfbef8a750beb15427b057749d9fc1"),
     ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "f54bd6a7425b58b1e466221d5e924f33bb7844ff2bdcac07ca38a9b1cde4c4a2"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "ffce075175996408630eb01c5b0e6abd579476b12d10d8ae68ec0fe8d70bdbb0"),
-    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "7d6a2b3a26baa8504f046bc567a05c109c7f4e81d8f18f7a6478161da24417e0"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "789c8ef0f310f5f949ca502bb7fab972eda2255a8d4857c04a64f8822ccc8d11"),
+    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "b363bb9f6cc25cb4b967de541d791fad42a24aa887ea8d9a7e39208f6c4b9589"),
 ]
 
 _snapshot_float(x) = string(round(Float64(x); digits = 10))

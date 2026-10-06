@@ -99,6 +99,13 @@ const _XARROW_CODEPOINTS = Dict{String, UInt32}(
     "\\xlongequal" => 0x003D,  # = (plain equals; extensible via horiz_constructions)
 )
 
+# TeX's delim1 and delim2 (Rule 15e) in em: the minimum delimiter size for a
+# generalized fraction such as \binom in Display style and in other styles.
+# The MATH table has no equivalent; these are Computer Modern's values
+# (cmsy10 \fontdimen20 and 21), which KaTeX also uses.  LuaTeX's luaotfload
+# defaults to 2.40 and 1.01; XeTeX substitutes DelimitedSubFormulaMinHeight.
+const _GENFRAC_DELIM_EM = (2.39, 1.01)
+
 # Pieces (left, extender, right) for building an extensible arrow when the font's
 # MATH table has no horizontal construction for it, as amsmath's \arrowfill@
 # does with \relbar (minus) and \Relbar (equals).  Arrows not listed here (hooks,

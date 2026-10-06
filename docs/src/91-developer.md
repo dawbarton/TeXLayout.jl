@@ -508,12 +508,17 @@ All three use the following MATH table constants (all in design units):
 | `sub_superscript_gap_min` | Minimum gap between superscript bottom and subscript top |
 | `superscript_bottom_max_with_subscript` | When both are present: superscript bottom clipped to this value |
 
-**Italic correction** — for slanted single-glyph bases (e.g. `\int`), the subscript
-is shifted left by the glyph's italic correction value from the MATH table.  The helper
-`_base_italic_correction_em(boxes, ctx, scale)` returns the italic correction of the
-first `Glyph` in a box list, converted to em units.  This matches KaTeX's `supsub.ts`
-behaviour exactly: the full IC shift is applied to the subscript, and no IC shift is
-applied to the superscript (which is already displaced by the base's advance).
+**Italic correction** — as in TeX's `make_ord`, `_layout_char!` and the
+ordinary-symbol path of `_layout_command!` return a math character's advance plus
+its MATH-table italic correction (`_math_italic_correction_em`; text-font glyphs
+get none).  Script placement takes the correction back for a subscript:
+`_subscript_italic_correction_em` returns it for a character base (`_is_char_box`)
+or a large operator, whose own advance excludes it (XeTeX's `make_op`), and 0
+otherwise.  The subscript then sits at `base_adv - ic`, the superscript at
+`base_adv`, and the scripted atom is `base_adv - ic + max(sub, ic + sup)` plus
+`SpaceAfterScript` wide.  `hlayout_math` keeps the advance returned by
+`_layout_node!` as the width of inline math, so a trailing correction, which has
+no box of its own, still counts.
 
 ### Fraction layout
 

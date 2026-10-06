@@ -179,10 +179,9 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     return frac_w
 end
 
-# Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction wrapped
-# in auto-sized delimiters.  Implements Rule 15c (no-rule fraction) and sizes
-# the delimiters symmetrically around the math axis using the same algorithm as
-# NodeKind.Delimited (TeX instead uses the fixed sizes delim1/delim2).
+# Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction
+# between delimiters.  Implements Rule 15c (no-rule fraction) and Rule 15e
+# (delimiters of fixed size delim1/delim2, centred on the math axis).
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
 
@@ -195,8 +194,6 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     num_scale = _scale_for_child(scale, style, num_s, mc)
     den_s = frac_den_style(style)
     den_scale = _scale_for_child(scale, style, den_s, mc)
-
-    axis_h = mc.axis_height / upm * scale
 
     # Rule 15c (no fraction rule): TeX uses num1/denom1 in Display style and
     # num3/denom2 otherwise, with one mutual clearance of 7θ or 3θ.  The MATH
@@ -234,13 +231,9 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     inner_w = max(num_w, den_w)
 
-    # Compute the vertical extent of the fraction for delimiter sizing.
-    # Both measured relative to y0 (i.e. the formula baseline).
-    inner_top = num_shift + _boxes_top(boxes, num_start, num_stop, upm)
-    inner_bot = -den_shift + _boxes_bottom(boxes, den_start, den_stop, upm)
-    h_above = max(0.0, inner_top - axis_h)
-    h_below = max(0.0, axis_h - inner_bot)
-    required_du = 2.0 * max(h_above, h_below) / scale * upm
+    # Rule 15e: the delimiters have a fixed size, delim1 in Display style and
+    # delim2 otherwise, whatever the content (see _GENFRAC_DELIM_EM).
+    required_du = (is_display(style) ? _GENFRAC_DELIM_EM[1] : _GENFRAC_DELIM_EM[2]) * upm
 
     # Place left delimiter, fraction content (centred), right delimiter.
     cursor = x0
@@ -544,7 +537,8 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     # glyph with a known attachment point, align the attachment x of the accent
     # to the attachment x of the base.  Fall back to centering when attachment
     # data is unavailable.
-    base_attach_du = if base_start == base_stop && boxes[base_start].element isa Glyph
+    single_glyph = base_start == base_stop && boxes[base_start].element isa Glyph
+    base_attach_du = if single_glyph
         get(ctx.top_accent_attachments, (boxes[base_start].element::Glyph).glyph_name, nothing)
     else
         nothing
@@ -554,9 +548,13 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
         x0 + (base_attach_du - accent_attach_du) * scale / upm
     else
-        # Centre by ink midpoint rather than advance_width/2: handles zero-advance
-        # combining characters (adv_w=0, x_min/x_max negative).
-        x0 + base_w / 2 - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
+        # A single glyph is centred on its advance, excluding the italic
+        # correction in base_w, as HarfBuzz's default attachment is (XeTeX); a
+        # longer base on its whole width.  Centre the accent by its ink midpoint
+        # rather than advance_width/2: handles zero-advance combining characters
+        # (adv_w=0, x_min/x_max negative).
+        base_mid = single_glyph ? (boxes[base_start].element::Glyph).advance_width * scale / (2.0 * upm) : base_w / 2
+        x0 + base_mid - (accent_m.x_min + accent_m.x_max) * scale / (2.0 * upm)
     end
 
     push!(

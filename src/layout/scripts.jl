@@ -92,12 +92,11 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
         min(y0 - min_sub, _boxes_bottom(boxes, base_start, base_stop, upm) - mc.subscript_baseline_drop_min * s)
     # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
     y_sub = min(y_sub, y0 - _boxes_top(boxes, sub_start, sub_stop, upm) + mc.subscript_top_max * s)
-    # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
-    # shifted left by the full IC so it sits under the stroke, not the advance width.
-    # Matches KaTeX supsub.ts: marginLeft = makeEm(-italic_correction) on subscript.
-    ic_em = _base_italic_correction_em(boxes, base_start, base_stop, ctx, scale)
+    # The subscript sits at the base's uncorrected advance (see
+    # _subscript_italic_correction_em).
+    ic_em = _subscript_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
     _translate_range!(boxes, sub_start, sub_stop, x0 + base_adv - ic_em, y_sub)
-    return base_adv + sub_adv + mc.space_after_script * s
+    return base_adv - ic_em + sub_adv + mc.space_after_script * s
 end
 
 function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
@@ -153,10 +152,9 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
     sup_stop = lastindex(boxes)
     script_x = x0 + base_adv
-    # Italic correction: subscript on a slanted single-glyph base (e.g. ∫) is
-    # shifted left by the full IC so it sits under the stroke, not the advance width.
-    # Superscript is not shifted. Matches KaTeX supsub.ts behaviour.
-    ic_em = _base_italic_correction_em(boxes, base_start, base_stop, ctx, scale)
+    # The subscript sits at the base's uncorrected advance and the superscript
+    # at the full advance (see _subscript_italic_correction_em).
+    ic_em = _subscript_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
     s = scale / upm
     min_sup = is_cramped(style) ?
         mc.superscript_shift_up_cramped * s :
@@ -188,5 +186,5 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     end
     _translate_range!(boxes, sub_start, sub_stop, script_x - ic_em, y_sub)
     _translate_range!(boxes, sup_start, sup_stop, script_x, y_sup)
-    return base_adv + max(sub_adv, sup_adv) + mc.space_after_script * s
+    return base_adv - ic_em + max(sub_adv, ic_em + sup_adv) + mc.space_after_script * s
 end
