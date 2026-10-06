@@ -10,6 +10,10 @@ struct Token
     pos::Int        # 1-based byte offset in the source string
 end
 
+# Whitespace that may fill a blank line: the same set as `_BLANK_LINE_RE` in
+# document.jl.  `\r` matters for CRLF input, where a blank line is "\r\n".
+@inline _is_blank_line_filler(c::Char) = c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v'
+
 """
     tokenize(input) -> Vector{Token}
 
@@ -77,9 +81,11 @@ function tokenize(input::AbstractString)::Vector{Token}
             if eol > n
                 i = eol   # comment runs to end of input
             else
-                # Peek past the newline: is the next line blank (only spaces/tabs)?
+                # Peek past the newline: is the next line blank?  Blank-line
+                # filler matches the document parser's `_BLANK_LINE_RE`, so a
+                # CRLF blank line ("\r\n") counts as blank.
                 m = nextind(s, eol)
-                while m <= n && (s[m] == ' ' || s[m] == '\t')
+                while m <= n && _is_blank_line_filler(s[m])
                     m = nextind(s, m)
                 end
                 i = (m <= n && s[m] == '\n') ? eol : m   # keep break, else join lines

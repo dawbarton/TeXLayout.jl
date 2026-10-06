@@ -662,6 +662,95 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Limits: two-word operator names have a thin space" begin
+        # amsopn defines \liminf as \qopname\relax m{lim\,inf} (likewise \limsup,
+        # \injlim, \projlim): a 3 mu thin space separates the words, and the
+        # operator takes limits in Display style.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        for (cmd, word1, word2) in (
+                ("\\liminf", "lim", "inf"), ("\\limsup", "lim", "sup"),
+                ("\\injlim", "inj", "lim"), ("\\projlim", "proj", "lim"),
+            )
+            for (source, scale) in ((cmd, 1.0), ("x_{" * cmd * "}", mt.constants.script_percent_scale_down / 100))
+                glyphs = sort(filter(g -> g.scale ≈ scale, find_glyphs(layout(parse_latex(source), family, Text))); by = g -> g.x)
+                @test length(glyphs) == length(word1) + length(word2)
+                last1, first2 = glyphs[length(word1)], glyphs[length(word1) + 1]
+                @test first2.x - (last1.x + advance(last1)) ≈ 3 / 18 * scale
+            end
+            # Limits placement in Display style is unchanged.
+            glyphs = find_glyphs(layout(parse_latex(cmd * "_{n}"), family, Display))
+            sub = only(filter(b -> b.scale < 0.9, glyphs))
+            @test sub.y < 0.0
+            @test sub.x > 0.0
+        end
+    end
+
+    @testset "Limits: \\operatorname* and \\displaylimits take limits in Display only" begin
+        # \displaylimits (TeX's default for \mathop, and amsopn's flag for
+        # \operatorname*) behaves as \limits in Display style and as \nolimits
+        # otherwise.
+        positions(source, style) = [(b.x, b.y, b.scale) for b in layout(parse_latex(source), family, style)]
+        for (base, starred) in (
+                (raw"\operatorname{arg\,max}", raw"\operatorname*{arg\,max}"),
+                (raw"\int", raw"\int\displaylimits"),
+            )
+            limits, nolimits = base * raw"\limits_{x}", base * raw"\nolimits_{x}"
+            @test positions(limits, Display) != positions(nolimits, Display)   # not vacuous
+            @test positions(starred * "_{x}", Display) == positions(limits, Display)
+            @test positions(starred * "_{x}", Text) == positions(nolimits, Text)
+        end
+        # The unstarred form never takes limits.
+        @test positions(raw"\operatorname{arg\,max}_{x}", Display) ==
+            positions(raw"\operatorname{arg\,max}\nolimits_{x}", Display)
+        # The thin space in arg\,max is kept.
+        glyphs = sort(find_glyphs(layout(parse_latex(raw"\operatorname{arg\,max}"), family, Text)); by = g -> g.x)
+        @test length(glyphs) == 6
+        g, m = glyphs[3], glyphs[4]
+        @test m.x - (g.x + g.element.advance_width / FONT_UPM * g.scale) ≈ 3 / 18
+    end
+
+    @testset "\\bmod, \\pmod, \\mod, \\pod spacing follows amsmath" begin
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        # Gap between the end of glyph i and the start of glyph i + 1, sorted by x.
+        function gaps(source, style)
+            glyphs = sort(find_glyphs(layout(parse_latex(source), family, style)); by = g -> g.x)
+            return [glyphs[i + 1].x - (glyphs[i].x + advance(glyphs[i])) for i in 1:(length(glyphs) - 1)]
+        end
+        sscale = mt.constants.script_percent_scale_down / 100
+        # a mod b: 5 mu either side in every style (glyphs a m o d b).
+        for (source, style, s) in ((raw"a \bmod b", Display, 1.0), (raw"a \bmod b", Text, 1.0), (raw"x_{a \bmod b}", Text, sscale))
+            g = gaps(source, style)
+            @test g[end - 3] ≈ 5 / 18 * s
+            @test g[end] ≈ 5 / 18 * s
+        end
+        # b (mod n): 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n.
+        for (style, kern) in ((Display, 18), (Text, 8))
+            g = gaps(raw"b \pmod{n}", style)   # b ( m o d n )
+            @test g[1] ≈ kern / 18
+            @test g[5] ≈ 6 / 18
+            @test gaps(raw"b \pod{n}", style)[1] ≈ kern / 18
+        end
+        # b mod n: 18 mu (Display) or 12 mu before "mod", then two thin spaces.
+        for (style, kern) in ((Display, 18), (Text, 12))
+            g = gaps(raw"b \mod{n}", style)   # b m o d n
+            @test g[1] ≈ kern / 18
+            @test g[4] ≈ 6 / 18
+        end
+    end
+
+    @testset "\\mathchoice selects its argument by style" begin
+        chosen(source, style) = [g.element.glyph_name for g in find_glyphs(layout(parse_latex(source), family, style))]
+        choice = raw"\mathchoice{a}{b}{c}{d}"
+        @test chosen(choice, Display) == chosen("a", Display)
+        @test chosen(choice, Text) == chosen("b", Text)
+        @test chosen("x_{" * choice * "}", Text) == chosen("x_{c}", Text)
+        @test chosen("x_{y_{" * choice * "}}", Text) == chosen("x_{y_{d}}", Text)
+        # The chosen list is spliced into the surrounding list for spacing:
+        # a + \mathchoice{+}{+}{+}{+} b has the same layout as a + + b.
+        positions(source) = [(b.x, b.y) for b in layout(parse_latex(source), family, Text)]
+        @test positions(raw"a \mathchoice{+}{+}{+}{+} b") == positions(raw"a + b")
+    end
+
     # ── Font switching ──────────────────────────────────────────────────────────
 
     @testset "FontSwitch: \\mathbf{x} renders one glyph" begin

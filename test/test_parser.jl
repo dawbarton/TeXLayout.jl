@@ -874,6 +874,94 @@
         end
     end
 
+    @testset "Two-word operator names carry a thin space: \\liminf, \\injlim" begin
+        for (name, spelling) in (
+                ("liminf", "lim inf"), ("limsup", "lim sup"),
+                ("injlim", "inj lim"), ("projlim", "proj lim"),
+            )
+            op = only(parse_latex("\\" * name).children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == name
+            @test join(c.kind === NodeKind.Space ? " " : c.value for c in op.children) == spelling
+            @test only(filter(c -> c.kind === NodeKind.Space, op.children)).width ≈ 3 / 18
+        end
+    end
+
+    @testset "\\operatorname* takes \\displaylimits; spaces in the name are kept" begin
+        for source in (raw"\operatorname*{arg\,max}", raw"\operatorname *{arg\,max}")
+            node = only(parse_latex(source).children)
+            @test node.kind === NodeKind.LimitsOverride
+            @test node.value == "displaylimits"
+            op = only(node.children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == "argmax"
+            @test [c.kind for c in op.children] == [
+                NodeKind.Char, NodeKind.Char, NodeKind.Char, NodeKind.Space,
+                NodeKind.Char, NodeKind.Char, NodeKind.Char,
+            ]
+            @test op.children[4].width ≈ 3 / 18
+        end
+        # Unstarred: a plain operator, and no stray `*`.
+        op = only(parse_latex(raw"\operatorname{arg\,max}").children)
+        @test op.kind === NodeKind.Operator
+        @test op.value == "argmax"
+        @test length(op.children) == 7
+        @test isempty(only(parse_latex(raw"\operatorname{ker}").children).children)
+    end
+
+    @testset "\\limits, \\nolimits, \\displaylimits: the last modifier wins" begin
+        node = only(parse_latex(raw"\operatorname*{f}\nolimits_x").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Operator
+
+        node = only(parse_latex(raw"\sum\limits \nolimits_i").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Command
+
+        node = only(parse_latex(raw"\int\displaylimits_0^1").children)
+        @test node.kind === NodeKind.Decorated
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "displaylimits"
+    end
+
+    @testset "\\bmod, \\pmod, \\mod, \\pod expand to their amsmath spelling" begin
+        kinds(node) = [c.kind for c in node.children]
+        # \bmod: 5 mu, upright "mod", 5 mu, as one ordinary group.
+        a, bmod, b = parse_latex(raw"a \bmod b").children
+        @test bmod.kind === NodeKind.Group
+        @test kinds(bmod) == [NodeKind.Space, NodeKind.Operator, NodeKind.Space]
+        @test bmod.children[2].value == "mod"
+        @test all(c -> c.width ≈ 5 / 18, bmod.children[[1, 3]])
+        # \pod{n}: choice of 18 mu (display) or 8 mu, then (n).
+        pod = only(parse_latex(raw"\pod{n}").children)
+        @test kinds(pod) == [NodeKind.MathChoice, NodeKind.Char, NodeKind.Char, NodeKind.Char]
+        @test [c.value for c in pod.children[2:4]] == ["(", "n", ")"]
+        @test [only(c.children).width for c in pod.children[1].children] ≈ [18, 8, 8, 8] ./ 18
+        # \pmod{n} is \pod{{mod}\mkern6mu n}.
+        pmod = only(parse_latex(raw"\pmod{n}").children)
+        @test kinds(pmod) == [
+            NodeKind.MathChoice, NodeKind.Char, NodeKind.Group, NodeKind.Space, NodeKind.Char, NodeKind.Char,
+        ]
+        @test only(pmod.children[3].children).value == "mod"
+        @test pmod.children[4].width ≈ 6 / 18
+        # \mod{n}: 18 mu (display) or 12 mu, {mod}, \,\, n.
+        mod = only(parse_latex(raw"\mod {n+1}").children)
+        @test kinds(mod) == [
+            NodeKind.MathChoice, NodeKind.Group, NodeKind.Space, NodeKind.Space,
+            NodeKind.Char, NodeKind.Char, NodeKind.Char,
+        ]
+        @test [only(c.children).width for c in mod.children[1].children] ≈ [18, 12, 12, 12] ./ 18
+    end
+
+    @testset "\\mathchoice takes four arguments" begin
+        node = only(parse_latex(raw"\mathchoice{a}{b} {c}d").children)
+        @test node.kind === NodeKind.MathChoice
+        @test length(node.children) == 4
+    end
+
     @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
         for (left, right, glyph) in (
                 (raw"\vert", raw"\vert", "bar"),

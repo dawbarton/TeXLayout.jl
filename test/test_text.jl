@@ -1327,6 +1327,13 @@
             doc = TeXLayout.parse_document("a%\n\nb")
             paras = filter(b -> b isa TeXLayout.ParagraphBlock, doc)
             @test length(paras) == 2
+            # Windows line endings: the blank line is "\r\n", not "\n".
+            for source in ("a%\r\n\r\nb", "a%\n\t\r\nb")
+                doc = TeXLayout.parse_document(source)
+                paras = filter(b -> b isa TeXLayout.ParagraphBlock, doc)
+                @test length(paras) == 2
+            end
+            @test para_text("foo%comment\r\n  bar") == "foobar"
         end
 
         @testset "Escaped specials and text literal aliases render literally" begin

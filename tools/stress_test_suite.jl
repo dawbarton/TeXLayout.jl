@@ -12,7 +12,7 @@ using TeXLayout
 using TeXLayout: FontFamily, LayoutBox, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
-using Colors: Gray, RGB, N0f8
+using Colors: Gray, RGB, N0f8, color
 using Downloads
 using SHA
 using Tar
@@ -80,6 +80,12 @@ const MAKIE_CASES = [
         name = "math special characters",
         source = raw"\#\;\$\;\%\;\&\;\_\;\{\;\}\;\|",
     ),
+    (
+        # A multi-byte character before the closing `$` (L"$2π$").
+        section = "9. NON-ASCII SOURCE",
+        name = "non-ASCII before closing dollar",
+        source = "2π",
+    ),
 ]
 
 # ── Small utilities ──────────────────────────────────────────────────────────
@@ -104,6 +110,14 @@ end
 
 function _read_png(path::String)::Matrix{UInt8}
     return collect(reinterpret(UInt8, PNGFiles.load(path)))
+end
+
+# CairoMakie saves RGB(A) PNGs.  Convert them to the grey canvas used by the
+# other suites; reinterpreting colour pixels as UInt8 would turn each channel
+# into its own image row (stretching the image and striping it with alpha).
+function _read_png_gray(path::String)::Matrix{UInt8}
+    image = PNGFiles.load(path)
+    return collect(reinterpret(UInt8, Gray{N0f8}.(color.(image))))
 end
 
 function _font_name(family::FontFamily)::String
@@ -219,11 +233,20 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         CairoMakie.xlims!(ax, 0, w)
         CairoMakie.ylims!(ax, 0, h)
 
-        x = margin - bx1 * px
-        y = margin - by1 * px
+        # Makie aligns a LaTeXString by the bottom of its glyph bounding box
+        # (`:baseline` falls back to `:bottom`), not by the formula baseline.
+        # Shift the anchor by Makie's own alignment offset so that the TeXLayout
+        # origin lands on (x, y), as the em-space bounding box assumes.
+        latex = LaTeXStrings.LaTeXString("\$" * expr * "\$")
+        _, _, tex_offset = CairoMakie.Makie.texelems_and_glyph_collection(
+            latex, CairoMakie.Vec2f(px), (:left, :bottom), CairoMakie.Makie.to_rotation(0.0f0),
+            CairoMakie.RGBAf(0, 0, 0, 1), CairoMakie.RGBAf(0, 0, 0, 0), 0.0f0, -1.0f0,
+        )
+        x = margin - bx1 * px + tex_offset[1]
+        y = margin - by1 * px + tex_offset[2]
         CairoMakie.text!(
             ax, x, y;
-            text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
+            text = latex,
             fontsize = px,
             align = (:left, :bottom),
             space = :data,
@@ -233,7 +256,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         tmp = tempname() * ".png"
         try
             CairoMakie.save(tmp, fig)
-            return _read_png(tmp)
+            return _read_png_gray(tmp)
         finally
             rm(tmp; force = true)
         end

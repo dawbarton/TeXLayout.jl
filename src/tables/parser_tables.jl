@@ -269,7 +269,17 @@ const _OPERATOR_NAMES = Set{String}(
         "arcsin", "arccos", "arctan",
         "sinh", "cosh", "tanh", "coth",
         "ln", "lg", "log", "exp",
-        "lim", "limsup", "liminf", "sup", "inf", "max", "min",
+        "lim", "limsup", "liminf", "injlim", "projlim", "sup", "inf", "max", "min",
         "det", "dim", "ker", "deg", "gcd", "hom", "Pr", "arg",
     ]
+)
+
+# Operator names spelled as two words joined by a thin space (amsopn:
+# `\liminf` is `\qopname\relax m{lim\,inf}`).  Names not listed here are
+# spelled exactly as their command name.
+const _SPACED_OPERATOR_NAMES = Dict{String, Tuple{String, String}}(
+    "liminf" => ("lim", "inf"),
+    "limsup" => ("lim", "sup"),
+    "injlim" => ("inj", "lim"),
+    "projlim" => ("proj", "lim"),
 )

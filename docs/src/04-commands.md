@@ -63,7 +63,9 @@ In Display style, large operators are automatically enlarged using the font's
 `\prod`, `\coprod`, `\bigcap`, `\bigcup`, and all `\bigXxx` variants, limits
 placement (sub/superscript stacked above/below the operator) is used automatically
 in Display style; inline (beside-base) placement is used in Text style.  Use
-`\limits` or `\nolimits` to override this decision.
+`\limits` or `\nolimits` to override this decision, or `\displaylimits` to
+restore the automatic rule (limits in Display style only).  When several of
+these follow one base, the last one wins, as in TeX.
 
 `\sum`, `\prod`, `\coprod`, `\int`, `\iint`, `\iiint`, `\iiiint`, `\oint`,
 `\oiint`, `\oiiint`, `\bigcap`, `\bigcup`, `\bigsqcup`, `\bigsqcap`, `\bigwedge`,
@@ -73,14 +75,38 @@ in Display style; inline (beside-base) placement is used in Text style.  Use
 
 Rendered upright using the companion regular font (or the math font's own codepoint
 mapping where no regular font is configured).  In Display style, the operators
-`\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`, `\min`, `\det`, `\gcd`, and
-`\Pr` automatically use limits placement.
+`\lim`, `\limsup`, `\liminf`, `\injlim`, `\projlim`, `\sup`, `\inf`, `\max`,
+`\min`, `\det`, `\gcd`, and `\Pr` automatically use limits placement.
+`\limsup`, `\liminf`, `\injlim`, and `\projlim` set their two words with a thin
+space, as amsmath does ("lim sup").
 
 `\sin`, `\cos`, `\tan`, `\cot`, `\sec`, `\csc`, `\arcsin`, `\arccos`, `\arctan`,
-`\sinh`, `\cosh`, `\tanh`, `\coth`, `\ln`, `\lg`, `\log`, `\exp`, `\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`,
-`\min`, `\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
+`\sinh`, `\cosh`, `\tanh`, `\coth`, `\ln`, `\lg`, `\log`, `\exp`, `\lim`,
+`\limsup`, `\liminf`, `\injlim`, `\projlim`, `\sup`, `\inf`, `\max`, `\min`,
+`\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
 
 For an operator name that is not in the list above, use `\operatorname{name}`.
+The starred form `\operatorname*{name}` takes limits in Display style, like
+`\lim`.  Explicit spaces in the name are kept, so `\operatorname*{arg\,max}`
+renders "arg max".
+
+### Modular arithmetic
+
+`\bmod`, `\pmod`, `\mod`, and `\pod` follow amsmath:
+
+| Command | Output | Spacing |
+|---------|--------|---------|
+| `a \bmod b` | a mod b | 5 mu either side of "mod" |
+| `a \equiv b \pmod{n}` | a ≡ b (mod n) | 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n |
+| `a \equiv b \mod{n}` | a ≡ b mod n | 18 mu before "mod" in Display style, 12 mu otherwise; 6 mu before n |
+| `a \equiv b \pod{n}` | a ≡ b (n) | as `\pmod` |
+
+amsmath chooses the wider spaces in display *mode*; TeXLayout, like KaTeX, uses
+them in Display *style*, so the two differ only inside sub-formulae of a
+display, such as a fraction.
+
+`\mathchoice{D}{T}{S}{SS}` typesets one of its four arguments according to the
+current style (Display, Text, Script, ScriptScript), as in TeX.
 
 ## Delimiters
 
@@ -96,7 +122,7 @@ to cover the enclosed expression.  The size is selected from the font's
 | `\left[` | `\right]` |
 | `\left\{` | `\right\}` |
 | `\left\|`, `\left\vert`, or `\left\lvert` | `\right\|`, `\right\vert`, or `\right\rvert` |
-| `\left\|`, `\left\Vert`, or `\left\lVert` | `\right\|`, `\right\Vert`, or `\right\rVert` |
+| `\left\\|`, `\left\Vert`, or `\left\lVert` | `\right\\|`, `\right\Vert`, or `\right\rVert` |
 | `\left/` | `\right/` |
 | `\left\backslash` | `\right\backslash` |
 | `\left\langle` | `\right\rangle` |

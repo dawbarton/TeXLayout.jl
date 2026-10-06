@@ -220,7 +220,7 @@ const _CMD_ATOM_CLASS = Dict{String, Symbol}(
     "cdotp" => :punct,
     "ldotp" => :punct,
 
-    # ── Inner (ellipses, \bmod, \pmod) ──────────────────────────────────────
+    # ── Inner (ellipses) ──────────────────────────────────────────────────────
     "ldots" => :inner,
     "cdots" => :inner,
     "ddots" => :inner,
@@ -230,8 +230,6 @@ const _CMD_ATOM_CLASS = Dict{String, Symbol}(
     "dotsi" => :inner,
     "dotsm" => :inner,
     "dotso" => :inner,
-    "bmod" => :inner,
-    "pmod" => :inner,
 
     # ── Ordinary symbols ────────────────────────────────────────────────────
     # Greek lowercase

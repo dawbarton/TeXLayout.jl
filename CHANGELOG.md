@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Stress section "38. PARSER WHITESPACE & DELIMITER ALIASES", which sets spaced
+  or aliased spellings (`x ^2`, `\sqrt [3]{x}`, `\left\lvert`, `\bigl\vert`,
+  `\kern 1em`) beside their canonical forms, plus hyperbolic operator names, an
+  `array` colspec declaring more columns than are used, and brace notes under
+  `\large`.
+- A `makie_cairo` stress case for a non-ASCII character before the closing `$`
+  (`L"$2π$"`).
+- `\injlim` and `\projlim` (amsmath), which take limits in Display style.
+- `\operatorname*{…}` (amsmath), which takes limits in Display style only, and
+  the TeX primitive `\displaylimits`.
+- `\bmod`, `\pmod`, `\mod`, and `\pod` with amsmath's spacing (previously
+  `\bmod` rendered nothing and `\pmod{n}` dropped its argument), and the TeX
+  primitive `\mathchoice`.
+
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
   or `\limits` (`x ^2`, `\left(x\right) ^2`), after a control word that takes a
@@ -30,6 +45,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Makie extension no longer throws a `StringIndexError` for a
   `LaTeXString` whose last character before the closing `$` is non-ASCII
   (for example `L"$2π$"`).
+- `\liminf` and `\limsup` are set as "lim inf" and "lim sup" with amsmath's
+  3 mu thin space between the words, instead of as one word.
+- `\operatorname*{…}` no longer renders a literal `*` followed by the name in
+  math italic, and explicit spaces in an operator name (`\operatorname{arg\,max}`)
+  are kept instead of dropped.
+- When several of `\limits`, `\nolimits`, and `\displaylimits` follow one base,
+  the last one wins, as in TeX; previously the second was parsed as an empty atom
+  that captured the scripts.
+- The command reference's delimiter table shows `\left\|` for the double bar;
+  Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- A `%` comment followed by a blank line keeps the paragraph break with Windows
+  (CRLF) line endings, and when the blank line contains a form feed or vertical
+  tab, matching the document parser's own blank-line rule.
+- `makie_cairo` stress images are legible again.  The CairoMakie PNG was
+  reinterpreted byte by byte, stretching each image fourfold vertically and
+  striping it with the alpha channel, and Makie aligns a `LaTeXString` by the
+  bottom of its glyph bounding box rather than its baseline, which pushed the
+  tops of tall formulae off the canvas.  Every `makie_cairo` image changes, so
+  references that include them must be regenerated.
 
 ## [v0.3.2] - 2026-07-26
 

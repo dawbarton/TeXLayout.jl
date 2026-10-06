@@ -161,6 +161,22 @@
         @test occursin("\n\n", spaces[1].value)
     end
 
+    @testset "Comment before a blank line keeps the break with CRLF and other blanks" begin
+        # A blank line may contain `\r` (Windows line endings), `\f`, `\v`, or
+        # tabs; the document parser's blank-line rule accepts all of them.
+        for source in ("a%\r\n\r\nb", "a%\n\t\r\nb", "a%\n\f\nb", "a%\n\v\nb")
+            toks = tokenize(source)
+            spaces = [t for t in toks if t.kind === TokenKind.Space]
+            @test length(spaces) == 1
+            @test count(==('\n'), spaces[1].value) == 2
+        end
+        # A CRLF line ending after a comment still joins the lines.
+        toks = tokenize("foo%comment\r\n  bar")
+        @test [t.value for t in toks if t.kind === TokenKind.Char] ==
+            ["f", "o", "o", "b", "a", "r"]
+        @test all(t.kind !== TokenKind.Space for t in toks)
+    end
+
     @testset "Comment running to end of input emits no token" begin
         toks = tokenize("end%comment to EOF")
         @test [t.value for t in toks if t.kind === TokenKind.Char] ==

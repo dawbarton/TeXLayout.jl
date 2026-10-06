@@ -1417,3 +1417,77 @@
     are unsupported or approximated.
   - Global caches (`_FONT_CACHE`, `_MATH_TABLE_CACHE`, HarfBuzz caches) and the
     shared FreeType face `glyph` slot are not thread-safe.
+
+## 2026-10-05T15:21+01:00 PR #42 validation (Part 0 of the follow-up)
+
+- Stress comparison of `39867cf` (base) against PR #42 head `f59d869`, with
+  `--include-makie`: 1,344/1,344 images identical (1,024 `math_freetype`, 256
+  `text_freetype`, 64 `makie_cairo`). No regressions; snapshot hashes unchanged.
+- Tests on the PR branch: full suite 1,663/1,663 (HarfBuzz and Makie
+  extensions loaded), core `test/runtests.jl` 1,576/1,576. Every new PR testset
+  fails on the base source except the `\text{a b}` guard, which is meant to pass
+  on both.
+- Local `Pkg.test()` on Julia 1.13.0 fails before running any test with
+  "`MathTeXEngine` is a direct dependency, but does not appear in the manifest"
+  once a root `Manifest.toml` exists (sandbox issue, not a test failure). A
+  separate environment with TeXLayout developed plus the `[extras]` runs the
+  same suite.
+- Parse benchmark (BenchmarkTools, 3 s per case, minimum times): allocations
+  unchanged everywhere; time +0–8% on typical cases, +12% on the `cases`
+  matrix, +29% on a 26-letter space-separated string (about 12 ns per atom,
+  from the extra space lookahead in `_parse_atom!`). Layout dominates
+  `generate_tex_elements` by one to two orders of magnitude, so the end-to-end
+  effect is below noise.
+- `makie_cairo` stress images were unreadable before this session: the RGBA
+  PNG was reinterpreted as rows, and Makie aligns a `LaTeXString` by the bottom
+  of its glyph bounding box (`:baseline` falls back to `:bottom` in Makie's
+  `get_yshift`), so tall formulae lost their tops. Fixed in the stress tool;
+  every `makie_cairo` image changes.
+- Added stress section 38 (spaced/aliased spellings beside canonical forms) and
+  a Makie `2π` case; all render identically pairwise on all eight fonts.
+- Pre-existing issues seen while inspecting (identical on base, not PR #42):
+  Fira Math draws no extensible arrows (`\xrightarrow` and family) and does not
+  stretch `\widehat`/`\widetilde`; `\underbrace{x+y}_{n}^{m}` sets `m` as a side
+  superscript, whereas LaTeX defines `\underbrace` as `\mathop{…}\limits`, so
+  `m` should be a limit above; `\textbf\n\n{x}` drops the paragraph break
+  (TeX raises "Paragraph ended before … was complete" there).
+
+## 2026-10-05T15:56+01:00 Follow-up Part 1: small fixes
+
+- Comparison harness (scratch, not committed): XeLaTeX + unicode-math with the
+  bundled font files themselves (`\setmathfont{math.otf}[Path=…]`, regular font
+  as `\setmainfont`/`\setmathrm`), with TeXLayout's boxes overlaid in the same
+  PDF via `\XeTeXglyph <gid>` at the box positions (TikZ, multiply blend: cyan
+  XeTeX, magenta TeXLayout, dark where they agree). Two corrections make it
+  like-for-like: XeTeX uses `\scriptspace` (LaTeX 0.5pt) after scripts where
+  OpenType MATH, LuaTeX, and TeXLayout use `SpaceAfterScript`, so set
+  `\scriptspace` from the font; and Display cases need `\@displaytrue`
+  (amsmath's `\if@display`), because `$\displaystyle…$` is still inline mode.
+  `tools/stress_test_latex.jl` cannot do this: it loads no OpenType math font.
+- 1.1 CRLF: the lexer's blank-line peek after `%` now uses the same filler set
+  as `_BLANK_LINE_RE` (space, tab, `\r`, `\f`, `\v`).
+- 1.2 amsopn (`amsopn.dtx`, TL 2026): `\liminf` = `\qopname\relax m{lim\,inf}`,
+  likewise `\limsup`, `\injlim`, `\projlim`; `m` means `\displaylimits`.
+  Operators now carry spelling children (characters and spaces) when the body
+  is more than the name; `value` stays the lookup name. Added `\injlim`,
+  `\projlim`; not the `\var…lim` family (`\varinjlim`/`\varprojlim` need
+  `\underrightarrow`/`\underleftarrow`, which TeXLayout lacks).
+- 1.3 `\operatorname*` = `\qopname\newmcodes@ m`: new `"displaylimits"`
+  `LimitsOverride` flag (also the TeX primitive). Consecutive modifiers now
+  replace the flag (last wins) instead of the second one becoming an empty atom.
+- 1.4 `amsmath.dtx` lines 2110–2117: `\bmod` nets 5 mu either side in every
+  style, so it is an ordinary group [5 mu, mod, 5 mu], independent of whether
+  spaces are transparent to atom spacing. `\pod`/`\pmod`/`\mod` use
+  `\if@display` (display *mode*); implemented with a new `\mathchoice`
+  (`NodeKind.MathChoice`, spliced before spacing as in `mlist_to_hlist`), keyed
+  on display *style* as KaTeX does. The follow-up brief's recollection of
+  `\pmod` (always 18 mu) is the plain TeX definition, not amsmath's.
+- 1.5 In Markdown table cells `\|` is an escaped pipe even inside code; Julia's
+  Markdown also renders `<!-- … -->` as visible text, so no explanatory comment.
+- Found while comparing, not fixed (pre-existing): TeXLayout never appends the
+  italic correction after a math character, which TeX does when no subscript
+  follows (visible as drift after `f` in `f(x)`, `y` in `x+y=z`, `d` in New CM);
+  explicit spaces reset inter-atom spacing (Part 2.3), visible after `,\ `.
+- Parse-time cost: a `Dict` lookup in `_is_limits_modifier` slowed every atom
+  (x+y=z 178 → ~205 ns); plain string comparisons restore 181 ns. Layout
+  timings and all allocations unchanged.

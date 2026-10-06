@@ -3,7 +3,7 @@
 # NodeKind.Operator names that use limits placement in Display style (\lim, \max, etc.).
 const _LIMITS_OPERATORS = Set{String}(
     [
-        "lim", "limsup", "liminf",
+        "lim", "limsup", "liminf", "injlim", "projlim",
         "det", "gcd", "inf", "sup", "max", "min", "Pr",
     ]
 )

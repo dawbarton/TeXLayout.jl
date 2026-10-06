@@ -217,8 +217,19 @@ function _parse_text_argument!(p::_Parser)::Node
     end
 end
 
-@inline _is_limits_modifier(tok::Token) =
-    tok.kind === TokenKind.Command && (tok.value == "\\limits" || tok.value == "\\nolimits")
+# The NodeKind.LimitsOverride flag for \limits, \nolimits, or \displaylimits
+# (limits in Display style only, TeX's default for \mathop), else `nothing`.
+# Plain comparisons: this runs after every atom.
+@inline function _limits_flag(tok::Token)::Union{String, Nothing}
+    tok.kind === TokenKind.Command || return nothing
+    v = tok.value
+    v == "\\limits" && return "limits"
+    v == "\\nolimits" && return "nolimits"
+    v == "\\displaylimits" && return "displaylimits"
+    return nothing
+end
+
+@inline _is_limits_modifier(tok::Token) = _limits_flag(tok) !== nothing
 
 # Skip whitespace between a base and its scripts (`x ^2`, `\sum \limits_{i}`),
 # which TeX ignores in math mode.  The whitespace is consumed only when a script
@@ -241,12 +252,16 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
 
     base = _parse_primary!(p, isstop)
 
-    # Consume an explicit \limits or \nolimits modifier immediately after the primary,
-    # wrapping the base so the script branches can dispatch on it.
+    # Consume explicit \limits / \nolimits / \displaylimits modifiers after the
+    # primary, wrapping the base so the script branches can dispatch on it.  As
+    # in TeX the last modifier wins; it replaces an existing override (including
+    # the \displaylimits of \operatorname*) instead of nesting another wrapper.
     _skip_spaces_before_script!(p)
-    if _is_limits_modifier(_current(p))
-        flag = _advance!(p).value == "\\limits" ? "limits" : "nolimits"
-        base = Node(NodeKind.LimitsOverride, flag, [base])
+    while (flag = _limits_flag(_current(p))) !== nothing
+        _advance!(p)
+        inner = base.kind === NodeKind.LimitsOverride ? base.children[1] : base
+        base = Node(NodeKind.LimitsOverride, flag, [inner])
+        _skip_spaces_before_script!(p)
     end
 
     has_sup = false; has_sub = false
@@ -300,6 +315,58 @@ function _parse_optional_bracket!(p::_Parser, isstop)::Union{Node, Nothing}
     end
     _is_close_bracket(_current(p)) && _advance!(p)   # consume ']'
     return Node(NodeKind.Group, children)
+end
+
+# A named operator such as \sin.  `value` is the name used for lookups (limits,
+# tests); children spell the rendered body when it is more than the name's
+# letters, e.g. `lim`, thin space, `inf` for \liminf.
+function _operator_node(name::String)::Node
+    words = get(_SPACED_OPERATOR_NAMES, name, nothing)
+    words === nothing && return Node(NodeKind.Operator, name)
+    children = Node[Node(NodeKind.Char, string(c)) for c in words[1]]
+    push!(children, space_node(_SPACE_WIDTHS["\\,"]))
+    append!(children, Node(NodeKind.Char, string(c)) for c in words[2])
+    return Node(NodeKind.Operator, name, children)
+end
+
+# A kern of `display_mu` in Display style and `other_mu` otherwise.  amsmath
+# tests display *mode* (\if@display); like KaTeX, this approximates it with
+# display *style*, which differs only inside sub-formulae of a display.
+function _display_kern(display_mu::Real, other_mu::Real)::Node
+    branch(mu) = Node(NodeKind.Group, [space_node(mu / 18)])
+    return Node(NodeKind.MathChoice, [branch(display_mu), branch(other_mu), branch(other_mu), branch(other_mu)])
+end
+
+# amsmath's \pod, \pmod, and \mod, expanded around the parsed argument:
+#   \pod{#1}  = \if@display\mkern18mu\else\mkern8mu\fi(#1)
+#   \pmod{#1} = \pod{{\operator@font mod}\mkern6mu#1}
+#   \mod{#1}  = \if@display\mkern18mu\else\mkern12mu\fi{\operator@font mod}\,\,#1
+function _mod_node(cmd::String, arg::Node)::Node
+    body = arg.kind === NodeKind.Group || arg.kind === NodeKind.Sequence ? arg.children : [arg]
+    mod = Node(NodeKind.Group, [Node(NodeKind.Operator, "mod")])
+    thin = _SPACE_WIDTHS["\\,"]
+    children = if cmd == "\\mod"
+        Node[_display_kern(18, 12), mod, space_node(thin), space_node(thin), body...]
+    else
+        inner = cmd == "\\pmod" ? Node[mod, space_node(6 / 18), body...] : body
+        Node[_display_kern(18, 8), Node(NodeKind.Char, "("), inner..., Node(NodeKind.Char, ")")]
+    end
+    return Node(NodeKind.Group, children)
+end
+
+# Flatten the argument of \operatorname into its rendered spelling: upright
+# characters and explicit spaces (`arg\,max`).  Commands contribute their bare
+# names, as in `_node_text`.
+function _operator_body!(out::Vector{Node}, node::Node)::Vector{Node}
+    k = node.kind
+    if k === NodeKind.Char || k === NodeKind.Space
+        push!(out, node)
+    elseif k === NodeKind.Command
+        append!(out, Node(NodeKind.Char, string(c)) for c in _node_text(node))
+    elseif k === NodeKind.Sequence || k === NodeKind.Group
+        foreach(c -> _operator_body!(out, c), node.children)
+    end
+    return out
 end
 
 # Parse a single primary (no script decoration).
@@ -562,9 +629,30 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
         end
         return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
+    elseif cmd == "\\mathchoice"
+        # \mathchoice{D}{T}{S}{SS}: four math lists, one per style family.
+        return Node(NodeKind.MathChoice, [_parse_argument!(p, isstop) for _ in 1:4])
+
+    elseif cmd == "\\bmod"
+        # amsmath: \nonscript\mskip-\medmuskip\mkern5mu\mathbin{mod}\mkern5mu
+        # \nonscript\mskip-\medmuskip.  The negative glue cancels the automatic
+        # binary spacing, so the net effect is 5 mu either side in every style.
+        return Node(NodeKind.Group, [space_node(5 / 18), Node(NodeKind.Operator, "mod"), space_node(5 / 18)])
+
+    elseif cmd == "\\pod" || cmd == "\\pmod" || cmd == "\\mod"
+        return _mod_node(cmd, _parse_argument!(p, isstop))
+
     elseif cmd == "\\operatorname"
+        # amsopn: \operatorname* is \qopname\newmcodes@ m, i.e. limits in
+        # Display style only (\displaylimits); \@ifstar skips spaces before `*`.
+        n = _ignorable_space_run(p)
+        starred = _peek(p, n).kind === TokenKind.Char && _peek(p, n).value == "*"
+        starred && (p.pos += n + 1)
         arg = _parse_argument!(p, isstop)
-        return Node(NodeKind.Operator, _node_text(arg))
+        body = _operator_body!(Node[], arg)
+        children = any(c -> c.kind === NodeKind.Space, body) ? body : Node[]
+        op = Node(NodeKind.Operator, _node_text(arg), children)
+        return starred ? Node(NodeKind.LimitsOverride, "displaylimits", [op]) : op
 
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
         body = _parse_argument!(p, isstop)
@@ -609,7 +697,7 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
 
     else
         bare = cmd[2:end]   # strip leading '\'
-        return bare ∈ _OPERATOR_NAMES ? Node(NodeKind.Operator, bare) : Node(NodeKind.Command, cmd)
+        return bare ∈ _OPERATOR_NAMES ? _operator_node(bare) : Node(NodeKind.Command, cmd)
     end
 end
 
