@@ -56,6 +56,10 @@ mutable struct _RuntimeBundle
 end
 
 const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
+# Guards _RUNTIME_CACHE and each bundle's `fonts` and `glyph_indices`
+# (Base.Dict is not safe for concurrent use).  Reentrant because building a
+# bundle loads fonts through TeXLayout's own (separately locked) cache.
+const _CACHE_LOCK = ReentrantLock()
 
 # Strip surrounding $ delimiters that LaTeXStrings add automatically.
 # L"x^2" stores "$x^2$" internally; TeXLayout's parser expects no delimiters.
@@ -127,7 +131,7 @@ end
 @inline function _glyph_index(
         cache::Dict{Tuple{String, String}, Culong}, font, path::String, name::String
     )::Culong
-    return get!(cache, (path, name)) do
+    return @lock _CACHE_LOCK get!(cache, (path, name)) do
         _glyph_index_uncached(font, name)
     end
 end
@@ -170,7 +174,7 @@ end
     TeXLayout._font_family_key(tl_family)
 
 function _runtime_bundle(tl_family::TeXLayout.FontFamily)::_RuntimeBundle
-    return get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
+    return @lock _CACHE_LOCK get!(_RUNTIME_CACHE, _runtime_key(tl_family)) do
         slot_paths = Dict(
             TeXLayout.FontSlot.Math => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Math),
             TeXLayout.FontSlot.Regular => TeXLayout._slot_fallback(tl_family, TeXLayout.FontSlot.Regular),
@@ -196,7 +200,7 @@ function _glyph_index_for_slot(
         runtime::_RuntimeBundle, slot::TeXLayout.FontSlot.T, name::String
     )::Union{Tuple{Culong, FreeTypeAbstraction.FTFont}, Nothing}
     for path in runtime.slot_paths[slot]
-        font = runtime.fonts[path]
+        font = @lock _CACHE_LOCK runtime.fonts[path]
         gid = _glyph_index(runtime.glyph_indices, font, path, name)
         gid > 0 && return (gid, font)
     end
@@ -204,7 +208,7 @@ function _glyph_index_for_slot(
 end
 
 function _font_for_path(runtime::_RuntimeBundle, path::String)::FreeTypeAbstraction.FTFont
-    return get!(runtime.fonts, path) do
+    return @lock _CACHE_LOCK get!(runtime.fonts, path) do
         font, _ = TeXLayout._load_font(path)
         font
     end
