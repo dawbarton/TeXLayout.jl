@@ -836,6 +836,14 @@
             end
         end
 
+        @testset "Space after a control word inside \\text{} is dropped" begin
+            # TeX skips spaces after a control word in every mode, but not after a
+            # control symbol such as \, or after an argument's closing brace.
+            show(n) = n.kind === NodeKind.Space ? "space($(round(n.width; digits = 3)))" : n.kind === NodeKind.Char ? n.value : string(n.kind)
+            body = only(parse_latex(raw"\text{a\quad b\, c\textdollar 5\textbf{d} e}").children).children[1]
+            @test show.(body.children) == ["a", "space(1.0)", "b", "space(0.167)", " ", "c", "\$", "5", "Text", " ", "e"]
+        end
+
         @testset "Space after a control word: \\text {a b}" begin
             node = only(parse_latex(raw"\text {a b}").children)
             @test node.kind === NodeKind.Text

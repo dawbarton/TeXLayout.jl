@@ -185,17 +185,28 @@ function _parse_text_literal_command!(p::_Parser)::Union{Node, Nothing}
     return Node(NodeKind.Char, string(ch))
 end
 
+# A control word is a backslash followed by letters (\quad, \textdollar);
+# a control symbol is a backslash and one non-letter (\,, \%).
+@inline _is_control_word(tok::Token) =
+    tok.kind === TokenKind.Command && length(tok.value) > 1 && all(isletter, SubString(tok.value, 2))
+
 function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
-        k = _current(p).kind
+        tok = _current(p)
+        k = tok.kind
         (k === TokenKind.EOF || k === TokenKind.RBrace) && break
         if k === TokenKind.Space
             push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
         else
+            start = p.pos
             literal = _parse_text_literal_command!(p)
             push!(children, literal === nothing ? _parse_atom!(p) : literal)
+            # TeX drops the spaces after a control word that took no argument
+            # (`\quad b`), but keeps them after a control symbol (`\, b`) and
+            # after an argument's closing brace (`\textbf{a} b`).
+            _is_control_word(tok) && p.pos == start + 1 && _skip_ignorable_spaces!(p)
         end
     end
     return children

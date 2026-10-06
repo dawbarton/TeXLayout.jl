@@ -376,6 +376,23 @@
         end
     end
 
+    @testset "Explicit spaces keep their width in styled and shaped math \\text" begin
+        # Styled text (\textbf inside \text) and any non-metric shaper take the
+        # shaping path, which used to turn \quad, \, and \kern into a single
+        # interword space.  `{}` ends each control word without a space.
+        last_x(source; kwargs...) = maximum(
+            b.x for b in layout(parse_latex(source), family, Text; kwargs...)
+                if b.element isa Union{Glyph, GlyphID}
+        )
+        for (space, width) in ((raw"\quad", 1.0), (raw"\,", 3 / 18), (raw"\kern2em", 2.0))
+            @test last_x("\\text{\\textbf{a}" * space * "{}b}") - last_x(raw"\text{\textbf{a}b}") ≈ width
+        end
+        if Base.get_extension(TeXLayout, :HarfBuzzExt) !== nothing
+            shaper = TeXLayout.HarfBuzzShaper()
+            @test last_x(raw"\text{a\quad{}b}"; shaper) - last_x(raw"\text{a\,{}b}"; shaper) ≈ 1.0 - 3 / 18
+        end
+    end
+
     # ── Parser additions ──────────────────────────────────────────────────────
 
     @testset "Parser additions" begin

@@ -1591,3 +1591,19 @@
   the cache lock each time.
 - Regression test `test/test_threads.jl` runs a child Julia with four threads
   (about 3.5 s); it fails on the old code (5/5 crashes) and passes now.
+
+## 2026-10-05T21:21+01:00 Follow-up 3.3: spaces in styled or shaped math \text
+
+- Confirmed: `_text_node_spans` wrote every explicit space node (`\quad`, `\,`,
+  `\kern`) into the span as `" "`, so the shaping path (styled `\text` bodies,
+  or any `\text` with `HarfBuzzShaper`) set them as one interword space. They
+  now stay as widths between spans and become `Space` boxes. Overlay against
+  XeLaTeX (with the family's bold and italic fonts passed to fontspec) matches;
+  the only residue is LaTeX's automatic italic correction after `\textit{…}`.
+- Found alongside: the `\text` parser kept the space after a control word
+  (`\text{a\quad b}` had an extra interword space after the quad). TeX drops it
+  after a control word but not after a control symbol or a closing brace; fixed
+  in the parser, matches XeLaTeX.
+- No stress image changes (no stress case exercises either path). The document
+  layer does not support `\quad`/`\,` at all (`a\quad b` becomes "a b"); not
+  changed.

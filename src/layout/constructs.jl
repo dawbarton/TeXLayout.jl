@@ -413,8 +413,12 @@ function _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
     return _layout_node!(node.children[1], new_ctx, style, x0, y0, scale, boxes)
 end
 
-function _text_node_spans(node, base_attrs::TextAttrs)::Union{Vector{TextSpan}, Nothing}
-    spans = TextSpan[]
+# Flatten a \text{…} body into styled text spans for a shaper.  Explicit spaces
+# (\quad, \,, \kern, …) are kept as their widths in em between the spans, so
+# they are not shaped as a single interword space.  Returns `nothing` for
+# content the shaping path cannot represent.
+function _text_node_spans(node, base_attrs::TextAttrs)::Union{Vector{Union{TextSpan, Float64}}, Nothing}
+    spans = Union{TextSpan, Float64}[]
     io = IOBuffer()
     active_attrs = base_attrs
 
@@ -436,8 +440,8 @@ function _text_node_spans(node, base_attrs::TextAttrs)::Union{Vector{TextSpan}, 
             select_attrs!(attrs)
             write(io, n.value)
         elseif n.kind === NodeKind.Space
-            select_attrs!(attrs)
-            write(io, " ")
+            flush!()
+            push!(spans, n.width)
         elseif n.kind === NodeKind.Sequence || n.kind === NodeKind.Group
             for child in n.children
                 append_text!(child, attrs) || return false
@@ -475,9 +479,14 @@ function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
     slot = ctx.family.regular === nothing ? FontSlot.Math : FontSlot.Regular
     base_attrs = TextAttrs(TextFamily.Roman, slot, 1.0, TextFeatures())
     spans = _text_node_spans(node, base_attrs)
-    has_styles = spans !== nothing && any(span -> span.attrs != base_attrs, spans)
+    has_styles = spans !== nothing && any(span -> span isa TextSpan && span.attrs != base_attrs, spans)
     if spans !== nothing && (!(ctx.text_shaper isa MetricShaper) || has_styles)
-        shaped = hconcat([shape_span(ctx.text_shaper, span, ctx.family, scale) for span in spans])
+        parts = map(spans) do span
+            span isa TextSpan && return shape_span(ctx.text_shaper, span, ctx.family, scale)
+            w = span * scale
+            return TeXBox([LayoutBox(Space(w), 0.0, 0.0, scale)], w, 0.0, 0.0)
+        end
+        shaped = hconcat(parts)
         _emit_texbox!(boxes, shaped, x0, y0)
         return shaped.width
     end
