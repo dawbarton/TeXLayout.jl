@@ -526,6 +526,28 @@
             @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
         end
 
+        @testset "Unbraced text commands take one token as their argument" begin
+            # TeX reads an undelimited argument as the next token, after the
+            # spaces that follow the control word: `\textbf x rest` is bold "x".
+            spans_of(source) = [
+                (sp.text, sp.attrs.slot) for b in TeXLayout.parse_document(source)
+                    if b isa TeXLayout.ParagraphBlock for l in b.lines
+                    for r in l.runs if r isa TeXLayout.TextRun for sp in r.spans
+            ]
+            Bold, Regular, BoldItalic = TeXLayout.FontSlot.Bold, TeXLayout.FontSlot.Regular, TeXLayout.FontSlot.BoldItalic
+            @test spans_of("\\textbf x rest") == [("x", Bold), (" rest", Regular)]
+            @test spans_of("\\textbf xy rest") == [("x", Bold), ("y rest", Regular)]
+            @test spans_of("\\textbf\\%x y") == [("%", Bold), ("x y", Regular)]
+            # Degraded but contained: a nested command is taken with its group.
+            @test spans_of("\\textit\\textbf{x} y") == [("x", BoldItalic), (" y", Regular)]
+            @test all(sp -> sp[2] === Regular, spans_of("rest \\textbf"))
+            # A paragraph break is not skipped to reach an argument (TeX would
+            # stop with "Paragraph ended before ... was complete").
+            doc = TeXLayout.parse_document("a \\textbf\n\n{x} y")
+            @test count(b -> b isa TeXLayout.ParagraphBlock, doc) == 2
+            @test all(sp -> sp[2] === Regular, spans_of("a \\textbf\n\n{x} y"))
+        end
+
         @testset "\\textit produces Italic span" begin
             doc = TeXLayout.parse_document("\\textit{hello}")
             spans = doc[1].lines[1].runs[1].spans
