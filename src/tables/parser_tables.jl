@@ -76,7 +76,13 @@ const _DELIM_GLYPH_NAMES = Dict{String, String}(
     "\\lbrace" => "braceleft",
     "\\rbrace" => "braceright",
     "|" => "bar",
+    "\\vert" => "bar",
+    "\\lvert" => "bar",
+    "\\rvert" => "bar",
     "\\|" => "dblverticalbar",
+    "\\Vert" => "dblverticalbar",
+    "\\lVert" => "dblverticalbar",
+    "\\rVert" => "dblverticalbar",
     "/" => "slash",
     "\\backslash" => "backslash",
     "\\langle" => "angleleft",
@@ -261,7 +267,8 @@ const _OPERATOR_NAMES = Set{String}(
     [
         "sin", "cos", "tan", "cot", "sec", "csc",
         "arcsin", "arccos", "arctan",
-        "ln", "log", "exp",
+        "sinh", "cosh", "tanh", "coth",
+        "ln", "lg", "log", "exp",
         "lim", "limsup", "liminf", "sup", "inf", "max", "min",
         "det", "dim", "ker", "deg", "gcd", "hom", "Pr", "arg",
     ]

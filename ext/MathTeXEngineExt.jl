@@ -59,9 +59,12 @@ const _RUNTIME_CACHE = Dict{_RuntimeKey, _RuntimeBundle}()
 
 # Strip surrounding $ delimiters that LaTeXStrings add automatically.
 # L"x^2" stores "$x^2$" internally; TeXLayout's parser expects no delimiters.
+# `chop` respects character boundaries, so a multi-byte character before the
+# closing `$` (e.g. L"$2π$") does not produce an invalid string index.
 function _strip_math_delimiters(s::AbstractString)
     str = String(s)
-    length(str) >= 2 && str[1] == '$' && str[end] == '$' && return str[2:(end - 1)]
+    length(str) >= 2 && first(str) == '$' && last(str) == '$' &&
+        return String(chop(str; head = 1, tail = 1))
     return str
 end
 

@@ -1380,3 +1380,40 @@
 - Committed the visualiser fix and release preparation as `39b1a47` on
   `fix/visualise-text-glyphid-v0.3.2` and opened
   [PR #31](https://github.com/dawbarton/TeXLayout.jl/pull/31).
+
+## 2026-10-05T13:36+00:00 Runic 1.12 fix and static bug sweep
+
+- CI's Runic job (runic-action resolves to Runic 1.12.0) failed on `main` for a
+  single file: `test/test_layout.jl` around the `\xrightarrow` width test.
+  Runic 1.12 dedents the first line of a multi-line ternary inside a
+  parenthesised generator term by one level. Applied the CI diff verbatim.
+- Julia could not be installed in this cloud session (julialang hosts blocked
+  by the egress policy), so the sweep was a static read of `src/` and `ext/`;
+  tests and Runic were **not** run locally. The new code was hand-formatted to
+  match Runic idioms already present in the repo. Run `runic --check` and
+  `Pkg.test()` before merging.
+- Fixed (each with a regression test written to fail on the old code):
+  whitespace before scripts/`\limits`, after `\left`/`\big`/`\kern`, before
+  `\text` arguments, and around `\sqrt`/xarrow `[…]`; `~` dropped in matrix
+  cells; document `\textbf {x}` swallowing the rest of the input; missing
+  `\sinh \cosh \tanh \coth \lg`; `\vert`-family delimiters (already advertised
+  in `docs/src/04-commands.md`) mapping to null delimiters; `array` cell
+  stride using the colspec column count instead of the observed count;
+  brace-note scale ignoring `\large`/`smallmatrix`; `StringIndexError` in the
+  Makie extension for `L"$2π$"`; latent missing `y0` in Rule 18e's psi.
+- Snapshot hashes should be unchanged: every snapshot case uses colspecs that
+  match their cells, no spaces before scripts, and Display style at scale 1.0
+  (where `_scale_for_child` reduces exactly to `size_scale`).
+- Flagged, not fixed (need a rendering check or a design call):
+  - `\binom` uses Fraction* constants with an axis-relative clamp. The MATH
+    table's Stack* constants (`StackTopShiftUp`, `StackGapMin`, …; already
+    parsed) are, as I recall the OpenType spec, the equivalents of TeX's
+    num3/denom2/3θ/7θ, contrary to the claim in `katex_rules.md` Rule 15c.
+    Spec page not retrievable from this session; verify before changing.
+  - Explicit spaces reset `prev_emit_class`, so `a\,+b` loses the medium space
+    before `+`; TeX and KaTeX ignore glue when computing inter-atom spacing.
+    Snapshot-affecting.
+  - `\bmod`, `\pmod`, `\operatorname*`, `\liminf`/`\limsup` (no thin space)
+    are unsupported or approximated.
+  - Global caches (`_FONT_CACHE`, `_MATH_TABLE_CACHE`, HarfBuzz caches) and the
+    shared FreeType face `glyph` slot are not thread-safe.

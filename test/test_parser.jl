@@ -790,6 +790,103 @@
                 tree.children,
             )
         end
+
+        @testset "Space before ^/_ is ignored: x ^2, x^2 _1" begin
+            sup = only(parse_latex("x ^2").children)
+            @test sup.kind === NodeKind.Superscript
+            @test sup.children[2].value == "2"
+
+            dec = only(parse_latex("x^2 _1").children)
+            @test dec.kind === NodeKind.Decorated
+            @test dec.children[2].value == "1"   # [base, sub, sup]
+            @test dec.children[3].value == "2"
+
+            dec = only(parse_latex(raw"\left( x \right) ^2").children)
+            @test dec.kind === NodeKind.Superscript
+            @test dec.children[1].kind === NodeKind.Delimited
+        end
+
+        @testset "Space before \\limits is ignored: \\sum \\limits _{i}" begin
+            node = only(parse_latex(raw"\sum \limits _{i}").children)
+            @test node.kind === NodeKind.Subscript
+            @test node.children[1].kind === NodeKind.LimitsOverride
+            @test node.children[1].value == "limits"
+        end
+
+        @testset "Space not followed by a script is kept inside \\text{}" begin
+            body = only(parse_latex(raw"\text{a b}").children).children[1]
+            @test [c.value for c in body.children] == ["a", " ", "b"]
+        end
+
+        @testset "Space after a control word: \\left (, \\middle |, \\bigl (" begin
+            delim = only(parse_latex(raw"\left ( x \middle | y \right )").children)
+            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            @test (payload.left, payload.right) == ("parenleft", "parenright")
+            @test any(c -> c.kind === NodeKind.Middle && c.value == "bar", delim.children)
+
+            big = only(parse_latex(raw"\bigl (").children)
+            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == "parenleft"
+        end
+
+        @testset "Space after a control word: \\kern 1em, \\mkern 18mu" begin
+            for (source, width) in (("a\\kern 1emb", 1.0), ("a\\mkern 18mub", 1.0), ("a\\hskip {2em}b", 2.0))
+                children = parse_latex(source).children
+                @test [c.kind for c in children] == [NodeKind.Char, NodeKind.Space, NodeKind.Char]
+                @test children[2].width ≈ width
+            end
+        end
+
+        @testset "Space after a control word: \\text {a b}" begin
+            node = only(parse_latex(raw"\text {a b}").children)
+            @test node.kind === NodeKind.Text
+            @test [c.value for c in node.children[1].children] == ["a", " ", "b"]
+        end
+
+        @testset "Spaces around optional [...] arguments: \\sqrt, \\xrightarrow" begin
+            for source in (raw"\sqrt[3]{x}", raw"\sqrt [3]{x}", raw"\sqrt[ 3 ]{x}")
+                node = only(parse_latex(source).children)
+                @test node.kind === NodeKind.Sqrt
+                @test length(node.children) == 2
+                @test [c.value for c in node.children[1].children] == ["3"]
+                @test node.children[2].value == "x"
+            end
+
+            node = only(parse_latex(raw"\xrightarrow [ f ]{g}").children)
+            @test node.kind === NodeKind.XArrow
+            @test node.children[1].value == "g"   # [above, below]
+            @test [c.value for c in node.children[2].children] == ["f"]
+        end
+
+        @testset "~ is kept inside matrix cells" begin
+            matrix = only(parse_latex(raw"\begin{matrix} a~b \end{matrix}").children)
+            cell = only(matrix.children)
+            @test [c.kind for c in cell.children] ==
+                [NodeKind.Char, NodeKind.Space, NodeKind.Char]
+            @test cell.children[2].width ≈ TeXLayout._NORMAL_SPACE_EM
+        end
+    end
+
+    @testset "Standard LaTeX operator names: \\sinh, \\cosh, \\tanh, \\coth, \\lg" begin
+        for name in ("sinh", "cosh", "tanh", "coth", "lg")
+            op = only(parse_latex("\\" * name).children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == name
+        end
+    end
+
+    @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
+        for (left, right, glyph) in (
+                (raw"\vert", raw"\vert", "bar"),
+                (raw"\lvert", raw"\rvert", "bar"),
+                (raw"\Vert", raw"\Vert", "dblverticalbar"),
+                (raw"\lVert", raw"\rVert", "dblverticalbar"),
+            )
+            delim = only(parse_latex("\\left" * left * " x \\right" * right).children)
+            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            @test (payload.left, payload.right) == (glyph, glyph)
+            big = only(parse_latex("\\bigl" * left).children)
+            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == glyph
+        end
     end
 
 end

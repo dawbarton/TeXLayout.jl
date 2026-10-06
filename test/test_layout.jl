@@ -75,6 +75,20 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test any(contains("braceright"), names)
     end
 
+    @testset "\\vert-family delimiters render after \\left/\\right" begin
+        for source in (raw"\left\vert x \right\vert", raw"\left\lVert x \right\rVert")
+            # x plus one glyph per delimiter (previously null delimiters: x only).
+            @test length(find_glyphs(layout(parse_latex(source), family, Text))) >= 3
+        end
+    end
+
+    @testset "\\sinh, \\cosh, \\tanh, \\coth, \\lg render their operator names" begin
+        for name in ("sinh", "cosh", "tanh", "coth", "lg")
+            boxes = layout(parse_latex("\\" * name * " x"), family, Text)
+            @test length(find_glyphs(boxes)) == length(name) + 1
+        end
+    end
+
     @testset "Superscript is above baseline" begin
         # In x^2, the '2' must have a positive y offset.
         boxes = layout(parse_latex("x^2"), family, Text)
@@ -1107,6 +1121,16 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test bot_brace < bot_plain
     end
 
+    @testset "HorizBrace: note scales with surrounding \\large sizing" begin
+        # The note is the smallest glyph; it must inherit the 1.2× sizing factor
+        # like the body and brace rather than resetting to the bare script scale.
+        note_scale(source) = minimum(b.scale for b in find_glyphs(layout(parse_latex(source), family, Text)))
+        # The last case also has a secondary (opposite-side) script.
+        for brace in (raw"\underbrace{x}_{n}", raw"\overbrace{x}^{n}", raw"\underbrace{x}_{n}^{m}")
+            @test note_scale(raw"\large" * brace) ≈ 1.2 * note_scale(brace)
+        end
+    end
+
     @testset "HorizBrace: \\overbrace{xyz} renders multi-char body with brace above" begin
         boxes = layout(parse_latex("\\overbrace{xyz}"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -1215,6 +1239,37 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(glyphs) == 4
         paren_boxes = filter(b -> contains(b.element.glyph_name, "paren"), glyphs)
         @test isempty(paren_boxes)
+    end
+
+    @testset "array: colspec column count differs from the cells used" begin
+        glyph_name_of(ch) = TeXLayout.glyph_name_by_codepoint(family, UInt32(ch))
+        digit_glyph(glyphs, ch) = only(filter(b -> b.element.glyph_name == glyph_name_of(ch), glyphs))
+        centre(g) = g.x + g.element.advance_width / mt.upm * g.scale / 2
+        for source in (
+                # Valid LaTeX: the colspec declares more columns than are used.
+                raw"\begin{array}{ccc} 1 & 2 \\ 3 & 4 \end{array}",
+                # Malformed: more cells than declared columns; keep them all.
+                raw"\begin{array}{|c|} 1 & 2 \\ 3 & 4 \end{array}",
+            )
+            boxes = layout(parse_latex(source), family, Display)
+            glyphs = find_glyphs(boxes)
+            @test length(glyphs) == 4
+            g1, g2, g3, g4 = (digit_glyph(glyphs, ch) for ch in ('1', '2', '3', '4'))
+            # Cells stay in their source rows and (centred) columns.
+            @test g1.y ≈ g2.y
+            @test g3.y ≈ g4.y
+            @test g3.y < g1.y
+            @test centre(g1) < centre(g2)
+            @test centre(g1) ≈ centre(g3)
+            @test centre(g2) ≈ centre(g4)
+        end
+        # The declared rules stay outermost; the extra column carries none.
+        boxes = layout(parse_latex(raw"\begin{array}{|c|} 1 & 2 \end{array}"), family, Display)
+        rules = find_elements(boxes, e -> e isa VRule)
+        digits = find_glyphs(boxes)
+        @test length(rules) == 2
+        @test minimum(r.x for r in rules) < minimum(g.x for g in digits)
+        @test maximum(r.x for r in rules) > maximum(g.x for g in digits)
     end
 
     @testset "cases: left brace present, no right brace" begin
@@ -1507,15 +1562,15 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes_long = layout(parse_latex(raw"\xrightarrow{\text{long label}}"), family, Text)
         w_short = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_short
+            ) for b in boxes_short
         )
         w_long = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_long
+            ) for b in boxes_long
         )
         @test w_long > w_short
     end

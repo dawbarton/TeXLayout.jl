@@ -390,7 +390,13 @@ at the end of that file.
   blank (the paragraph break is preserved).  Escaped `\%` is a literal.
   Math mode (`parse_latex`) ignores leading, trailing, and repeated ordinary
   whitespace, including a space after `^`/`_` or before a command argument
-  (`x^ 2`, `\frac 1 2`).  The explicit interword spaces `~`, `\ `, `\space`, and
+  (`x^ 2`, `\frac 1 2`), before `^`/`_`/`\limits` (`x ^2`), before a
+  delimiter, dimension, or `\text` argument (`\left (`, `\kern 1em`,
+  `\text {a}`), and around `\sqrt`/xarrow optional `[…]` arguments.  The
+  space before a script is consumed only when a script actually follows
+  (`_skip_spaces_before_script!`), so significant spaces inside `\text{…}`
+  survive.  `\\[dim]` in matrices deliberately does not skip a space before
+  `[`, matching amsmath.  The explicit interword spaces `~`, `\ `, `\space`, and
   `\nobreakspace` are *not* ignorable: they emit a normal interword space
   (`_NORMAL_SPACE_EM = 6/18` em, TeX's `fontdimen2`) in math mode and inside
   `\text{…}`.  The parser distinguishes them from ignorable whitespace via

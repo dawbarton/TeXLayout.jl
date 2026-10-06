@@ -77,7 +77,7 @@ mapping where no regular font is configured).  In Display style, the operators
 `\Pr` automatically use limits placement.
 
 `\sin`, `\cos`, `\tan`, `\cot`, `\sec`, `\csc`, `\arcsin`, `\arccos`, `\arctan`,
-`\ln`, `\log`, `\exp`, `\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`,
+`\sinh`, `\cosh`, `\tanh`, `\coth`, `\ln`, `\lg`, `\log`, `\exp`, `\lim`, `\limsup`, `\liminf`, `\sup`, `\inf`, `\max`,
 `\min`, `\det`, `\dim`, `\ker`, `\deg`, `\gcd`, `\hom`, `\Pr`, `\arg`
 
 For an operator name that is not in the list above, use `\operatorname{name}`.
@@ -95,8 +95,8 @@ to cover the enclosed expression.  The size is selected from the font's
 | `\left(` | `\right)` |
 | `\left[` | `\right]` |
 | `\left\{` | `\right\}` |
-| `\left\|` or `\left\vert` | `\right\|` or `\right\vert` |
-| `\left\|` or `\left\Vert` | `\right\|` or `\right\Vert` |
+| `\left\|`, `\left\vert`, or `\left\lvert` | `\right\|`, `\right\vert`, or `\right\rvert` |
+| `\left\|`, `\left\Vert`, or `\left\lVert` | `\right\|`, `\right\Vert`, or `\right\rVert` |
 | `\left/` | `\right/` |
 | `\left\backslash` | `\right\backslash` |
 | `\left\langle` | `\right\rangle` |

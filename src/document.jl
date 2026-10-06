@@ -149,6 +149,15 @@ function _parse_text_group!(p::_Parser, builder::_DocBuilder, new_attrs::TextAtt
     return _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
 end
 
+# TeX discards the space after a control word, so `\textbf {x}` takes `{x}` as
+# its argument.  Skip the whitespace only when a group follows, so the space in
+# an unbraced `\textbf x` keeps its current text-mode meaning.
+function _skip_space_before_group!(p::_Parser)
+    n = _ignorable_space_run(p)
+    n > 0 && _peek(p, n).kind === TokenKind.LBrace && (p.pos += n)
+    return nothing
+end
+
 # Core text-mode dispatch loop.
 # `in_group`: when true, stop at the next TokenKind.RBrace (matching the group's '{').
 function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
@@ -237,11 +246,13 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
         elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_STYLE_COMMANDS
             in_group || _commit_space!(builder)
             cmd = _advance!(p).value
+            _skip_space_before_group!(p)
             _parse_text_group!(p, builder, _apply_text_style(cmd, builder.attrs))
 
         elseif tok.kind === TokenKind.Command && (tok.value == "\\text" || tok.value == "\\mbox")
             in_group || _commit_space!(builder)
             _advance!(p)
+            _skip_space_before_group!(p)
             _parse_text_group!(p, builder, builder.attrs)   # no attr change
 
         elseif tok.kind === TokenKind.Command && haskey(_TEXT_LITERAL_CHARS, tok.value)
