@@ -69,6 +69,7 @@ TeXLayout.jl/
 │   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
 │   ├── stress_test_text.jl        # Render mixed text/math document stress-test sheet
 │   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
+│   ├── compare_tex.jl             # Overlay TeXLayout on LuaLaTeX/XeLaTeX output with the same fonts
 │   ├── stress_test_suite.jl       # Unified per-case stress PNG generator/packer/comparator
 │   ├── stress_test_all.jl         # Compatibility wrapper for stress_test_suite.jl
 │   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
@@ -103,6 +104,7 @@ All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activa
 | `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
+| `compare_tex.jl` | Overlay TeXLayout's boxes on LuaLaTeX (default) or XeLaTeX output typeset with unicode-math and the same font files: cyan TeX, magenta TeXLayout, dark where they agree.  The check for any "matches TeX" claim; see "Comparing against TeX" below. | `julia tools/compare_tex.jl [--engine=xelatex] [--fonts=new_cm,stix_two] "expr" "T:expr" "B:{n}{k}"` |
 | `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [:font_symbol] [out.png]` |
 | `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [:font_symbol] [png\|pdf\|svg] [out]` |
 | `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. Most cases use `MetricShaper`; a small final section opts into `HarfBuzzShaper`. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
@@ -120,6 +122,34 @@ just stress-pack
 just stress-compare
 just stress-all
 ```
+
+### Comparing against TeX
+
+`tools/compare_tex.jl` checks geometry against a real TeX engine.  It typesets
+each expression with unicode-math and the bundled font files themselves, then
+draws TeXLayout's boxes into the same PDF glyph by glyph, so differences show as
+cyan (TeX) or magenta (TeXLayout) fringes.  `tools/stress_test_latex.jl` loads no
+OpenType math font and cannot be used for this.  Prefixes select Text (`T:`) or
+Script (`S:`) style, and `B:{num}{den}` compares a binomial without its
+delimiters with `{num \atop den}`, isolating the vertical shifts.
+
+- **LuaLaTeX is the reference.**  It implements OpenType MATH directly:
+  `SpaceAfterScript` after scripts, the Stack* constants for rule-less
+  fractions, radical degrees measured from the bottom of the sign.  Where LuaTeX
+  and XeTeX disagree, follow LuaTeX and record the difference in
+  `katex_rules.md`.
+- **XeLaTeX differs in known ways.**  It puts `\scriptspace` (LaTeX: 0.5pt)
+  after scripts, which the tool replaces by the font's `SpaceAfterScript`; it
+  keeps the Fraction* shifts for rule-less fractions except `num3`; and
+  unicode-math raises radical degrees by p × (ht − dp) of the radical box.
+- **Display mode is not display style.**  `$\displaystyle …$` is still inline
+  mode, so amsmath's `\if@display` (used by `\pmod` and friends) is false; the
+  tool sets `\@displaytrue` for Display-style cases.
+- **Known residual differences**, not caused by the change under test: TeXLayout
+  adds no italic correction after math characters (visible after `f` or `y` in
+  New CM and Termes); unicode-math's `\mathbf` uses the bold text font, while
+  TeXLayout uses Unicode math-alphabet letters; LaTeX adds an italic correction
+  after `\textit{…}`.
 
 ### Stress references
 
@@ -407,8 +437,11 @@ at the end of that file.
   `\text {a}`), and around `\sqrt`/xarrow optional `[…]` arguments.  The
   space before a script is consumed only when a script actually follows
   (`_skip_spaces_before_script!`), so significant spaces inside `\text{…}`
-  survive.  `\\[dim]` in matrices deliberately does not skip a space before
-  `[`, matching amsmath.  The explicit interword spaces `~`, `\ `, `\space`, and
+  survive.  `\\[dim]` in matrices does not skip a space before `[`, matching
+  amsmath's `matrix` environments, `cases`, and `align`, which use
+  `\new@ifnextchar`.  A plain LaTeX `array` uses the kernel's space-skipping
+  `\@ifnextchar`, so there `\\ [2pt]` is a row-spacing argument, which
+  TeXLayout renders as cell content.  The explicit interword spaces `~`, `\ `, `\space`, and
   `\nobreakspace` are *not* ignorable: they emit a normal interword space
   (`_NORMAL_SPACE_EM = 6/18` em, TeX's `fontdimen2`) in math mode and inside
   `\text{…}`.  The parser distinguishes them from ignorable whitespace via

@@ -1641,3 +1641,17 @@
   blank line, so `a \textbf\n\n{x} y` keeps its paragraph break (TeX would report
   "Paragraph ended before \textbf was complete").
 - No stress image changes.
+
+## 2026-10-05T21:51+01:00 compare_tex.jl and AGENTS.md comparison guidance
+
+- Committed the session's overlay harness as `tools/compare_tex.jl`
+  (`just compare-tex`). LuaLaTeX is the default reference; under LuaLaTeX,
+  TeXLayout glyphs are placed through `luaotfload.aux.slot_of_name`, and shaped
+  `GlyphID` boxes are mapped to glyph names with `FT_Get_Glyph_Name` first.
+  Output goes to `compare_outputs/` (gitignored).
+- AGENTS.md now records the comparison method and the decision to follow LuaTeX
+  where it and XeTeX disagree, and corrects the `\\[dim]` sentence (plain
+  `array` does skip the space; amsmath's matrix environments, `cases`, and
+  `align` do not).
+- Seen while testing the tool: display-style `\sum` differs in size from
+  LuaTeX's in New CM and STIX Two (operator variant selection); not investigated.

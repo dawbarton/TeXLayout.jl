@@ -47,3 +47,6 @@ benchmark/latest.toml
 # Stress test tooling
 stress_outputs/
 stress_test_reference*.tar
+
+# TeX comparison overlays (tools/compare_tex.jl)
+compare_outputs/
