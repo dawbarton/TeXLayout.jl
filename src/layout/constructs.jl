@@ -298,14 +298,19 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     radical_x = has_degree ? x0 + degree_before + degree_w + degree_after : x0
 
     rule_top_em = y0 + rule_top_local
+    radical_start = lastindex(boxes) + 1
     radical = _layout_radical!(ctx, required_du, rule_top_em, radical_x, scale, boxes)
+    radical_stop = lastindex(boxes)
 
     if has_degree
-        degree_bottom = _boxes_bottom(boxes, degree_start, degree_stop, upm)
-        degree_raise = mc.radical_degree_bottom_raise_percent / 100.0 * radical.cover
-        degree_x = x0 + degree_before
-        degree_y = y0 + degree_raise - degree_bottom
-        _translate_range!(boxes, degree_start, degree_stop, degree_x, degree_y)
+        # RadicalDegreeBottomRaisePercent is a proportion of the radical sign's
+        # height (ascender + descender), measured from the bottom of the sign,
+        # which usually lies below the baseline.  As in LuaTeX's make_radical
+        # (and XeTeX's and KaTeX's \root), it sets the degree's baseline.
+        sign_bottom = _boxes_bottom(boxes, radical_start, radical_stop, upm)
+        sign_height = _boxes_top(boxes, radical_start, radical_stop, upm) - sign_bottom
+        degree_y = sign_bottom + mc.radical_degree_bottom_raise_percent / 100.0 * sign_height
+        _translate_range!(boxes, degree_start, degree_stop, x0 + degree_before, degree_y)
     end
 
     body_x = radical_x + radical.body_offset

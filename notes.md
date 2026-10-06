@@ -1491,3 +1491,32 @@
 - Parse-time cost: a `Dict` lookup in `_is_limits_modifier` slowed every atom
   (x+y=z 178 → ~205 ns); plain string comparisons restore 181 ns. Layout
   timings and all allocations unchanged.
+
+## 2026-10-05T16:08+01:00 Follow-up 2.2: radical degree raise
+
+- Spec (learn.microsoft.com, MATH table, MathConstants): `radicalDegreeBottomRaisePercent`
+  is the "height of the bottom of the radical degree, if such is present, in
+  proportion to the height (ascender + descender) of the radical sign.
+  Suggested: 60%". It does not say what the height is measured from.
+- Engines: LuaTeX `make_radical` (`luatexdir/tex/mlist.c`) sets the degree box's
+  shift to `-(h*p/100 - depth(y) - shift_amount(y))`, i.e. the degree's baseline
+  at sign bottom + p × sign height. unicode-math under XeTeX redefines `\r@@t`
+  to raise the root box by `(ht - dp) * fontdimen65 / 100` of the whole radical
+  box. KaTeX `sqrt.ts` and LaTeX's `\root` use `0.6 * (ht - dp)`.
+- TeXLayout measured p × sign height from the formula baseline (and placed the
+  degree's ink bottom there), so the degree floated above deep radical signs.
+  Now follows LuaTeX: degree baseline at sign bottom + p × sign height, with the
+  sign measured from its own boxes.
+- The overlay harness gained `XC_ENGINE=lualatex` (glyphs placed with
+  `luaotfload.aux.slot_of_name`). LuaTeX needs no `\scriptspace` correction
+  because it uses `SpaceAfterScript`; it is the better reference for OpenType
+  behaviour. Degree heights now match LuaLaTeX on all eight fonts.
+- Seen but not changed: TeXLayout picks smaller radical variants than LuaTeX
+  and XeTeX for display-style fractions on New CM, Pagella, Schola, Termes,
+  Bonum, and Luciole (Fira Math and STIX Two match); LuaTeX clamps
+  `RadicalKernAfterDegree` so the sign never starts left of the degree origin.
+- Italic correction after math characters (Part 1 note), rechecked on the same
+  fonts under both engines: XeLaTeX and LuaLaTeX agree. `x+y=z` and `f(x) + d`
+  match TeXLayout exactly in STIX Two, and drift after `y`, `f`, and `d` in New CM
+  and Termes under both, so the difference depends on the font's italic
+  corrections, not on the engine.

@@ -154,6 +154,33 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   constants that subsume the `ruleThickness + phi/4` calculation. ✓
 - Body is built in `cramp_style(style)` as required. ✓
 
+### Radical degree (`\sqrt[n]{…}`)
+
+The degree is set in ScriptScript style after `RadicalKernBeforeDegree`, and
+the sign follows after `RadicalKernAfterDegree`.  Its vertical position uses
+`RadicalDegreeBottomRaisePercent`, which the OpenType MATH spec describes as the
+"height of the bottom of the radical degree, if such is present, in proportion
+to the height (ascender + descender) of the radical sign".  The spec does not
+say what that height is measured from; the engines differ:
+
+| Implementation | Degree baseline |
+|----------------|-----------------|
+| LuaTeX `make_radical` (`mlist.c`, `\Uroot`) | sign bottom + p × (sign height + depth) |
+| XeTeX with unicode-math (`\r@@t`, fontdimen 65) | p × (ht − dp) of the whole radical box |
+| KaTeX `sqrt.ts`, plain/LaTeX `\root` | 0.6 × (ht − dp) of the radical box |
+
+**Status — follows LuaTeX.**  The degree's baseline is placed at
+`sign_bottom + RadicalDegreeBottomRaisePercent × sign_height`, with the sign
+measured from its own glyph boxes, so variants and assemblies are treated alike.
+This is the direct reading of the spec's "(ascender + descender)" (unicode-math's
+`ht − dp` is not the sign's height), and an overlay against LuaLaTeX with the
+same font files matches on all bundled fonts.  XeTeX sets the degree lower by
+0.2 × (sign depth) for the 60% default.  Until 2026-10 the raise was measured
+from the formula baseline, which left the degree above deep radical signs.
+
+Not matched: LuaTeX clamps `RadicalKernAfterDegree` so that the sign never
+starts left of the degree's origin (`-ar > wr + br`); TeXLayout does not.
+
 ---
 
 ## Rule 15 — Fractions (pg. 444–445)
