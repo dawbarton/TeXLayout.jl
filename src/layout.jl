@@ -549,7 +549,14 @@ function _layout_children!(
                     cursor += sp
                 end
             end
-            cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
+            start = lastindex(boxes) + 1
+            w = _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
+            # Mid-word letters of a text alphabet carry no italic correction.
+            if ctx.font_variant in _TEXT_ALPHABETS && i < lastindex(nodes) &&
+                    nodes[i + 1].kind === NodeKind.Char
+                w = _clean_char_box!(boxes, start, lastindex(boxes), nodes[i], w)
+            end
+            cursor += w
             prev_left_class = left_cls
             prev_emit_class = cls
         end
@@ -595,6 +602,52 @@ function _push_math_char!(boxes, g::Glyph, ctx, x0, y0, scale)::Float64
     return adv + ic_em
 end
 
+# True when `node` is a lone math character (a Char or symbol command, possibly
+# braced or under a font switch), the nucleus whose italic correction TeX's
+# `clean_box` discards.
+function _is_lone_char(node::Node)::Bool
+    n = node
+    while n.kind in (NodeKind.Group, NodeKind.Sequence) && length(n.children) == 1
+        n = n.children[1]
+    end
+    return n.kind !== NodeKind.Accent && _is_char_box(n)
+end
+
+# TeX's `clean_box` (tex.web §720–721): when a fraction part, script, radicand,
+# accent or over/underline nucleus is one character, the box drops the
+# character's trailing italic-correction kern.  `start:stop` is the range just
+# emitted for `node` (it must end the vector) and `w` its advance; returns the
+# advance without the kern.
+function _clean_char_box!(boxes::Vector{LayoutBox}, start::Int, stop::Int, node::Node, w::Float64)::Float64
+    (stop == lastindex(boxes) && stop == start + 1 && _is_lone_char(node)) || return w
+    kern = boxes[stop]
+    (kern.element isa Space && boxes[start].element isa Glyph) || return w
+    pop!(boxes)
+    return w - kern.element.width
+end
+
+# Lay out a fraction part, script, radicand, or over/underline nucleus as TeX's
+# `clean_box` does: a lone character loses its italic-correction kern.
+function _layout_clean!(node, ctx, style, x0, y0, scale, boxes)::Float64
+    start = lastindex(boxes) + 1
+    w = _layout_node!(node, ctx, style, x0, y0, scale, boxes)
+    return _clean_char_box!(boxes, start, lastindex(boxes), node, w)
+end
+
+# Lay out the base of a scripted atom.  An accented character keeps its italic
+# correction here: rule 12 attaches the scripts to the character, so the
+# correction still places the superscript.
+_layout_script_base!(base, ctx, style, x0, y0, scale, boxes)::Float64 =
+    base.kind === NodeKind.Accent ?
+    _layout_accent!(base, ctx, style, x0, y0, scale, boxes; clean = false) :
+    _layout_node!(base, ctx, style, x0, y0, scale, boxes)
+
+# Math alphabets that LaTeX takes from text fonts.  TeX adds no italic
+# correction between consecutive letters of a text font (tex.web §752), so
+# `\mathit{diff}` is not letter-spaced; symbol alphabets (`\mathnormal`,
+# `\boldsymbol`, `\mathcal`, …) keep it.
+const _TEXT_ALPHABETS = (:mathrm, :mathit, :mathbf, :mathsf, :mathtt, :mathsfit)
+
 # Design units per em of the font an emitted glyph element came from.
 _element_upm(ctx::_LayoutCtx, g::Glyph)::Float64 = ctx.upm
 _element_upm(::_LayoutCtx, g::GlyphID)::Float64 = _font_upm(g.font_path)
@@ -638,15 +691,16 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         isempty(ps) && return 0.0
         # In Display style, pick the smallest vert_constructions variant that
         # meets or exceeds display_operator_min_height (in design units).
+        # TeX takes the first variant at least DisplayOperatorMinHeight tall, or
+        # the largest one when none is (STIX Two's minimum exceeds all of its
+        # operator variants).
         chosen = ps
         if is_display(style) && haskey(ctx.vert_constructions, ps)
             min_h = Float64(mc.display_operator_min_height)
-            for v in ctx.vert_constructions[ps].variants
-                if Float64(v.advance) >= min_h
-                    chosen = v.glyph_name
-                    break
-                end
-            end
+            variants = ctx.vert_constructions[ps].variants
+            i = findfirst(v -> Float64(v.advance) >= min_h, variants)
+            i === nothing && !isempty(variants) && (i = lastindex(variants))
+            i === nothing || (chosen = variants[i].glyph_name)
         end
         g = _cmd_glyph(ctx, chosen)
         g === nothing && return 0.0
@@ -691,10 +745,19 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
     return g.advance_width / upm * scale
 end
 
+# Operator names that amsmath spells with a thin space (`lim\,sup`).
+const _SPACED_OPERATOR_NAMES = Dict("limsup" => "lim sup", "liminf" => "lim inf")
+
 function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
-    # Render each character of the operator name upright (roman).
+    # Render each character of the operator name upright (roman); a space in
+    # the spelling is a thin space.
     cursor = x0
-    for ch in node.value
+    for ch in get(_SPACED_OPERATOR_NAMES, node.value, node.value)
+        if ch == ' '
+            push!(boxes, LayoutBox(Space(_THIN * scale), cursor, y0, scale))
+            cursor += _THIN * scale
+            continue
+        end
         g = _upright_glyph(ctx, ch)
         g === nothing && continue
         push!(boxes, LayoutBox(g, cursor, y0, scale))

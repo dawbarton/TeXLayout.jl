@@ -514,7 +514,8 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test req(5.0) ≈ 9500.0        # shortfall dominates once 2δ > 5.07 em
         @test req(0.0) == 0.0
         @test TeXLayout._left_right_required_du(1.0, 0.5, 1000.0) ≈ 3604.0   # in unscaled units
-        # XeLaTeX + NewCMMath choose these parenthesis variants (measured).
+        # LuaLaTeX + NewCMMath choose these parenthesis variants (measured; XeLaTeX
+        # takes v3 for the nested fraction, its fraction shifts differing).
         paren(src, style) = only(
             b.element.glyph_name for b in find_glyphs(layout(parse_latex(src), family, style))
                 if startswith(b.element.glyph_name, "parenleft")
@@ -523,12 +524,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test paren(raw"\left(x^2\right)", Text) == "parenleft.v1"
         @test paren(raw"\left(\frac{a}{b}\right)", Display) == "parenleft.v4"
         @test paren(raw"\left(\frac{\frac{a}{b}}{c}\right)", Text) == "parenleft.v4"
-        # Matrix delimiters still cover the whole (strut-less) grid.
-        pm = layout(parse_latex(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}"), family, Text)
-        p = only(b for b in find_glyphs(pm) if startswith(b.element.glyph_name, "parenleft"))
-        cells = [b for b in find_glyphs(pm) if !startswith(b.element.glyph_name, "paren")]
-        @test p.y + p.element.y_max / FONT_UPM >= maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in cells)
-        @test p.y + p.element.y_min / FONT_UPM <= minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in cells)
+        # Matrix delimiters still cover the whole (strut-less) grid, whether
+        # from a matrix environment or from \left…\right around a matrix.
+        for src in (
+                raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}",
+                raw"\left( \begin{matrix} \frac{1}{2} & b \\ c & \frac{1}{2} \end{matrix} \right)",
+            )
+            pm = layout(parse_latex(src), family, Text)
+            p = only(b for b in find_glyphs(pm) if startswith(b.element.glyph_name, "parenleft"))
+            cells = [b for b in find_glyphs(pm) if !startswith(b.element.glyph_name, "paren")]
+            @test p.y + p.element.y_max / FONT_UPM >= maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in cells)
+            @test p.y + p.element.y_min / FONT_UPM <= minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in cells)
+        end
     end
 
     @testset "\\left. (null delimiter) places no glyph on the left" begin
@@ -1074,6 +1081,35 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         int = first(find_glyphs(int_boxes))
         int_sub = only(filter(b -> b.element isa Glyph && b.scale < 0.99, int_boxes))
         @test int_sub.x ≈ int.element.advance_width / mt.upm - ic(int.element.glyph_name)
+    end
+
+    @testset "Italic correction: clean_box drops it after a lone character" begin
+        # tex.web §721: a fraction part, script, radicand, or accent nucleus that
+        # is one character loses its italic-correction kern.
+        fic = get(mt.italic_corrections, "u1D453", 0) / mt.upm
+        @test fic > 0
+        fadv = glyph_metrics_by_codepoint(family, UInt32(0x0001D453)).advance_width / mt.upm
+        width(src, style = Text) = TeXLayout.measure(layout(parse_latex(src), family, style), Float64(mt.upm)).width
+        trailing_kern(src) = (bs = layout(parse_latex(src), family, Text); any(b -> b.element isa Space && b.element.width ≈ fic, bs))
+        @test width("f") ≈ fadv + fic                     # in a math list the kern stays
+        @test !trailing_kern(raw"\frac{f}{2}")
+        @test !trailing_kern(raw"\sqrt{f}")
+        @test !trailing_kern(raw"x^{f}")
+        # The accent nucleus is cleaned: what follows \hat{f} moves left by the kern.
+        star_x(src) = only(b.x for b in find_glyphs(layout(parse_latex(src), family, Text)) if b.element.glyph_name == "asteriskmath")
+        @test star_x(raw"\hat{f}*") ≈ star_x("f*") - fic atol = 1.0e-9
+        # …but an accented character with scripts keeps it (rule 12), so the
+        # superscript still clears the slant.
+        hat_sq = layout(parse_latex(raw"\hat{f}^2"), family, Text)
+        two = only(b for b in find_glyphs(hat_sq) if b.element.glyph_name == "two")
+        @test two.x ≈ fadv + fic atol = 1.0e-9
+        # Text alphabets add no correction between letters, only after the word.
+        mathit = layout(parse_latex(raw"\mathit{ff}"), family, Text)
+        fs = sort([b for b in find_glyphs(mathit)]; by = b -> b.x)
+        @test fs[2].x - fs[1].x ≈ fadv atol = 1.0e-9
+        @test count(b -> b.element isa Space, mathit) == 1
+        plain = sort(find_glyphs(layout(parse_latex("ff"), family, Text)); by = b -> b.x)
+        @test plain[2].x - plain[1].x ≈ fadv + fic atol = 1.0e-9
     end
 
     @testset "Math inside \\text{…} is laid out in math mode" begin
@@ -1704,6 +1740,51 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test count(b -> cp_of(stix, b) == 2, twohead) >= 1
         longeq = TeXLayout.layout(parse_latex(raw"\xlongequal{\text{def}}"), stix, Text)
         @test count(b -> cp_of(stix, b) == 4, longeq) >= 2
+
+        # Arrows sit on the baseline like any relation, so a harpoon's shaft
+        # stays on the axis instead of its ink being centred there.
+        harpoon = TeXLayout.layout(parse_latex(raw"\xrightharpoonup{\text{long label}}"), fira, Text)
+        @test all(b.y == 0.0 for b in boxes if cp_of(fira, b) in (1, 2))
+        @test all(b.y == 0.0 for b in harpoon if b.element isa Glyph && b.scale == 1.0)
+    end
+
+    @testset "horizontal assemblies shrink to the required width" begin
+        # Widening the part overlaps (as vertical assemblies already did) keeps
+        # an assembled brace within its body; with minimum overlaps the Pagella
+        # underbrace below overshot by 0.84 em on each side.
+        pagella = font_family(:pagella)
+        pupm = Float64(load_math_table(pagella.math).upm)
+        src = raw"\underbrace{f(x_1)\cdot f(x_2)\cdots f(x_n)}_{n}"
+        bx = TeXLayout.layout(parse_latex(src), pagella, Text)
+        brace = [b for b in bx if b.element isa Glyph && occursin(r"brace|23DF", b.element.glyph_name)]
+        @test length(brace) > 3   # an assembly, not a single variant
+        body = TeXLayout.layout(parse_latex(raw"f(x_1)\cdot f(x_2)\cdots f(x_n)"), pagella, Text)
+        body_w = TeXLayout.measure(body, pupm).width
+        ink_l = minimum(b.x + b.element.x_min / pupm * b.scale for b in brace)
+        ink_r = maximum(b.x + b.element.x_max / pupm * b.scale for b in brace)
+        @test ink_r - ink_l <= body_w + 0.1
+    end
+
+    @testset "display operators fall back to the largest variant" begin
+        # STIX Two's DisplayOperatorMinHeight (1800) exceeds every operator
+        # variant; TeX then takes the largest rather than the base glyph.
+        stix = font_family(:stix_two)
+        names(src, st) = [b.element.glyph_name for b in TeXLayout.layout(parse_latex(src), stix, st) if b.element isa Glyph]
+        @test names(raw"\sum", Display) == ["uni2211.s1"]
+        @test names(raw"\bigoplus", Display) == ["uni2A01.s1"]
+        @test names(raw"\sum", Text) == ["uni2211"]
+    end
+
+    @testset "logic symbols, harpoons, and spaced lim sup" begin
+        for cmd in ("\\neg", "\\lnot", "\\leftharpoonup", "\\rightharpoondown", "\\rightleftharpoons", "\\upharpoonright")
+            @test length(find_glyphs(layout(parse_latex(cmd), family, Text))) == 1
+        end
+        # Harpoons are relations: thick spaces around them.
+        @test length(find_spaces(layout(parse_latex(raw"a\rightleftharpoons b"), family, Text))) == 2
+        # amsmath sets \limsup as lim\,sup.
+        ls = layout(parse_latex(raw"\limsup"), family, Text)
+        @test length(find_glyphs(ls)) == 6
+        @test only(b.element.width for b in ls if b.element isa Space) ≈ 3 / 18
     end
 
     # ── Binomial coefficients ──────────────────────────────────────────────────

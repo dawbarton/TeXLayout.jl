@@ -246,6 +246,13 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "Rightarrow" => 0x21D2, "Leftarrow" => 0x21D0,
     "leftrightarrow" => 0x2194, "Leftrightarrow" => 0x21D4,
     "mapsto" => 0x21A6, "longmapsto" => 0x27FC,
+    "leftharpoonup" => 0x21BC, "leftharpoondown" => 0x21BD,
+    "rightharpoonup" => 0x21C0, "rightharpoondown" => 0x21C1,
+    "upharpoonleft" => 0x21BF, "upharpoonright" => 0x21BE,
+    "downharpoonleft" => 0x21C3, "downharpoonright" => 0x21C2,
+    "rightleftharpoons" => 0x21CC, "leftrightharpoons" => 0x21CB,
+    # Logic
+    "neg" => 0x00AC, "lnot" => 0x00AC,
     "longrightarrow" => 0x27F6, "longleftarrow" => 0x27F5,
     "Longrightarrow" => 0x27F9, "Longleftarrow" => 0x27F8,
     "hookrightarrow" => 0x21AA, "hookleftarrow" => 0x21A9,

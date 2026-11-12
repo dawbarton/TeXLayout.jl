@@ -28,7 +28,7 @@ end
 # Lay out an extensible arrow with optional above and below labels.
 #
 # Vertical positioning follows KaTeX xarrow.ts:
-#   - Arrow body centred on the math axis.
+#   - Arrow body at its natural baseline position (shaft on the math axis).
 #   - Above label: bottom of ink at arrow_top + KERN.
 #   - Below label: top of ink at arrow_bot − KERN.
 #   - Minimum arrow width: max(natural width, widest_label + 2*PAD*scale).
@@ -78,10 +78,12 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     # Total advance: same as arrow width (labels are centred within it).
     total_w = arrow_w
 
-    # Vertical: centre arrow on math axis.
+    # Vertical: the arrow sits on the baseline like any relation, as in amsmath's
+    # \arrowfill@; the font draws its shaft on the math axis.  Centring the ink
+    # on the axis instead would drop harpoon shafts below it (or raise them).
     axis_em = mc.axis_height / upm * scale
     if g_ref !== nothing
-        arrow_y = y0 + axis_em - (Float64(g_ref.y_min) + Float64(g_ref.y_max)) / (2.0 * upm) * scale
+        arrow_y = y0
         arrow_top = arrow_y + Float64(g_ref.y_max) / upm * scale
         arrow_bot = arrow_y + Float64(g_ref.y_min) / upm * scale
     else
@@ -155,10 +157,10 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
 
     # Layout at y=0 to measure ink extents before applying shifts.
     num_start = lastindex(boxes) + 1
-    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
+    num_w = _layout_clean!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
     num_stop = lastindex(boxes)
     den_start = lastindex(boxes) + 1
-    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
+    den_w = _layout_clean!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
     den_stop = lastindex(boxes)
 
     # Clamp shifts so the minimum gap between content and rule is respected
@@ -218,10 +220,10 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     # Lay out numerator and denominator at origin to measure ink extents.
     num_start = lastindex(boxes) + 1
-    num_w = _layout_node!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
+    num_w = _layout_clean!(num_node, ctx, num_s, 0.0, 0.0, num_scale, boxes)
     num_stop = lastindex(boxes)
     den_start = lastindex(boxes) + 1
-    den_w = _layout_node!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
+    den_w = _layout_clean!(den_node, ctx, den_s, 0.0, 0.0, den_scale, boxes)
     den_stop = lastindex(boxes)
 
     # Rule 15c: gap clamping with no rule (rule_thickness = 0).
@@ -266,14 +268,14 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     if has_degree
         degree_style = ScriptScript
         degree_scale = _scale_for_child(scale, style, degree_style, mc)
-        degree_w = _layout_node!(degree_node, ctx, degree_style, 0.0, 0.0, degree_scale, boxes)
+        degree_w = _layout_clean!(degree_node, ctx, degree_style, 0.0, 0.0, degree_scale, boxes)
     end
     degree_stop = lastindex(boxes)
 
     # Rule 11: body is built in the cramped style (prevents superscripts inside
     # the radicand from protruding above the rule bar).
     body_start = lastindex(boxes) + 1
-    body_w = _layout_node!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
+    body_w = _layout_clean!(body_node, ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
     body_stop = lastindex(boxes)
     body_top = _boxes_top(boxes, body_start, body_stop, upm)
     body_bot = _boxes_bottom(boxes, body_start, body_stop, upm)
@@ -393,7 +395,11 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     axis_em = y0 + mc.axis_height / upm * scale
     h_above = max(0.0, content_top - axis_em)
     h_below = max(0.0, axis_em - content_bot)
-    required_du = _left_right_required_du(max(h_above, h_below), scale, upm)
+    # A matrix inside the delimiters is ink-tight here but strutted in TeX, so
+    # it gets full coverage, as matrix environments' own delimiters do.
+    δ = max(h_above, h_below)
+    required_du = any(_contains_matrix, node.children) ? 2δ / scale * upm :
+        _left_right_required_du(δ, scale, upm)
 
     # Place left delimiter, then (segment + middle delimiter)*, then last segment + right.
     cursor = x0
@@ -500,15 +506,19 @@ function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
     return _layout_node!(node.children[1], _with_text_mode(ctx), style, x0, y0, scale, boxes)
 end
 
-function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
+function _layout_accent!(node, ctx, style, x0, y0, scale, boxes; clean::Bool = true)
     # KaTeX Rule 12 (accent.ts).  Build base in cramped style, then place the
     # accent glyph above it, aligned via MathTopAccentAttachment when available.
+    # `clean = false` keeps a lone character's italic correction, for the base of
+    # a scripted accent (see `_layout_script_base!`).
     isempty(node.children) && return 0.0
     mc, upm = ctx.mc, ctx.upm
 
     # Build base in cramped style (Rule 12: base is typeset cramped).
     base_start = lastindex(boxes) + 1
-    base_w = _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
+    base_w = clean ?
+        _layout_clean!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, boxes) :
+        _layout_node!(node.children[1], ctx, cramp_style(style), 0.0, 0.0, scale, boxes)
     base_stop = lastindex(boxes)
     base_top = _boxes_top(boxes, base_start, base_stop, upm)   # body.height in em (measured at origin)
     _translate_range!(boxes, base_start, base_stop, x0, y0)
@@ -581,7 +591,7 @@ function _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
     child_style = is_over ? cramp_style(style) : style
 
     body_start = lastindex(boxes) + 1
-    body_w = _layout_node!(node.children[1], ctx, child_style, 0.0, 0.0, scale, boxes)
+    body_w = _layout_clean!(node.children[1], ctx, child_style, 0.0, 0.0, scale, boxes)
     body_stop = lastindex(boxes)
     body_top = _boxes_top(boxes, body_start, body_stop, upm)
     body_bot = _boxes_bottom(boxes, body_start, body_stop, upm)

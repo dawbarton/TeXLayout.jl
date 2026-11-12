@@ -58,6 +58,37 @@ end
 
 # Lay out a glyph assembly centred on the math axis.  Returns the horizontal
 # advance of the widest part.
+# Overlaps between adjacent parts of an expanded assembly, and its resulting
+# length (design units).  Start with the minimum overlap at each gap (the
+# longest possible assembly for this many extenders), then widen the overlaps,
+# in proportion to each gap's spare connector length, to shrink the assembly
+# toward `required_du`.  Without this, fonts that provide only one pre-built
+# variant (e.g. STIX Two bar/|) always overshoot: n extenders round the length
+# up to the nearest multiple, so assembled delimiters come out visibly taller,
+# and assembled braces and arrows wider, than their content.
+function _assembly_overlaps(
+        parts::Vector{GlyphAssemblyPart}, required_du::Float64, min_conn::Int
+    )::Tuple{Vector{Int}, Float64}
+    overlaps = [_gap_min_overlap(parts[i], parts[i + 1], min_conn) for i in 1:(length(parts) - 1)]
+    total_du = _assembly_total_du(parts, overlaps)
+    if !isempty(overlaps) && total_du > required_du
+        excess = total_du - required_du
+        max_extra = [
+            min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
+                for i in eachindex(overlaps)
+        ]
+        total_cap = Float64(sum(max_extra))
+        if total_cap > 0.0
+            for i in eachindex(overlaps)
+                extra = round(Int, excess * max_extra[i] / total_cap)
+                overlaps[i] += clamp(extra, 0, max_extra[i])
+            end
+            total_du = _assembly_total_du(parts, overlaps)
+        end
+    end
+    return overlaps, total_du
+end
+
 function _layout_assembly!(
         asm::GlyphAssembly,
         ctx::_LayoutCtx,
@@ -75,44 +106,7 @@ function _layout_assembly!(
     parts = _expand_assembly_parts(asm.parts, n)
     isempty(parts) && return 0.0
 
-    # Start with minimum overlaps at each gap (giving the maximum possible height
-    # for this n), then increase them uniformly to shrink the assembly toward
-    # required_du.  Without this adjustment, fonts that provide only one pre-built
-    # variant (e.g. STIX Two bar/|) always overshoot: n extenders round the height
-    # up to the nearest multiple, making assembled delimiters visibly taller than
-    # their \left/\right companions (which use exact pre-built variants).
-    overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
-    for i in eachindex(overlaps)
-        overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
-    end
-
-    # Total assembly height in design units with minimum overlaps.
-    total_du = Float64(parts[1].full_advance)
-    for i in eachindex(overlaps)
-        total_du += parts[i + 1].full_advance - overlaps[i]
-    end
-
-    # Distribute extra overlap to bring total_du toward required_du.
-    # Excess is spread proportionally across gaps by their available connector
-    # capacity; each gap is clamped to its per-gap maximum.
-    if !isempty(overlaps) && total_du > required_du
-        excess = total_du - required_du
-        max_extra = [
-            min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
-                for i in eachindex(overlaps)
-        ]
-        total_cap = Float64(sum(max_extra))
-        if total_cap > 0.0
-            for i in eachindex(overlaps)
-                extra = round(Int, excess * max_extra[i] / total_cap)
-                overlaps[i] += min(extra, max_extra[i])
-            end
-            total_du = Float64(parts[1].full_advance)
-            for i in eachindex(overlaps)
-                total_du += parts[i + 1].full_advance - overlaps[i]
-            end
-        end
-    end
+    overlaps, total_du = _assembly_overlaps(parts, required_du, min_conn)
 
     # Derive ink bounds from first/last glyph metrics.  When assembly parts have
     # y_min ≠ 0 (e.g. STIX Two bar: y_min=-234, y_max=706, full_advance=941),
@@ -291,6 +285,11 @@ function _layout_radical!(
     return _place_variant(chosen)
 end
 
+# True when `n` is, or groups, a matrix-like environment (`matrix`, `array`,
+# `aligned`, …), whose rows lack TeX's struts in this layout.
+_contains_matrix(n::Node)::Bool = n.kind === NodeKind.Matrix ||
+    (n.kind in (NodeKind.Group, NodeKind.Sequence) && any(_contains_matrix, n.children))
+
 # Size, in unscaled design units, that a `\left…\right` delimiter must reach to
 # enclose content extending `δ_em` above or below the math axis (TeX rule 19):
 # max(2δ × `\delimiterfactor`, 2δ − `\delimitershortfall`).
@@ -401,17 +400,8 @@ function _layout_wide_accent!(
         n = _min_extender_reps(asm.parts, required_du, min_conn)
         parts = _expand_assembly_parts(asm.parts, n)
         if !isempty(parts)
-            # Compute overlap for each adjacent pair.
-            overlaps = [
-                _gap_min_overlap(parts[i], parts[i + 1], min_conn)
-                    for i in 1:(length(parts) - 1)
-            ]
-            # Total width of the assembly in design units.
-            total_du = Float64(parts[1].full_advance) +
-                sum(
-                Float64(parts[i + 1].full_advance) - overlaps[i]
-                    for i in eachindex(overlaps); init = 0.0
-            )
+            # Overlaps widened so the assembly matches the base width.
+            overlaps, total_du = _assembly_overlaps(parts, required_du, min_conn)
             total_w = total_du / upm * scale
             # Centre the assembly over the base.
             ax = x0 + (base_w_em - total_w) / 2

@@ -347,6 +347,26 @@ bases (`{fa}_i`) get no correction from their first glyph.  Before 2026-11 no
 kern was emitted and δ was subtracted for every base, which pushed letter
 subscripts δ to the left of the advance.
 
+Two TeX refinements keep the kern from opening gaps:
+
+- **`clean_box`** (tex.web §720–721): a fraction part, script, radicand, degree,
+  accent nucleus, or over/underline nucleus that is a single character loses
+  its trailing kern (`_layout_clean!`).  So `\hat{f}*` and `\frac{e}{f}` set
+  as in TeX.  The base of a scripted accent keeps it, because rule 12 attaches
+  the scripts to the character (`_layout_script_base!`).
+- **Text alphabets** (tex.web §752): `\mathrm`, `\mathit`, `\mathbf`,
+  `\mathsf`, `\mathtt` and `\mathsfit` are text fonts in LaTeX, which add no
+  correction between consecutive letters, so `\mathit{diff}` is not
+  letter-spaced.  Symbol alphabets (`\mathnormal`, `\boldsymbol`, `\mathcal`,
+  …) keep the per-letter kern, as cmmi does.
+
+The kern makes an atom after a subscripted large operator sit closer than
+before 2026-11 (`\int_D f`).  This is TeX's arithmetic (the operator width
+loses δ under a subscript): measured with the real font files in LuaLaTeX,
+`\int_D f` is 0.64–0.71 pt wider at 10 pt in Termes, Bonum, Pagella and
+NewCM, entirely because LuaTeX sets the subscript with the wider `ssty`
+script glyphs.
+
 ---
 
 ## Rule 19 — Binary atom spacing context (pg. 446)
@@ -370,16 +390,16 @@ constants are noted for quick lookup.
 
 | Feature | NodeKind | Key implementation detail |
 |---------|----------|--------------------------|
-| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matched XeLaTeX's variant choice for NewCMMath in every case tried except where script placement differs between engines (see 18a).  Matrix delimiters still cover the whole grid, because the grid has no `\arraystretch` struts |
+| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matches LuaLaTeX's variant choice for NewCMMath in every case tried; XeLaTeX differs for `\left(\frac{\frac{a}{b}}{c}\right)` and `\left(\int_0^1 f\right)`, where its fraction and script placement differ (see 18a).  `\\left…\\right` around a matrix also keeps full coverage.  Matrix delimiters still cover the whole grid, because the grid has no `\arraystretch` struts |
 | `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
 | `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
 | Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
-| Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant from `vert_constructions` using `display_operator_min_height`; codepoints in `_DISPLAY_OP_CODEPOINTS` |
+| Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant: the first in `vert_constructions` at least `display_operator_min_height` tall, else the largest (STIX Two's minimum exceeds all its variants); codepoints in `_DISPLAY_OP_CODEPOINTS` |
 | Limits placement | `NodeKind.Decorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
 | `\limits`/`\nolimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch |
 | Horizontal extensibles (`\widehat`, `\widetilde`) | `NodeKind.Accent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | `NodeKind.HorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
-| Extensible arrows (`\xrightarrow`, …) | `NodeKind.XArrow` | 18 commands; arrow stretched to cover labels; labels at `_XARROW_KERN` (0.111 em) clearance.  Where the MATH table cannot stretch the arrow (Fira Math, some STIX Two arrows), it is built from pieces as amsmath's `\arrowfill@` does (`_XARROW_FILL_PIECES`); `\xmapsto`, the hook arrows and stacked harpoons then keep their natural width |
+| Extensible arrows (`\xrightarrow`, …) | `NodeKind.XArrow` | 18 commands; arrow stretched to cover labels and set on the baseline like a relation (the font puts the shaft on the axis; centring the ink would misplace harpoon shafts); assemblies widen their overlaps to match the width exactly; labels at `_XARROW_KERN` (0.111 em) clearance.  Where the MATH table cannot stretch the arrow (Fira Math, some STIX Two arrows), it is built from pieces as amsmath's `\arrowfill@` does (`_XARROW_FILL_PIECES`); `\xmapsto`, the hook arrows and stacked harpoons then keep their natural width |
 | Font switching (`\mathbf`, `\mathrm`, …) | `NodeKind.FontSwitch` | Maps Latin/Greek/symbols to Unicode math-variant codepoints; propagates through sub/superscripts via `ctx.font_variant` |
 | Style switches (`\displaystyle`, …) | `NodeKind.StyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see AGENTS.md encoding note) |
 | Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |

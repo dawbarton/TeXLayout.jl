@@ -112,6 +112,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   previously had to cover the content completely, so `\left(\frac{a}{b}\right)`
   in text style took a parenthesis two sizes larger than TeX's. Matrix
   delimiters are unchanged, because the matrix grid lacks TeX's row struts.
+- A single character as a fraction part, script, radicand, accent nucleus, or
+  over/underline nucleus drops its italic-correction kern, as TeX's
+  `clean_box` does, and the text alphabets (`\mathit`, `\mathrm`, `\mathbf`,
+  `\mathsf`, `\mathtt`) add none between letters. `\hat{f}*` had a visible gap
+  before the `*`, and `\mathit{AaBbXx}` was letter-spaced.
+- `\left…\right` around a matrix keeps full delimiter coverage, like the
+  matrix environments' own delimiters, since the matrix grid lacks TeX's row
+  struts.
+- Assembled horizontal braces and arrows widen their part overlaps to match
+  the required width, as vertical assemblies already did. They could overshoot
+  by up to one extender per side (a Pagella `\underbrace` ran 0.84 em past its
+  content on each side, and assembled arrowheads ran into the next atom).
+- Extensible arrows sit on the baseline like other relations rather than
+  having their ink centred on the axis, which put harpoon shafts off the axis.
+- Display-style large operators fall back to the largest size variant when
+  none reaches `DisplayOperatorMinHeight`. STIX Two's minimum exceeds all its
+  variants, so `\sum` and `\bigoplus` stayed text-size in display style; so did
+  Schola's `\bigoplus`.
+- `\neg`, `\lnot`, and the harpoon relations (`\leftharpoonup`,
+  `\rightleftharpoons`, `\upharpoonright`, …) render instead of drawing nothing,
+  and `\limsup` / `\liminf` have amsmath's thin space (`lim sup`).
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
