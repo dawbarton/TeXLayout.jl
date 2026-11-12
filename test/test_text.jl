@@ -220,8 +220,11 @@
                 full_family,
                 TeXLayout.Text,
             )
-            @test any(b.element isa Glyph for b in math_default)
-            @test !any(b.element isa GlyphID for b in math_default)
+            @test any(b.element isa Glyph for b in math_default)   # the math x and +
+            # The default path does not shape: one regular-font glyph per character.
+            default_text = filter(b -> b.element isa GlyphID, math_default)
+            @test [b.element.represented_char for b in default_text] == collect("office")
+            @test all(b.element.font_path == full_family.regular for b in default_text)
 
             math_hb = TeXLayout.layout(
                 parse_latex(raw"x+\text{office}"),

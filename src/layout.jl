@@ -250,20 +250,22 @@ function _char_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
     )
 end
 
-# Return an upright Glyph for a character, or nothing if not in the font.
-# Uses the regular font slot when present (both metrics and PS name come from
-# the same font so the renderer can locate the glyph correctly); falls back to
-# the math font when no regular font is configured.
-function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, Nothing}
+# Return an upright glyph for a character, or nothing if not in the font.
+# With a regular font configured the result is a `GlyphID` naming that exact
+# file: its metrics are in the regular font's design units, which need not match
+# the math font's (a 2048-unit TrueType text font beside a 1000-unit math font),
+# and every measurement helper scales a `GlyphID` by its own font's UPM.  Without
+# a regular font it is a math-font `Glyph`.
+function _upright_glyph(ctx::_LayoutCtx, ch::Char)::Union{Glyph, GlyphID, Nothing}
     family = ctx.family
     if family.regular !== nothing
-        m = glyph_metrics_upright(family, ch)
-        m === nothing && return nothing
-        ps = glyph_name_by_codepoint(family.regular, UInt32(ch))
-        name = isempty(ps) ? string(ch) : ps
-        return Glyph(
-            name, FontSlot.Regular, m.advance_width, m.left_side_bearing,
-            m.x_min, m.y_min, m.x_max, m.y_max
+        r = _codepoint_glyph(family.regular, UInt32(ch))
+        r === nothing && return nothing
+        gid, m = r
+        return GlyphID(
+            gid, family.regular, FontSlot.Regular, ch,
+            m.advance_width, m.left_side_bearing,
+            m.x_min, m.y_min, m.x_max, m.y_max,
         )
     else
         m = glyph_metrics_by_codepoint(family, UInt32(ch))
@@ -593,6 +595,10 @@ function _push_math_char!(boxes, g::Glyph, ctx, x0, y0, scale)::Float64
     return adv + ic_em
 end
 
+# Design units per em of the font an emitted glyph element came from.
+_element_upm(ctx::_LayoutCtx, g::Glyph)::Float64 = ctx.upm
+_element_upm(::_LayoutCtx, g::GlyphID)::Float64 = _font_upm(g.font_path)
+
 function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     ch = only(node.value)
     g = if ctx.font_variant !== :default
@@ -604,7 +610,8 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     elseif ctx.mode === LayoutMode.Text && ch == ' '
         # Space in text mode: emit a Space element with the font's word-space advance.
         m = glyph_metrics_upright(ctx.family, ' ')
-        w = m === nothing ? 0.25 : m.advance_width / ctx.upm * scale
+        text_upm = _font_upm(something(ctx.family.regular, ctx.family.math))
+        w = m === nothing ? 0.25 : m.advance_width / text_upm * scale
         push!(boxes, LayoutBox(Space(w), x0, y0, scale))
         return w
     elseif ctx.mode === LayoutMode.Text
@@ -615,10 +622,10 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     end
     g === nothing && return 0.0
     # Text-mode glyphs come from a text font, where TeX adds no italic kern.
-    ctx.mode === LayoutMode.Math && g.font_slot === FontSlot.Math &&
+    g isa Glyph && ctx.mode === LayoutMode.Math && g.font_slot === FontSlot.Math &&
         return _push_math_char!(boxes, g, ctx, x0, y0, scale)
     push!(boxes, LayoutBox(g, x0, y0, scale))
-    return g.advance_width / ctx.upm * scale
+    return g.advance_width / _element_upm(ctx, g) * scale
 end
 
 function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
@@ -691,7 +698,7 @@ function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
         g = _upright_glyph(ctx, ch)
         g === nothing && continue
         push!(boxes, LayoutBox(g, cursor, y0, scale))
-        cursor += g.advance_width / ctx.upm * scale
+        cursor += g.advance_width / _element_upm(ctx, g) * scale
     end
     return cursor - x0
 end

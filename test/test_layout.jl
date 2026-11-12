@@ -733,14 +733,32 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
     end
 
-    @testset "font_slot: \\text glyphs carry FontSlot.Regular when family has regular font" begin
-        # When a regular font is configured, _upright_glyph should emit FontSlot.Regular.
-        # Build a two-font family using the NewCM10-Regular companion for NewCMMath.
-        reg_path = joinpath(dirname(FIXTURE_FONT_PATH), "NewCM10-Regular.otf")
-        if isfile(reg_path)
-            family_with_reg = FontFamily(FIXTURE_FONT_PATH, reg_path, nothing, nothing, nothing)
-            boxes = layout(parse_latex(raw"\text{hi}"), family_with_reg, Text)
-            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in find_glyphs(boxes))
+    @testset "font_slot: \\text glyphs come from the regular font when one is configured" begin
+        # With a regular font, _upright_glyph emits a GlyphID naming that exact
+        # file, so its metrics are read in that font's own units.
+        with_regular = font_family(:new_cm)
+        for expr in (raw"\text{hi}", raw"\sin")
+            boxes = layout(parse_latex(expr), with_regular, Text)
+            ids = find_elements(boxes, e -> e isa TeXLayout.GlyphID)
+            @test length(ids) == (expr == raw"\sin" ? 3 : 2)
+            @test all(b.element.font_slot === TeXLayout.FontSlot.Regular for b in ids)
+            @test all(b.element.font_path == with_regular.regular for b in ids)
+        end
+    end
+
+    @testset "Upright glyphs use their own font's units per em" begin
+        # A 2048-unit text font beside a 1000-unit math font: \text advances must
+        # follow the text font's metrics, not be divided by the math font's UPM.
+        dejavu = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
+        if isfile(dejavu)
+            mixed = font_family(FIXTURE_FONT_PATH; regular = dejavu)
+            boxes = layout(parse_latex(raw"\text{ab}"), mixed, Text)
+            expected = sum(
+                TeXLayout._codepoint_glyph(dejavu, UInt32(c))[2].advance_width for c in "ab"
+            ) / TeXLayout._font_upm(dejavu)
+            @test TeXLayout.measure(boxes, Float64(mt.upm)).width ≈ expected
+        else
+            @info "DejaVu Serif not installed; skipping the mixed-UPM \\text test"
         end
     end
 

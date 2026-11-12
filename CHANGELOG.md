@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Makie handler tests use the public `Makie.layout_text` protocol instead of
   `Text` compute-graph node names that changed when Makie's text-handler pull
   request merged, and `tools/Project.toml` accepts CairoMakie 0.16.
+- Upright glyphs taken from a family's regular font (`\text{…}`, `\mbox{…}`,
+  and operator names such as `\sin`) are measured in that font's own units per
+  em and emitted as `GlyphID`s naming the exact font file. They were previously
+  scaled by the math font's units per em, so a 2048-unit TrueType text font
+  beside a 1000-unit math font set its text about twice too wide. The FreeType
+  tools render these glyphs from their font file.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
