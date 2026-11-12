@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
   string indices, so formulas ending in a multibyte character such as `$α$` do
   not raise a `StringIndexError`.
+- Scripts on an accented single character attach to the character, as TeX's
+  rule 12 and KaTeX require. `\hat{y}_{t+1}` previously dropped its subscript
+  0.11–0.16 em below that of `y_{t+1}`, and `\tilde{A}^2` raised its
+  superscript 0.3 em, so accented labels sat at different heights from their
+  neighbours when aligned by their bottom edge.
 - `TeXLayoutHandler` treats Makie's `lineheight` as a multiplier of the
   document baselineskip. It previously replaced the baselineskip outright, so
   handler documents were set 1.0 em apart instead of 1.2 em and a pinned

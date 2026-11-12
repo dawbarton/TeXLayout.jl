@@ -470,6 +470,11 @@ function _is_char_box(node::Node)::Bool
     # NodeKind.FontSwitch is constructed with exactly one body child by the parser, so the
     # recursion is unconditional.
     n.kind === NodeKind.FontSwitch && return _is_char_box(n.children[1])
+    # Rule 12: scripts on an accented single character attach to the character,
+    # so the accent neither lowers a subscript (via the character's depth) nor
+    # raises a superscript (via the accent's height). KaTeX does the same by
+    # delegating such supsub groups to the accent builder (supsub.ts).
+    n.kind === NodeKind.Accent && return length(n.children) == 1 && _is_char_box(n.children[1])
     return false
 end
 

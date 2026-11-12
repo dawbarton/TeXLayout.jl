@@ -117,6 +117,13 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   `\dot`, `\mathring`, `\vec`. ✓
 - `MathTopAccentAttachment` alignment used when both glyphs have records;
   falls back to centering for complex multi-glyph bases. ✓
+- Scripts on an accented single character attach to the character (TeXbook
+  rule 12's final step; KaTeX `supsub.ts` delegates to `accent.ts`), so
+  `\hat{y}_{t+1}` and `\tilde{A}^2` place their scripts exactly as `y_{t+1}` and
+  `A^2` do.  `_is_char_box` treats an accent over a character box as a
+  character box.  Before 2026-11 the accent box was used as a compound base,
+  which lowered subscripts by the character's depth plus
+  `SubscriptBaselineDropMin` and raised superscripts with the accent. ✓
 - Wide/stretchy accents (`\widehat`, `\widetilde`) implemented: share codepoints
   with their fixed-size counterparts; layout dispatches to `_layout_wide_accent!`
   which selects the smallest pre-built variant from `horiz_constructions` wide

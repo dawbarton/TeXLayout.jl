@@ -957,6 +957,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Accent: Rule 12 attaches scripts to the accented character" begin
+        # Script positions on an accented single character match the bare
+        # character: the accent neither lowers a subscript nor raises a superscript.
+        script_ys(expr) = sort([b.y for b in find_glyphs(layout(parse_latex(expr), family, Display)) if b.scale < 0.99])
+        @test script_ys(raw"\hat{y}_{t+1}") ≈ script_ys(raw"y_{t+1}")
+        @test script_ys(raw"\tilde{A}^2") ≈ script_ys(raw"A^2")
+        @test script_ys(raw"\vec{v}_i^2") ≈ script_ys(raw"v_i^2")
+        @test script_ys(raw"\widehat{x}^2") ≈ script_ys(raw"x^2")
+        # A multi-character accented base is still a compound box (Rule 18a).
+        @test script_ys(raw"\widehat{xy}^2") != script_ys(raw"{xy}^2")
+    end
+
     @testset "Wide accent: \\widehat{x} emits base and accent" begin
         boxes = layout(parse_latex("\\widehat{x}"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -1507,15 +1519,15 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes_long = layout(parse_latex(raw"\xrightarrow{\text{long label}}"), family, Text)
         w_short = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_short
+            ) for b in boxes_short
         )
         w_long = maximum(
             b.x + (
-                    b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
+                b.element isa Glyph ? b.element.advance_width / mt.upm * b.scale :
                     b.element isa HRule ? b.element.width : 0.0
-                ) for b in boxes_long
+            ) for b in boxes_long
         )
         @test w_long > w_short
     end
