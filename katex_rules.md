@@ -265,6 +265,15 @@ operators (Greek letters, etc.), and recursively for `NodeKind.FontSwitch` wrapp
 single character.  Large operators (`\int`, `\sum`, …), named operators (`\sin`,
 …), fractions, and groups all return false, triggering the supDrop/subDrop clamp.
 
+**Deviation — drops are taken at the base size.**  TeX reads σ₁₈/σ₁₉ from the
+script font, and KaTeX and XeTeX scale the drops by the script size multiplier
+as above.  LuaTeX, the OpenType-native engine, applies
+`SuperscriptBaselineDropMax` and `SubscriptBaselineDropMin` unscaled, and
+TeXLayout follows it.  Measured with NewCMMath at 10 pt: a subscript on a
+20 pt-deep rule ends 22.0 pt down in LuaLaTeX and in TeXLayout, 21.4 pt in
+XeLaTeX; `\displaystyle\int_0^1 f` agrees with LuaLaTeX to 0.02 pt and differs
+from XeLaTeX by 0.6–0.75 pt.
+
 ### 18b — Subscript only
 
 ```
@@ -361,7 +370,7 @@ constants are noted for quick lookup.
 
 | Feature | NodeKind | Key implementation detail |
 |---------|----------|--------------------------|
-| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` that clears the inner content height; centred on math axis |
+| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matched XeLaTeX's variant choice for NewCMMath in every case tried except where script placement differs between engines (see 18a).  Matrix delimiters still cover the whole grid, because the grid has no `\arraystretch` struts |
 | `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
 | `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
 | Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |

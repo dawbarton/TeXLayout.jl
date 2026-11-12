@@ -3,7 +3,7 @@ using SHA
 const SNAPSHOT_MATH_CASES = [
     ("simple_atom", raw"x+y=z", "89a80264270cc3247752bca2a9fb9db97664c671a3a0e4d43c1bc1f2af75015b"),
     ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "e77c4f125707ca78da28ccfce0a510dd70329d952da7168cf763358af77b61c6"),
-    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "5accd4dfa83911dc0f8589953936adbcfde3c2d56ba0afdc637ec48744629f38"),
+    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "331abc8eca97da723f53ef1f038fe06ff9151bc564affac990843b7ad2c1bbd6"),
     ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "9d6d0826eaafb71b4453a080254614f6d7397969d7aa10ef110c3accf8723c23"),
     ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "72458b7ec3aebcac5dc84732b38c7cc104e56edcde41cf982ef5c97801b7d7ac"),
     ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "da2b3cd63b0e2189238b0971280e0232a422f0e2c469676e82c3bb4e93e06c82"),

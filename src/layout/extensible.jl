@@ -291,6 +291,14 @@ function _layout_radical!(
     return _place_variant(chosen)
 end
 
+# Size, in unscaled design units, that a `\left…\right` delimiter must reach to
+# enclose content extending `δ_em` above or below the math axis (TeX rule 19):
+# max(2δ × `\delimiterfactor`, 2δ − `\delimitershortfall`).
+function _left_right_required_du(δ_em::Float64, scale::Float64, upm::Float64)::Float64
+    total = max(2δ_em * _DELIMITER_FACTOR, 2δ_em - _DELIMITER_SHORTFALL, 0.0)
+    return total / scale * upm
+end
+
 # Lay out one delimiter (left or right) at position (x0, y0), centred on the
 # math axis.  Tries pre-built size variants first; falls back to the glyph
 # assembly when no variant is large enough.  Returns horizontal advance.

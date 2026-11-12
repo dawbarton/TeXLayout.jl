@@ -11,6 +11,13 @@ const _THICK = 5 / 18
 # base size likewise.
 const _NULL_DELIMITER_SPACE = 0.12
 
+# TeX's `\delimiterfactor` (901, as a fraction of 1000) and `\delimitershortfall`
+# (5 pt at 10 pt, in em of the formula's base size): a `\left…\right` delimiter
+# need cover only max(0.901 × 2δ, 2δ − 0.5 em) of content extending δ from the
+# axis (rule 19).  LaTeX's defaults; KaTeX uses the same values.
+const _DELIMITER_FACTOR = 0.901
+const _DELIMITER_SHORTFALL = 0.5
+
 # Automatic inter-atom spacing for Display/Text style: (prev, next) → em.
 # Derived from KaTeX spacingData.ts; pairs with no entry have zero spacing.
 const _SPACINGS = Dict{Tuple{Symbol, Symbol}, Float64}(

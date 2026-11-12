@@ -506,6 +506,31 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test height(left_frac) > height(left_plain)
     end
 
+    @testset "\\left…\\right sizing allows TeX's delimiter factor and shortfall" begin
+        # TeXbook rule 19: size ≥ max(0.901 × 2δ, 2δ − 0.5 em).
+        req(δ) = TeXLayout._left_right_required_du(δ, 1.0, 1000.0)
+        @test req(1.0) ≈ 1802.0       # factor dominates for tall content
+        @test req(0.3) ≈ 0.901 * 600   # shortfall would allow 100
+        @test req(5.0) ≈ 9500.0        # shortfall dominates once 2δ > 5.07 em
+        @test req(0.0) == 0.0
+        @test TeXLayout._left_right_required_du(1.0, 0.5, 1000.0) ≈ 3604.0   # in unscaled units
+        # XeLaTeX + NewCMMath choose these parenthesis variants (measured).
+        paren(src, style) = only(
+            b.element.glyph_name for b in find_glyphs(layout(parse_latex(src), family, style))
+                if startswith(b.element.glyph_name, "parenleft")
+        )
+        @test paren(raw"\left(\frac{a}{b}\right)", Text) == "parenleft.v1"
+        @test paren(raw"\left(x^2\right)", Text) == "parenleft.v1"
+        @test paren(raw"\left(\frac{a}{b}\right)", Display) == "parenleft.v4"
+        @test paren(raw"\left(\frac{\frac{a}{b}}{c}\right)", Text) == "parenleft.v4"
+        # Matrix delimiters still cover the whole (strut-less) grid.
+        pm = layout(parse_latex(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}"), family, Text)
+        p = only(b for b in find_glyphs(pm) if startswith(b.element.glyph_name, "parenleft"))
+        cells = [b for b in find_glyphs(pm) if !startswith(b.element.glyph_name, "paren")]
+        @test p.y + p.element.y_max / FONT_UPM >= maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in cells)
+        @test p.y + p.element.y_min / FONT_UPM <= minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in cells)
+    end
+
     @testset "\\left. (null delimiter) places no glyph on the left" begin
         # Null delimiter "." produces no rendered glyph on the left.
         boxes_null = layout(parse_latex("\\left. x \\right)"), family, Text)

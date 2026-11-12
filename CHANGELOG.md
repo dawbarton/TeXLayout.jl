@@ -106,6 +106,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cases` give the same space. The fraction rule previously ran into the
   neighbouring atoms (`x\frac{a}{b}x` was 0.24 em narrower than in TeX).
   Layouts containing fractions or null delimiters widen accordingly.
+- `\left…\right` delimiters are sized by TeX's rule, with `\delimiterfactor`
+  901 and `\delimitershortfall` 5 pt: a delimiter need reach only
+  max(0.901 × 2δ, 2δ − 0.5 em) for content extending δ from the axis. They
+  previously had to cover the content completely, so `\left(\frac{a}{b}\right)`
+  in text style took a parenthesis two sizes larger than TeX's. Matrix
+  delimiters are unchanged, because the matrix grid lacks TeX's row struts.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`

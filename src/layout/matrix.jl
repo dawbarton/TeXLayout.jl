@@ -136,6 +136,11 @@ function _layout_matrix!(
         actual_bot = y_shift + grid_bot - y0
         h_above = max(0.0, actual_top - axis_em)
         h_below = max(0.0, axis_em - actual_bot)
+        # Cover the whole grid.  amsmath uses \left…\right here, whose rule 19
+        # lets a delimiter fall short of its content (`_left_right_required_du`),
+        # but TeX's rows carry \arraystretch struts that make the content box far
+        # taller than its ink.  This grid is ink-tight, so the same allowance
+        # would leave the delimiters shorter than the entries.
         required_em = 2.0 * max(h_above, h_below)
         required_du = required_em / scale * upm
         left_w = _layout_delim!(ctx, info.left, required_du, x0, y0, scale, boxes)

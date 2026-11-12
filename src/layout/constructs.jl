@@ -386,15 +386,14 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     content_top = max(content_top, y0 + mc.axis_height / upm * scale)
     content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
 
-    # Required delimiter advance: sized so every delimiter covers the content
-    # symmetrically around the math axis (same formula for left, middle, and right).
-    # Converted to unscaled design units because GlyphVariant.advance and
-    # GlyphAssemblyPart.full_advance are stored in unscaled design units.
+    # Required delimiter size (TeX rule 19): symmetric about the math axis, the
+    # same for left, middle, and right, allowing TeX's delimiter factor and
+    # shortfall.  In unscaled design units, the units of GlyphVariant.advance
+    # and GlyphAssemblyPart.full_advance.
     axis_em = y0 + mc.axis_height / upm * scale
     h_above = max(0.0, content_top - axis_em)
     h_below = max(0.0, axis_em - content_bot)
-    required_em = 2.0 * max(h_above, h_below)
-    required_du = required_em / scale * upm
+    required_du = _left_right_required_du(max(h_above, h_below), scale, upm)
 
     # Place left delimiter, then (segment + middle delimiter)*, then last segment + right.
     cursor = x0
