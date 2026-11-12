@@ -26,6 +26,13 @@ this file records the intended implementation direction.
 - Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
   compare any proposed default change against TeX, KaTeX, and all snapshot
   fonts.
+- Give matrix rows TeX's `\arraystretch` strut height and depth, then size
+  matrix delimiters with rule 19 (`_left_right_required_du`) as `\left…\right`
+  already is.  Until then the grid is ink-tight, so the delimiters must cover
+  it fully; XeLaTeX's `pmatrix` rows are noticeably taller than TeXLayout's.
+- Size `\binom` and `\genfrac` delimiters from fixed sizes, as TeX does with
+  `delim1` / `delim2` (OpenType has no such constant; check what LuaTeX uses),
+  instead of fitting them to the content.
 
 ## Display environments
 
@@ -43,6 +50,16 @@ this file records the intended implementation direction.
   codepoint.
 - Define fallback behavior for math font switches applied to characters outside
   the Unicode Mathematical Alphanumeric Symbols block.
+- Apply the OpenType `ssty` feature (script-style alternates) to glyphs set in
+  Script and ScriptScript style.  XeLaTeX and LuaLaTeX both do, so primes,
+  script digits, and radical degrees come out slightly larger and wider there
+  (a ScriptScript "3" is 3.4 pt wide at 10 pt in LuaLaTeX, 2.5 pt here).  The
+  prime in `f'` currently matches XeLaTeX only because `\prime` is set as an
+  ordinary superscript of the U+2032 glyph.
+- Extensible arrows without a single-codepoint tail piece (`\xmapsto`, the hook
+  arrows, the stacked harpoons) stay at natural width in fonts lacking a
+  horizontal construction (Fira Math).  They could be built from a vertical
+  rule or by overlapping two copies of the arrow glyph with clipping.
 
 ## Makie integration
 
@@ -51,6 +68,9 @@ this file records the intended implementation direction.
   method.
 - If Makie exposes per-render layout options, replace the current session-wide
   default bridge for document width and alignment.
+- Once Makie 0.25 is released, run the `TeXLayoutHandler` tests in CI against
+  it; until then they are checked by hand against Makie's `ff/breaking-0.25`
+  branch.
 
 ## Regression tooling
 
