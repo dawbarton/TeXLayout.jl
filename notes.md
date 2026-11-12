@@ -1508,3 +1508,76 @@
 
 - Stress-suite `makie_cairo` reference images need regenerating: the metric fix
   changes alignment, which is the point of the fix.
+
+## 2026-11-12T13:37+00:00 Makie 0.25 readiness review and layout-correctness sweep
+
+- **ddpm baseline report.** Two causes. (1) Makie 0.24's `get_yshift` maps
+  `valign = :baseline` to the bottom edge for LaTeX labels; this cannot be fixed
+  from TeXLayout and disappears with Makie 0.25's handler protocol, whose
+  `TextLayout.baseline` is honoured. (2) A TeXLayout bug: scripts on an accented
+  single character (`\hat{y}_{t+1}`) did not attach to the character (TeX rule
+  12), which accounted exactly for the 3 px offset seen in ddpm.
+- **Makie 0.25.** `TeXLayoutHandler` now scales Makie's `lineheight` as a
+  multiplier of the document baselineskip and reports the last line's baseline,
+  as Makie's own layouts do. Tests use `Makie.layout_text` rather than
+  compute-graph node names. Full suite passes against the `ff/breaking-0.25`
+  checkout (Makie 0.25.0) and under `Pkg.test()` with Makie 0.24.
+- **Environments re-resolved for Julia 1.13** (`Pkg.update`, since
+  `Pkg.resolve` failed on 1.10-era manifests); `tools/Project.toml` accepts
+  CairoMakie 0.16. Pkg 1.13 writes absolute `[sources]` paths into
+  `benchmark/Project.toml`; that edit was reverted.
+- **Engine references.** Where TeX engines disagree, TeXLayout follows LuaTeX
+  (the OpenType-native engine), checked empirically with box measurements
+  (`\setbox0\hbox{$…$}\typeout{\the\ht0}`) in LuaLaTeX and XeLaTeX with
+  NewCMMath:
+  - radical degree: LuaTeX `\Uroot` puts the degree *baseline* at sign bottom +
+    `RadicalDegreeBottomRaisePercent` × sign height and clamps the negative
+    after-kern; XeLaTeX uses LaTeX's `\root` (0.6 × (ht − dp), no MATH
+    constant). TeXLayout now matches LuaTeX to 0.001 pt;
+  - script baseline drops (`SuperscriptBaselineDropMax`,
+    `SubscriptBaselineDropMin`): LuaTeX applies them unscaled; XeTeX and KaTeX
+    scale them by the script size (classic σ18/σ19 from the script font).
+    TeXLayout already matched LuaTeX; documented as a deviation from KaTeX;
+  - null delimiter space (1.2 pt, unscaled in scripts) and rule 19 delimiter
+    sizing (901, 5 pt) agree across engines; the variants chosen now match
+    LuaLaTeX's in every case tried (XeLaTeX differs where its fraction and
+    script placement differ).
+- **Pitfall: TinyTeX does not have the bundled math fonts installed.**
+  `\setmathfont{NewCMMath-Regular.otf}` silently falls back to Latin Modern
+  Math (the log says `not loadable`, then `latinmodern-math.otf`).  Load the
+  artifact file explicitly with `\setmathfont{math.otf}[Path=<artifact dir>/]`
+  and grep the log for `not loadable` before trusting a measurement.  The
+  first round of comparisons here used LM by accident; re-run with the real
+  NewCMMath they gave identical numbers (LM and NewCM share these metrics).
+- **Stress review.** All 1116 changed images (8 fonts) were reviewed visually
+  by four parallel reviewers against the pre-fix baseline, then the 580 images
+  changed by the follow-up fixes in a second pass.  The first pass found
+  regressions from this session's changes (no text-font italic-correction
+  rule, rule 19 around matrices) and older bugs it exposed
+  (horizontal assemblies overshooting, harpoon shafts off the axis, display
+  operators falling back to the base glyph, missing `\neg` and harpoons).  It
+  also showed the `makie_cairo` suite had never produced usable images:
+  `_read_png` reinterpreted RGBA as bytes and the label was aligned by Makie's
+  padded block box, clipping the top.  Captures are now greyscale and cropped
+  to the ink.
+- **`clean_box` tried and reverted.** TeX82 drops a lone character's italic
+  correction in fraction parts, scripts, radicands, and accent nuclei
+  (tex.web §720–721); implementing that made Bonum's f collide with `(` and
+  integral subscripts collide with the integrand (second-pass review).
+  Measuring XeLaTeX and LuaLaTeX with the real Bonum file showed both engines
+  *keep* the correction in all these contexts with OpenType fonts, so the
+  change was reverted.  Lesson: check OpenType-engine behaviour empirically
+  before porting a tex.web rule.
+- **Judged faithful, not changed:** an atom after a subscripted integral sits
+  closer than before (`\int_D f`; TeX's width arithmetic, LuaLaTeX differs only
+  by its `ssty` subscript glyphs), and STIX Two radical degrees touch the
+  sign's tick (LuaLaTeX places them identically, to 0.001 pt).
+- **Matrix delimiters deliberately not moved to rule 19**: TeX's array rows have
+  `\arraystretch` struts, ours are ink-tight, so the shortfall would leave
+  parentheses shorter than the entries. Needs strut rows first (future.md).
+- **Fonts lacking constructions.** Fira Math has no horizontal arrow
+  constructions; STIX Two none for ↠, ⇌, or =. Arrows are now built as
+  amsmath's `\arrowfill@` does; tail-shaped arrows fall back to natural width.
+- **Not done, by design or deferred:** `\textsc` under `MetricShaper` still
+  throws inside the Makie handler (feature-bearing spans need HarfBuzz); `ssty`
+  script alternates; CI job for Makie 0.25; fixed-size `\binom` delimiters.

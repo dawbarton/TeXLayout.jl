@@ -23,6 +23,13 @@ this file records the intended implementation direction.
   box representation.
 - Preserve optional matrix row-spacing dimensions such as `\\[0.2em]` in the
   parsed matrix representation and apply them when computing row baselines.
+- Set matrix column spacing per environment, as amsmath and KaTeX do:
+  `\arraycolsep` is 5 pt (0.5 em, `article.cls`; KaTeX `array.ts` likewise), so
+  columns are 1 em apart and matrix environments drop the outer
+  `\arraycolsep`; only `smallmatrix` uses `\thickspace` (5 mu).  TeXLayout
+  uses 5 mu everywhere (`_MATRIX_COLSEP`), so matrix columns are 0.44 em
+  closer than in TeX, and `pmatrix` keeps 5 mu of padding inside its
+  parentheses.
 - Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
   compare any proposed default change against TeX, KaTeX, and all snapshot
   fonts.
@@ -33,6 +40,31 @@ this file records the intended implementation direction.
 - Size `\binom` and `\genfrac` delimiters from fixed sizes, as TeX does with
   `delim1` / `delim2` (OpenType has no such constant; check what LuaTeX uses),
   instead of fitting them to the content.
+
+- Add an invisible element with height and depth (a strut) to the box model.
+  Layout is ink-based, so `RadicalExtraAscender` (space TeX keeps above a
+  radical's rule) cannot be represented and is ignored: `\frac{1}{\sqrt{x}}`
+  sets the fraction bar 0.04 em (NewCM) to 0.14 em (Termes) closer to the
+  radical than TeX does.  The same element would carry matrix row struts.
+
+## Extensible glyph assemblies
+
+- Vertical arrow and double-arrow assemblies are broken in some fonts: Luciole
+  `\left\uparrow` shows two arrowheads and its `\downarrow` a detached bar;
+  STIX Two and Luciole `\Downarrow` show a seam, and `\Downarrow` comes out
+  taller than `\Uparrow` for the same content.
+- Radical assemblies still use minimum part overlaps
+  (`_layout_radical_assembly!`), so they can overshoot the required height by up
+  to one extender; horizontal and delimiter assemblies now share
+  `_assembly_overlaps`.
+- `\bigm\{` and `\bigm|` come out at different heights (about 1.9 em and
+  1.1 em in Bonum); check the `\big` size tiers against each font's variants.
+- Fira Math's overbracket assembly has a visible step in its top rule.
+
+## Sizing
+
+- Make `\tiny` … `\Huge` absolute, as in LaTeX, rather than multiplying the
+  enclosing size: `{\Large … {\small x}}` sets x at 1.44 × 0.9 instead of 0.9.
 
 ## Display environments
 
@@ -50,6 +82,13 @@ this file records the intended implementation direction.
   codepoint.
 - Define fallback behavior for math font switches applied to characters outside
   the Unicode Mathematical Alphanumeric Symbols block.
+- Add a fallback font for symbols a math font lacks.  Fira Math has no
+  `\setminus`, `\vdash`, `\triangle`, `\top`, `\bot`, or big set and lattice
+  operators (⋃ ⋂ ⨁ ⨂ ⨀ ⨄ ⨆ ⨅ ⋁ ⋀), which render as blank space; its `\mathcal`
+  and `\mathscr` fall back to upright sans, and `\widehat`/`\widetilde` do not
+  stretch.
+- An unknown command that is dropped still counts as an atom for spacing:
+  `\unknown + x` gives the leading `+` binary spacing.
 - Apply the OpenType `ssty` feature (script-style alternates) to glyphs set in
   Script and ScriptScript style.  XeLaTeX and LuaLaTeX both do, so primes,
   script digits, and radical degrees come out slightly larger and wider there
