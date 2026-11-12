@@ -35,3 +35,37 @@ jobs:
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Makie 0.25 is unreleased: run the suite, including the TeXLayoutHandler
+  # assertions, against its development branch.  Experimental, so a failure
+  # here (for example after a breaking change upstream) does not fail the run.
+  makie-0-25:
+    name: Makie 0.25 (ff/breaking-0.25, experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: MakieOrg/Makie.jl
+          ref: ff/breaking-0.25
+          path: makie-src
+          sparse-checkout: |
+            ComputePipeline
+            Makie
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@b7788abd52452d5bc033d69796e110d9906af4ab # v3.2.0
+      - name: Develop the Makie branch and TeXLayout into a scratch environment
+        run: |
+          julia --project=makie-env -e '
+            using Pkg
+            Pkg.develop([
+                PackageSpec(path = "makie-src/ComputePipeline"),
+                PackageSpec(path = "makie-src/Makie"),
+                PackageSpec(path = pwd()),
+            ])
+            Pkg.instantiate()'
+      - name: Run the tests with that Makie
+        run: julia --project=makie-env -e 'using Pkg; Pkg.test("TeXLayout")'
