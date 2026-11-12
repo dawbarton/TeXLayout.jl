@@ -92,6 +92,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all. Such arrows are now built from a head and repeated shaft pieces, as
   amsmath's `\arrowfill@` builds them, and `\xmapsto`, the hook arrows, and the
   stacked harpoons fall back to the arrow glyph at its natural width.
+- The degree of `\sqrt[n]{…}` is placed as LuaTeX's `\Uroot` places it: its
+  baseline sits `RadicalDegreeBottomRaisePercent` of the radical sign's height
+  above the sign's bottom. It was measured from the formula baseline instead,
+  so the degree floated 0.25–0.4 em too high and, on tall radicands, above the
+  sign altogether. The negative kern after the degree no longer pulls a narrow
+  degree's sign left into the preceding material.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`

@@ -160,6 +160,17 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   the OpenType MATH table instead of the KaTeX formula; these are purpose-built
   constants that subsume the `ruleThickness + phi/4` calculation. ✓
 - Body is built in `cramp_style(style)` as required. ✓
+- **Degree (`\sqrt[n]{…}`)** follows LuaTeX's `\Uroot`, not KaTeX's or LaTeX's
+  `\root` (which raise the degree by 0.6 × (height − depth) of the radical box
+  and ignore the MATH table).  The degree is set in ScriptScript style; its
+  baseline sits `RadicalDegreeBottomRaisePercent` of the radical sign's height
+  above the sign's bottom; `RadicalKernBeforeDegree` and
+  `RadicalKernAfterDegree` separate it from the sign, with the negative
+  after-kern clamped so that the degree and kerns never have negative width.
+  Checked against LuaLaTeX + unicode-math with NewCMMath: the degree baseline
+  agrees to 0.001 pt at 10 pt in Text and Display style.  LuaTeX also uses the
+  font's `ssty` script variants for the degree, which TeXLayout does not, so
+  degree widths differ slightly.
 
 ---
 

@@ -300,16 +300,23 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     required_du = required_cover_du
     degree_before = has_degree ? mc.radical_kern_before_degree / upm * scale : 0.0
     degree_after = has_degree ? mc.radical_kern_after_degree / upm * scale : 0.0
+    # The after-degree kern is negative; as in LuaTeX, it never pulls the sign
+    # left of where it would sit with no degree.
+    degree_after = max(degree_after, -(degree_before + degree_w))
     radical_x = has_degree ? x0 + degree_before + degree_w + degree_after : x0
 
     rule_top_em = y0 + rule_top_local
     radical = _layout_radical!(ctx, required_du, rule_top_em, radical_x, scale, boxes)
 
     if has_degree
-        degree_bottom = _boxes_bottom(boxes, degree_start, degree_stop, upm)
+        # RadicalDegreeBottomRaisePercent is a fraction of the radical sign's
+        # height, measured up from the sign's bottom (whose top is at the rule
+        # top).  As in LuaTeX's \Uroot, the degree's baseline goes there, so a
+        # descender in the degree hangs below it.
+        sign_bottom = rule_top_em - radical.cover
         degree_raise = mc.radical_degree_bottom_raise_percent / 100.0 * radical.cover
         degree_x = x0 + degree_before
-        degree_y = y0 + degree_raise - degree_bottom
+        degree_y = sign_bottom + degree_raise
         _translate_range!(boxes, degree_start, degree_stop, degree_x, degree_y)
     end
 

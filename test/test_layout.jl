@@ -203,12 +203,37 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test radical.x < degree.x < body.x
         @test body.x - radical.x ≈ radical.element.advance_width / FONT_UPM * radical.scale atol = 1.0e-6
 
-        degree_bottom = degree.y + degree.element.y_min / FONT_UPM * degree.scale
+        # The degree's baseline is RadicalDegreeBottomRaisePercent of the sign's
+        # height above the sign's bottom, not above the formula baseline.
         radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
         radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
-        expected_bottom = mt.constants.radical_degree_bottom_raise_percent / 100 *
+        expected = radical_bottom + mt.constants.radical_degree_bottom_raise_percent / 100 *
             (radical_top - radical_bottom)
-        @test degree_bottom ≈ expected_bottom atol = 1.0e-6
+        @test degree.y ≈ expected atol = 1.0e-6
+    end
+
+    @testset "Sqrt degree matches LuaTeX's \\Uroot" begin
+        # LuaLaTeX + unicode-math + NewCMMath at 10 pt: the degree's baseline is
+        # 3.605 pt up in Text style and 4.095 pt in Display style (measured from
+        # the height of \sqrt[\rule{1pt}{60pt}]{x}).  A degree with a descender
+        # hangs below that baseline rather than raising it.
+        for (style, expected) in ((Text, 0.3605), (Display, 0.4095))
+            for (src, degree_ps) in (("\\sqrt[3]{x}", "three"), ("\\sqrt[p]{x}", "u1D45D"))
+                degree = only(
+                    filter(
+                        b -> b.element.glyph_name == degree_ps,
+                        find_glyphs(layout(parse_latex(src), family, style))
+                    )
+                )
+                @test degree.y ≈ expected atol = 1.0e-4
+            end
+        end
+        # The negative after-degree kern never pulls the sign left of where it
+        # sits without a degree (LuaTeX gives both 14.05 pt wide).
+        plain = layout(parse_latex("\\sqrt{x}"), family, Text)
+        rooted = layout(parse_latex("\\sqrt[3]{x}"), family, Text)
+        sign_x(bs) = only(b.x for b in find_glyphs(bs) if startswith(b.element.glyph_name, "radical"))
+        @test sign_x(rooted) ≈ sign_x(plain) atol = 1.0e-9
     end
 
     @testset "Nested sqrt: radicand starts at radical advance width" begin
