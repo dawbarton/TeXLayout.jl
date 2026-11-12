@@ -9,12 +9,12 @@ const SNAPSHOT_MATH_CASES = [
     ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "fb0d711ec94511853009b8cb54d5bc8505ce6da2c5874e68e0210021a0179e56"),
     # Display alignment environments typeset cells in Display style: fractions and
     # scripts keep full display size (contrast with the text-sized matrix cells above).
-    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "f6275119f5cf2b791731ac7d753edaeaf1911c53e197dd7dc1a5eed706d0a4cd"),
-    ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "30c25ef3e156a67a37b9c13263db520cdb5226fadebeb88cb2fc34baf1964a9e"),
+    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "2cdb3c6e57faafc4a150d99b9bcd4f692e5d81f8d2e9f3fc74a3a4218a0a08f1"),
+    ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "4acc36219cb53cf2bf454443966e95eea9403d44e85f50f7d5c1726163676f00"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "4acb5fbf1083d01dcb07b4db874d6313d8caa8e971649e32810c4cef2854bb79"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "dea9869d84cc1bfe2727f98de172cb5687d39f0c285dc347185c660fad57a95f"),
     ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "55f263f8cebe23c9a5108fc759481dd2d0ba1ea89dbe3fca6f168f061f998de6"),
 ]
 

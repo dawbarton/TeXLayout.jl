@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
   including glyph IDs, exact font faces, horizontal and vertical rule specs,
   block bounds, and per-plot or theme-level selection.
+- `\\[len]` row spacing in matrices, arrays, `cases`, `smallmatrix`, and the
+  alignments, with LaTeX's semantics: in an array a positive length deepens
+  the row to at least the strut depth plus the length, and elsewhere it adds
+  space. It was parsed and ignored.
+- TeX units `pt`, `ex`, `mm`, `cm`, `in`, `bp`, `pc`, `dd`, `cc`, and `sp`
+  (at 10 pt = 1 em) in `\kern`, `\hskip`, and `\\[len]`; only `em` and `mu`
+  were understood, so `\kern 3pt` gave no space.
 
 ### Changed
 - Makie 0.25 integration no longer relies on intercepting
@@ -50,13 +57,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   covering the ink. `||` in an array spec adds `\doublerulesep` (0.2 em).
   `smallmatrix` sets its entries in script style (with `ssty` alternates)
   rather than at 0.9×, with amsmath's spacing. Widths agree with LuaLaTeX to
-  0.001 pt across 30 cases in New Computer Modern and TeX Gyre Bonum. The
-  display alignments (`align`, `gather`, …) are unchanged.
+  0.001 pt across 30 cases in New Computer Modern and TeX Gyre Bonum. A
+  one-column `cases` ends with the `\quad` of amsmath's template.
+- The alignments (`aligned`, `gathered`, `align`, `gather`, and `split`) are
+  spaced as in amsmath: every row carries a strut and rows are 1.5 em apart
+  baseline to baseline (`\baselineskip` + `\jot`), or 0.4 em clear of each
+  other when taller; column pairs are 1 em apart and there is no outer
+  margin. Rows were ink-tight with a 3 mu gap, pairs 0.56 em apart, and
+  `gather` had 5 mu margins. Widths, heights, and depths agree with LuaLaTeX
+  to 0.001 pt.
 - `glyph_metrics(family, name)` is memoised per font and glyph name. Layouts
   with delimiters, large operators, or scripts are 1.5–6× faster in the
   benchmark suite (FreeType's name lookup dominated them).
 
 ### Fixed
+- `\begin{equation}` is laid out exactly like `\[…\]`. It was centred on the
+  math axis like an array, which moved its baseline.
 - Fractions (`\frac`, `\dfrac`, `\binom`, …) and the undelimited arrays
   (`matrix`, `array`, `smallmatrix`, `aligned`, …) are Ord atoms, as in LaTeX
   (whose `\frac` is `{…\over…}`) and KaTeX. They were Inner, which put a

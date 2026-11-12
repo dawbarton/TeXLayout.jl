@@ -1147,6 +1147,19 @@
             @test result.descent < 1.0
         end
 
+        @testset "equation is a plain display, like \\[…\\]" begin
+            # amsmath's equation has no strut and no \vcenter: its content sits
+            # on the display baseline exactly as in \[…\].
+            full_family = font_family(:new_cm)
+            records(box) = sort([(string(typeof(b.element)), b.x, b.y, b.scale) for b in box.boxes])
+            for body in ("E = mc^2", raw"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}")
+                env = TeXLayout.layout_document("A\\begin{equation}$body\\end{equation}B"; family = full_family)
+                brk = TeXLayout.layout_document("A\\[$body\\]B"; family = full_family)
+                @test records(env) == records(brk)
+                @test (env.width, env.ascent, env.descent) == (brk.width, brk.ascent, brk.descent)
+            end
+        end
+
         @testset "Display skips are explicit extra space, not synthetic lines" begin
             full_family = font_family(:new_cm)
             src = "\\begin{equation}x\\end{equation}b"

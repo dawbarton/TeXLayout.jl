@@ -43,6 +43,17 @@ const _TEXT_LITERAL_CHARS = merge(
     ),
 )
 
+# TeX units in em, taking 10 pt = 1 em, the base size that TeXLayout's other
+# fixed TeX lengths (\nulldelimiterspace, \arraycolsep, …) also assume.  `ex`
+# is Latin Modern's x-height at 10 pt (4.31 pt), the default text font under
+# fontspec and unicode-math; `mu` is 1/18 em.
+const _TEX_UNIT_EM = Dict{String, Float64}(
+    "em" => 1.0, "pt" => 0.1, "ex" => 0.431, "mu" => 1 / 18,
+    "mm" => 7.227 / 25.4, "cm" => 72.27 / 25.4, "in" => 7.227,
+    "bp" => 7.227 / 72, "pc" => 1.2, "dd" => 0.1 * 1238 / 1157,
+    "cc" => 1.2 * 1238 / 1157, "sp" => 0.1 / 65536,
+)
+
 # Explicit horizontal spacing commands mapped to their width in em units.
 # Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
 const _SPACE_WIDTHS = Dict{String, Float64}(

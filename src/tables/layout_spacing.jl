@@ -37,13 +37,36 @@ const _SMALLMATRIX_GAP = 0.2777
 const _SMALLMATRIX_BASELINESKIP = 0.6
 const _SMALLMATRIX_LINESKIP = 0.15
 
-# Column spacing and row model of the array-like environments, in em of the
-# environment's size: `outer` before the first and after the last column,
-# `gap` between columns, and `rows` either `:strut` (TeX array rows with struts
-# `stretch` times the default) or `:baselineskip` (smallmatrix).  Environments
-# not listed (the display alignments) keep their own spacing in matrix.jl.
-const _MatrixSpacing = @NamedTuple{outer::Float64, gap::Float64, rows::Symbol, stretch::Float64}
-const _ARRAY_ROWS = (rows = :strut, stretch = 1.0)
+# amsmath's alignments (`aligned`, `gathered`, and the display forms) put a
+# `\strut@` (the 8.4 pt × 3.6 pt `\strutbox`) in every row and `\openup\jot`
+# (3 pt) the interline parameters: `\baselineskip` 12 → 15 pt, `\lineskip`
+# 1 → 4 pt, `\lineskiplimit` 0 → 3 pt.  Column pairs are `\minalignsep`
+# (10 pt) apart.
+const _JOT = 0.3
+const _MINALIGNSEP = 1.0
+
+# Column spacing and row model of every array-like environment, in em of the
+# environment's size: `outer` before the first and after the last column, `gap`
+# between columns (between column pairs in the alignments), and `strut` times
+# the (0.84 em, 0.36 em) row strut as each row's minimum height and depth.
+# `rows` is `:touch` for LaTeX's array, whose rows abut, or `:interline` for
+# TeX's interline glue: baselines `baselineskip` apart unless that leaves less
+# than `lineskiplimit` between the rows, else `lineskip` between them.
+# `vcenter` centres the grid on the math axis (TeX's `\vcenter`, used by every
+# array and inline alignment); otherwise the first row sits on the baseline.
+const _MatrixSpacing = @NamedTuple{
+    outer::Float64, gap::Float64, strut::Float64, rows::Symbol,
+    baselineskip::Float64, lineskip::Float64, lineskiplimit::Float64, vcenter::Bool,
+}
+const _ARRAY_ROWS = (
+    strut = 1.0, rows = :touch, baselineskip = 0.0, lineskip = 0.0, lineskiplimit = 0.0,
+    vcenter = true,
+)
+const _ALIGN_SPACING = (
+    outer = 0.0, gap = _MINALIGNSEP, strut = 1.0, rows = :interline,
+    baselineskip = 1.2 + _JOT, lineskip = 0.1 + _JOT, lineskiplimit = 0.0 + _JOT,
+    vcenter = true,
+)
 const _MATRIX_SPACING = Dict{String, _MatrixSpacing}(
     "array" => (; outer = _ARRAYCOLSEP, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
     "matrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
@@ -52,8 +75,20 @@ const _MATRIX_SPACING = Dict{String, _MatrixSpacing}(
     "Bmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
     "vmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
     "Vmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
-    "cases" => (outer = 0.0, gap = 1.0, rows = :strut, stretch = 1.2),
-    "smallmatrix" => (outer = _THIN, gap = _SMALLMATRIX_GAP, rows = :baselineskip, stretch = 1.0),
+    "cases" => (; outer = 0.0, gap = 1.0, _ARRAY_ROWS..., strut = 1.2),
+    "smallmatrix" => (
+        outer = _THIN, gap = _SMALLMATRIX_GAP, strut = 0.0, rows = :interline,
+        baselineskip = _SMALLMATRIX_BASELINESKIP, lineskip = _SMALLMATRIX_LINESKIP,
+        lineskiplimit = _SMALLMATRIX_LINESKIP, vcenter = true,
+    ),
+    # Display alignments are laid out as their inline forms (`align` as
+    # `aligned`, `gather` as `gathered`): there is no display width to spread
+    # `align`'s column pairs over.
+    "align" => _ALIGN_SPACING, "aligned" => _ALIGN_SPACING, "split" => _ALIGN_SPACING,
+    "gather" => _ALIGN_SPACING, "gathered" => _ALIGN_SPACING,
+    # `equation` is not an alignment but a plain display, like `\[…\]`: no
+    # strut, and its content stays on the baseline.
+    "equation" => (; _ALIGN_SPACING..., strut = 0.0, vcenter = false),
 )
 
 # Automatic inter-atom spacing for Display/Text style: (prev, next) → em.

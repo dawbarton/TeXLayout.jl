@@ -1630,6 +1630,53 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         small = layout(parse_latex(raw"\begin{smallmatrix} a \end{smallmatrix}"), family, Text)
         @test only(find_glyphs(small)).element.glyph_name == "u1D44E.st"
         @test only(find_glyphs(small)).scale ≈ mt.constants.script_percent_scale_down / 100
+        # A one-column cases still ends with the \quad of its l@{\quad}l template.
+        @test width(raw"\begin{cases} a \\ c \end{cases}") ≈ 2.551 atol = 1.0e-4
+    end
+
+    @testset "row spacing and alignments match LaTeX + amsmath" begin
+        # TeX's box of each environment (struts included), from
+        # `_layout_matrix_box!`, against LuaLaTeX's \ht and \dp at 10 pt in
+        # NewCM, in em.  \\[len] deepens an array row to at least strut depth
+        # plus len, but adds to the gap when negative and in smallmatrix and
+        # the alignments; aligned and gathered rows carry \strut@ and are
+        # \baselineskip + \jot (1.5 em) apart, or \lineskip + \jot (0.4 em)
+        # clear of each other when taller.
+        ctx = TeXLayout._LayoutCtx(
+            family, mt.constants, Float64(mt.upm), mt.vert_constructions,
+            mt.horiz_constructions, mt.top_accent_attachments, mt.italic_corrections,
+            mt.min_connector_overlap, mt.script_alternates, TeXLayout.LayoutMode.Math,
+            :default, TeXLayout.MetricShaper(),
+        )
+        function box(src)
+            m = only(c for c in parse_latex(src).children if c.kind === NodeKind.Matrix)
+            return TeXLayout._layout_matrix_box!(m, ctx, Text, 0.0, 0.0, 1.0, TeXLayout.LayoutBox[])
+        end
+        for (src, ht, dp) in (
+                (raw"\begin{matrix} a \\[10pt] b \end{matrix}", 1.95, 1.45),
+                (raw"\begin{matrix} a \\[1em] b \end{matrix}", 1.95, 1.45),
+                (raw"\begin{matrix} a \\[-2pt] b \end{matrix}", 1.35, 0.85),
+                (raw"\begin{matrix} \dfrac{a}{b} \\[2pt] c \end{matrix}", 1.758, 1.258),
+                (raw"\begin{matrix} a \\ b \\[5pt] \end{matrix}", 1.7, 1.2),
+                (raw"\begin{matrix} a \\[3mm] b \end{matrix}", 1.876791, 1.37679),
+                (raw"\begin{smallmatrix} a \\[2pt] b \end{smallmatrix}", 0.829251, 0.329251),
+                (raw"\begin{aligned} a &= b \\ c &= d \\ e &= f \end{aligned}", 2.35, 1.85),
+                (raw"\begin{aligned} a &= b \\[5pt] c &= d \end{aligned}", 1.85, 1.35),
+                (raw"\begin{aligned} a &= b \\[-2pt] c &= d \end{aligned}", 1.5, 1.0),
+                (raw"\begin{aligned} x &= \sum_{i=1}^n a_i \\ y &= \sum_{j=1}^n b_j \end{aligned}", 3.072401, 2.5724),
+                (raw"\begin{gathered} \sum_{i=1}^n a_i \\ b \end{gathered}", 2.32725, 1.82725),
+            )
+            b = box(src)
+            @test b.height ≈ ht atol = 1.0e-4
+            @test b.depth ≈ dp atol = 1.0e-4
+        end
+        # Column pairs are \minalignsep (1 em) apart, with no outer margin, and
+        # alignments are Ord atoms (no space after `x`).
+        width(src) = TeXLayout.measure(layout(parse_latex(src), family, Text), Float64(FONT_UPM)).width
+        @test width(raw"\begin{aligned} a &= b & c &= d \end{aligned}") ≈ 5.641083 atol = 1.0e-4
+        @test width(raw"\begin{aligned} a &= b & c &= d & e &= f \end{aligned}") ≈ 9.020624 atol = 1.0e-4
+        @test width(raw"x\begin{aligned} a &= b \end{aligned}") ≈ 2.87754 atol = 1.0e-4
+        @test width(raw"\begin{gathered} a \\ bbbb \end{gathered}") ≈ 1.771997 atol = 1.0e-4
     end
 
     @testset "align inserts relation spacing after alignment marker" begin

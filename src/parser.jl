@@ -12,10 +12,24 @@ mutable struct _Parser
     pos::Int
 end
 
+# A TeX dimension `value unit` in em (`_TEX_UNIT_EM`), or `nothing` for an
+# unknown unit.
+_dimension_em(value::Real, unit::AbstractString) =
+    (f = get(_TEX_UNIT_EM, lowercase(unit), nothing); f === nothing ? nothing : value * f)
+
+# A dimension written out as text (`2pt`, ` -0.5 em `) in em; 0.0 when it is not
+# a number followed by a known two-letter unit (`\jot` and other registers are
+# not supported).
+function _dimension_text_em(s::AbstractString)::Float64
+    m = match(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*([A-Za-z]{2})\s*$", s)
+    m === nothing && return 0.0
+    return something(_dimension_em(parse(Float64, m[1]), m[2]), 0.0)
+end
+
 # Parse a TeX dimension after \kern / \mkern / \hskip / \mskip and return its
 # value in em units.  Supports a braced form (\kern{1em}) and an unbraced form
-# (\kern1em).  Only "em" and "mu" units are recognised; anything else yields 0.
-# One math unit (mu) = 1/18 em by the standard TeX convention.
+# (\kern1em).  Units are those of `_TEX_UNIT_EM`; an unknown unit yields 0.
+# \mkern and \mskip take math units (mu, 1/18 em) whatever the unit says.
 function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
     _skip_ignorable_spaces!(p)
     braced = _current(p).kind === TokenKind.LBrace
@@ -46,14 +60,8 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
 
     val = tryparse(Float64, isempty(num) ? "0" : String(num))
     val === nothing && return 0.0
-    unit_str = lowercase(String(unit))
-    if mu_units || unit_str == "mu"
-        return val / 18
-    elseif unit_str == "em"
-        return val
-    else
-        return 0.0   # unsupported unit: zero-width space
-    end
+    mu_units && return val / 18
+    return something(_dimension_em(val, String(unit)), 0.0)   # unknown unit: no space
 end
 
 @inline _current(p::_Parser) = p.tokens[p.pos]
@@ -402,6 +410,7 @@ function _parse_matrix_body!(
     )::Node
     cells = Node[]   # flat row-major list of completed cells
     row_lengths = Int[]   # number of cells in each row
+    row_gaps = Float64[]   # \\[len] after each row, in em
     current_cell = Node[]
     ncol_current = 0   # cells completed in the current row (0-based)
 
@@ -441,15 +450,21 @@ function _parse_matrix_body!(
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\\\"
             _advance!(p)
-            # Skip optional row-spacing argument \\[dim]
+            # Optional row spacing \\[len], recognised only directly after the
+            # \\: amsmath's environments read it with \new@ifnextchar, which does
+            # not skip spaces, so that a row may start with a bracket.
+            gap = 0.0
             if _current(p).kind === TokenKind.Char && _current(p).value == "["
                 _advance!(p)   # consume '['
+                buf = IOBuffer()
                 while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
-                    _advance!(p)
+                    print(buf, _advance!(p).value)
                 end
                 _current(p).kind !== TokenKind.EOF && _advance!(p)   # consume ']'
+                gap = _dimension_text_em(String(take!(buf)))
             end
             finish_row!()
+            push!(row_gaps, gap)
 
         elseif tok.kind === TokenKind.Space
             _advance!(p)   # skip whitespace in matrix bodies (math mode)
@@ -465,6 +480,7 @@ function _parse_matrix_body!(
     # Commit the last (possibly incomplete) row if non-empty.
     if !isempty(current_cell) || ncol_current > 0
         finish_row!()
+        push!(row_gaps, 0.0)
     end
 
     nrow = length(row_lengths)
@@ -502,7 +518,7 @@ function _parse_matrix_body!(
         end
     end
 
-    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec)), cells)
+    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec, row_gaps)), cells)
 end
 
 # Parse a command token and return the appropriate node.

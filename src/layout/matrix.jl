@@ -1,12 +1,5 @@
 # Matrix and array environment layout.
 
-# Spacing of the display alignment environments (`align`, `gather`, …), which
-# have no `_MATRIX_SPACING` entry: `_MATRIX_COLSEP` on each side of a column and
-# `_MATRIX_ROWGAP` between ink-tight rows.  amsmath sets these rows with
-# `\strut@` and `\jot` instead (see future.md).
-const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
-const _MATRIX_ROWGAP = 3 / 18   # extra row gap in em
-
 # Parse a column-spec string (e.g. "|l||c|r|") into per-column alignment symbols
 # and a vertical-rule count vector.
 # col_aligns[c] ∈ {:l, :c, :r} for each column c = 1..ncol.
@@ -42,12 +35,10 @@ function _sole_matrix(children::Vector{Node})::Union{Node, Nothing}
 end
 
 # True when `\left…\right` around matrix node `m` should size its delimiters as
-# the environment's own: an array-like environment (rows with TeX's struts, or
-# smallmatrix) with no delimiters of its own.
+# the environment's own: one with no delimiters of its own (`matrix`, `array`,
+# `aligned`, …).
 function _takes_outer_delimiters(m::Node)::Bool
-    env = _decode_matrix_payload(m.value).env_name
-    haskey(_MATRIX_SPACING, env) || return false
-    info = get(_MATRIX_ENVS, env, _MATRIX_ENVS["matrix"])
+    info = get(_MATRIX_ENVS, _decode_matrix_payload(m.value).env_name, _MATRIX_ENVS["matrix"])
     return isempty(info.left) && isempty(info.right)
 end
 
@@ -58,7 +49,13 @@ end
 # delimiters here so that they are sized against the array's strutted box, as
 # in TeX, which the emitted glyphs do not show.
 # Returns the total horizontal advance in em units.
-function _layout_matrix!(
+_layout_matrix!(node, ctx, style, x0, y0, scale, boxes; kwargs...) =
+    _layout_matrix_box!(node, ctx, style, x0, y0, scale, boxes; kwargs...).width
+
+# As `_layout_matrix!`, returning the environment's box: its advance `width`
+# and the `height` and `depth` of TeX's box about the baseline y0, struts
+# included (they are invisible, so the emitted glyphs do not show them).
+function _layout_matrix_box!(
         node::Node,
         ctx::_LayoutCtx,
         style::TexStyle,
@@ -68,16 +65,16 @@ function _layout_matrix!(
         boxes::Vector{LayoutBox};
         left::Union{Nothing, String} = nothing,
         right::Union{Nothing, String} = nothing,
-    )::Float64
+    )
     payload = _decode_matrix_payload(node.value)
     env_name = payload.env_name
     nrow = payload.nrow
     col_aligns, vrule = _parse_colspec(payload.colspec)
     ncol = length(col_aligns)
-    (nrow == 0 || ncol == 0) && return 0.0
+    (nrow == 0 || ncol == 0) && return (width = 0.0, height = 0.0, depth = 0.0)
 
     info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
-    spacing = get(_MATRIX_SPACING, env_name, nothing)
+    spacing = get(_MATRIX_SPACING, env_name, _MATRIX_SPACING["matrix"])
     left_name = something(left, info.left)
     right_name = something(right, info.right)
     upm = ctx.upm
@@ -88,7 +85,7 @@ function _layout_matrix!(
     # display size.  Genuine array environments (matrix/array/cases) typeset
     # cells in Text style, following TeX's rule for array entries, and
     # smallmatrix in script style.
-    small = spacing !== nothing && spacing.rows === :baselineskip
+    small = env_name == "smallmatrix"
     cell_style = if env_name ∈ _DISPLAY_MATH_ENVS
         is_cramped(style) ? CrampedDisplay : Display
     elseif small
@@ -124,48 +121,57 @@ function _layout_matrix!(
     row_heights = [maximum(cell_heights[r, :]; init = 0.0) for r in 1:nrow]
     row_depths = [maximum(cell_depths[r, :]; init = 0.0) for r in 1:nrow]
 
+    # Every row is at least as tall and deep as the environment's strut.
+    row_heights .= max.(row_heights, spacing.strut * _ARRAY_STRUT_HEIGHT * cell_scale)
+    row_depths .= max.(row_depths, spacing.strut * _ARRAY_STRUT_DEPTH * cell_scale)
+
+    # \\[len] after row r.  In LaTeX's array a positive length deepens the row
+    # to at least the strut depth plus the length (\@xargarraycr); otherwise,
+    # and in amsmath's smallmatrix and alignments, it is extra space below.
+    # The length is in the environment's size (smallmatrix's entries are smaller).
+    gaps = payload.row_gaps .* scale
+    extra = zeros(Float64, nrow)
+    for r in 1:nrow
+        g = r <= length(gaps) ? gaps[r] : 0.0
+        if spacing.rows === :touch && g > 0
+            row_depths[r] = max(row_depths[r], spacing.strut * _ARRAY_STRUT_DEPTH * cell_scale + g)
+        elseif r < nrow
+            extra[r] = g
+        end
+    end
+
     # Provisional baseline y for each row (row 1 at y = 0).
     row_y = zeros(Float64, nrow)
-    if spacing === nothing
-        for r in 2:nrow
-            row_y[r] = row_y[r - 1] - (row_depths[r - 1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
+    for r in 2:nrow
+        clearance = row_depths[r - 1] + row_heights[r]
+        step = if spacing.rows === :touch
+            clearance   # LaTeX's array rows abut
+        else
+            # TeX's interline glue: baselines \baselineskip apart unless that
+            # leaves less than \lineskiplimit between the rows, else \lineskip.
+            baselineskip = spacing.baselineskip * scale
+            baselineskip - clearance >= spacing.lineskiplimit * scale ? baselineskip :
+                clearance + spacing.lineskip * scale
         end
-    elseif spacing.rows === :strut
-        # Every row is at least as tall and deep as \@arstrut; rows then touch.
-        row_heights .= max.(row_heights, spacing.stretch * _ARRAY_STRUT_HEIGHT * cell_scale)
-        row_depths .= max.(row_depths, spacing.stretch * _ARRAY_STRUT_DEPTH * cell_scale)
-        for r in 2:nrow
-            row_y[r] = row_y[r - 1] - (row_depths[r - 1] + row_heights[r])
-        end
-    else
-        # TeX's interline glue: baselines \baselineskip apart unless that
-        # leaves less than \lineskiplimit between the rows, else \lineskip.
-        baselineskip = _SMALLMATRIX_BASELINESKIP * scale
-        lineskip = _SMALLMATRIX_LINESKIP * scale
-        for r in 2:nrow
-            clearance = row_depths[r - 1] + row_heights[r]
-            step = baselineskip - clearance >= lineskip ? baselineskip : clearance + lineskip
-            row_y[r] = row_y[r - 1] - step
-        end
+        row_y[r] = row_y[r - 1] - step - extra[r - 1]
     end
 
     # Vertical extent of the provisional grid.
     grid_top = row_y[1] + row_heights[1]
     grid_bot = row_y[nrow] - row_depths[nrow]
 
-    # Centre grid on the math axis.
+    # Centre the grid on the math axis, or keep the first row on the baseline.
     axis_em = mc.axis_height / upm * scale
-    y_shift = y0 + axis_em - (grid_top + grid_bot) / 2
+    y_shift = spacing.vcenter ? y0 + axis_em - (grid_top + grid_bot) / 2 : y0 - row_y[1]
 
     # In align/aligned the columns form right/left pairs glued together at the
     # alignment point (the `&`): no inter-column space is inserted within a pair,
     # so the spacing around a leading relation comes solely from the math-list
-    # relation atom (see the empty-group insertion in the parser). Space is only
-    # added between successive pairs, and the grid carries no outer margin.
-    tight_pairs = spacing === nothing && env_name ∈ ("align", "aligned", "split")
-    outer = spacing !== nothing ? spacing.outer * scale :
-        tight_pairs ? 0.0 : _MATRIX_COLSEP * cell_scale
-    gap = spacing !== nothing ? spacing.gap * scale : 2 * _MATRIX_COLSEP * cell_scale
+    # relation atom (see the empty-group insertion in the parser).  Successive
+    # pairs are `gap` (\minalignsep) apart.
+    tight_pairs = env_name ∈ ("align", "aligned", "split")
+    outer = spacing.outer * scale
+    gap = spacing.gap * scale
     # A `|` rule takes no width; each further rule in a slot adds \doublerulesep.
     rule_sep = _DOUBLERULESEP * cell_scale
     rules_extra(n) = max(n - 1, 0) * rule_sep
@@ -178,7 +184,10 @@ function _layout_matrix!(
     for c in 2:ncol
         x_col[c] = x_col[c - 1] + col_widths[c - 1] + col_gap(c)
     end
-    content_w = x_col[ncol] + col_widths[ncol] + outer + rules_extra(vrule[ncol + 1])
+    # amsmath's `cases` template is @{}l@{\quad}l@{}: the \quad belongs to the
+    # first column, so a one-column `cases` still ends with it.
+    cases_quad = env_name == "cases" && ncol == 1 ? gap : 0.0
+    content_w = x_col[ncol] + col_widths[ncol] + outer + rules_extra(vrule[ncol + 1]) + cases_quad
 
     # ── Delimiter sizing (if required) ──
     left_w = 0.0; right_w = 0.0
@@ -189,10 +198,8 @@ function _layout_matrix!(
         h_below = max(0.0, axis_em - actual_bot)
         δ = max(h_above, h_below)
         # amsmath's delimiters are \left…\right around the array's box, which
-        # rule 19 lets fall short of it (`_left_right_required_du`).  The
-        # display alignments' rows here are ink-tight, without amsmath's
-        # struts, so their delimiters cover the whole grid instead.
-        required_du = spacing === nothing ? 2δ / scale * upm : _left_right_required_du(δ, scale, upm)
+        # rule 19 lets fall short of it (`_left_right_required_du`).
+        required_du = _left_right_required_du(δ, scale, upm)
         left_w = _layout_delim!(ctx, left_name, required_du, x0, y0, scale, boxes)
         right_w = _layout_delim!(
             ctx, right_name, required_du,
@@ -242,10 +249,13 @@ function _layout_matrix!(
 
     # The trailing margin is part of the array's box, as the leading one is;
     # a Space keeps it in measured extents (`measure`, Makie bounding boxes).
-    trailing = outer + rules_extra(vrule[ncol + 1])
-    if spacing !== nothing && trailing > 0
+    trailing = outer + rules_extra(vrule[ncol + 1]) + cases_quad
+    if trailing > 0
         push!(boxes, LayoutBox(Space(trailing), x0 + left_w + content_w - trailing, y_shift + row_y[nrow], scale))
     end
 
-    return left_w + content_w + right_w
+    return (
+        width = left_w + content_w + right_w,
+        height = y_shift + grid_top - y0, depth = y0 - (y_shift + grid_bot),
+    )
 end

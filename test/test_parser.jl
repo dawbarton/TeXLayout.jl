@@ -824,9 +824,27 @@
                 @test length(spaces) == 1 && spaces[1].width ≈ 1.0
             end
             @test only(parse_latex(raw"\mkern 3mu").children).width ≈ 3 / 18
+            # TeX units at 10 pt = 1 em.
+            for (s, w) in ((raw"\kern 3pt", 0.3), (raw"\hskip 1mm", 7.227 / 25.4), (raw"\kern2ex", 0.862))
+                @test only(parse_latex(s).children).width ≈ w
+            end
+            @test only(parse_latex(raw"\kern 3zz").children).width == 0.0
             arrow = parse_latex(raw"\xrightarrow [a]{b}").children[1]
             @test arrow.kind === NodeKind.XArrow && length(arrow.children) == 2
         end
+    end
+
+    @testset "Matrix row spacing \\[len]" begin
+        gaps(src) = TeXLayout._decode_matrix_payload(only(parse_latex(src).children).value).row_gaps
+        @test gaps(raw"\begin{matrix} a \\[10pt] b \\ c \\[-0.5em] d \end{matrix}") ≈ [1.0, 0.0, -0.5, 0.0]
+        @test gaps(raw"\begin{matrix} a \\ b \\[3mm] \end{matrix}") ≈ [0.0, 7.227 / 25.4 * 3]
+        # As with amsmath's \new@ifnextchar, a bracket after a space starts the
+        # next row rather than giving a length.
+        @test gaps(raw"\begin{aligned} a &= b \\ [5pt] c &= d \end{aligned}") == [0.0, 0.0]
+        # A register or an unknown unit gives no space.
+        @test gaps(raw"\begin{matrix} a \\[\jot] b \end{matrix}") == [0.0, 0.0]
+        # Without gaps the payload keeps its three-field form.
+        @test only(parse_latex(raw"\begin{matrix} a \\ b \end{matrix}").children).value == "matrix\0" * "2\0c"
     end
 
     @testset "Primes" begin

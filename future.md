@@ -21,22 +21,14 @@ this file records the intended implementation direction.
   depth.
 - Add `\phantom`, `\vphantom`, and `\hphantom` using the same invisible measured
   box representation.
-- Preserve optional matrix row-spacing dimensions such as `\\[0.2em]` in the
-  parsed matrix representation and apply them when computing row baselines.
-- Matrix-family environments, `array`, `cases`, and `smallmatrix` follow
-  LaTeX + amsmath (`_MATRIX_SPACING`; widths agree with LuaLaTeX to 0.001 pt).
-  Remaining differences: a one-column `cases` omits the trailing `\quad` that
-  amsmath's `l@{\quad}l` template leaves after the first column; array entries
-  inside a script shrink with it, where TeX sets them at full Text size
-  (`x_{\begin{matrix}a\\b\end{matrix}}`, measured in LuaLaTeX); `\hline` and `@{…}` are
-  ignored.
-- The display alignments (`align`, `gather`, `split`, …) keep ink-tight rows
-  with `_MATRIX_ROWGAP` and 5 mu column margins.  amsmath sets them with
-  `\strut@` rows, `\jot`, and its own column spacing; measure them in LuaLaTeX
-  before changing, and compare against the snapshot fonts.
-- Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
-  compare any proposed default change against TeX, KaTeX, and all snapshot
-  fonts.
+- Every array-like environment follows LaTeX + amsmath (`_MATRIX_SPACING`,
+  `\\[len]` included; LuaLaTeX agrees to 0.001 pt).  Remaining differences:
+  array entries inside a script shrink with it, where TeX sets them at full
+  Text size (`x_{\begin{matrix}a\\b\end{matrix}}`, measured in LuaLaTeX);
+  `\hline`, `@{…}`, `\\*`, and register lengths in `\\[…]` (`\jot`) are
+  ignored; `align` and `gather` are set as `aligned` and `gathered`, without
+  `align`'s spreading of column pairs across the display width or equation
+  numbers; `\begin{array}[t]` / `[b]` positions are ignored (always centred).
 - `\overbrace` and `\underbrace` are Op atoms in the LaTeX kernel
   (`\mathop{…}\limits`, fontmath.ltx) and Inner here; unicode-math redeclares
   them as `\mathover`/`\mathunder` characters, class unverified.  Widths next
