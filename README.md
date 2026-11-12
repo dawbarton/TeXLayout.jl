@@ -11,14 +11,14 @@ with [Makie.jl](https://github.com/MakieOrg/Makie.jl). Full documentation availa
 
 Full-sheet example outputs from the stress renderer:
 
-- New Computer Modern [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/new_cm_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/new_cm_text_freetype.png)
-- TeX Gyre Bonum [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/bonum_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/bonum_text_freetype.png)
-- TeX Gyre Pagella [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/pagella_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/pagella_text_freetype.png)
-- TeX Gyre Schola [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/schola_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/schola_text_freetype.png)
-- TeX Gyre Termes [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/termes_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/termes_text_freetype.png)
-- Luciole [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/luciole_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/luciole_text_freetype.png)
-- STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/stix_two_text_freetype.png)
-- Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.3.0-stress/fira_math_text_freetype.png)
+- New Computer Modern [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/new_cm_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/new_cm_text_freetype.png)
+- TeX Gyre Bonum [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/bonum_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/bonum_text_freetype.png)
+- TeX Gyre Pagella [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/pagella_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/pagella_text_freetype.png)
+- TeX Gyre Schola [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/schola_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/schola_text_freetype.png)
+- TeX Gyre Termes [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/termes_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/termes_text_freetype.png)
+- Luciole [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/luciole_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/luciole_text_freetype.png)
+- STIX Two [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/stix_two_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/stix_two_text_freetype.png)
+- Fira Math + Fira Sans [maths](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/fira_math_math_freetype.png) and [text](https://github.com/dawbarton/TeXLayout.jl/releases/download/v0.4.0-stress/fira_math_text_freetype.png)
 
 Since a picture is worth a thousand words...
 

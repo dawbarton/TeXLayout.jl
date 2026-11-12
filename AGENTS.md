@@ -141,7 +141,7 @@ julia tools/stress_test_suite.jl pack --input stress_outputs/current --out stres
 julia tools/stress_test_suite.jl compare --current stress_outputs/current --reference stress_test_reference.tar
 ```
 
-The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.3.0-stress` release asset `stress_test_reference.tar`.
+The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.4.0-stress` release asset `stress_test_reference.tar`.
 
 Full-sheet outputs remain useful for quick visual inspection and are written under each font's `sheets/` directory, but they are deliberately excluded from reference tarballs and comparisons.  Adding new stress cases is backwards-compatible: images present only in the current output are reported as `NEW` and do not fail comparison unless `--fail-on-new` is passed.  Missing, changed, or unreadable reference images still fail.
 
