@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.21 em under the V), superscripts got none (`f^2` touched the hook of the f),
   and a compound base such as `{fa}` used its first glyph's correction. Large
   operators are unchanged. Layouts containing italic letters widen slightly.
+- Explicit spaces (`\,`, `\;`, `\quad`, `\kern`, …) are transparent to
+  inter-atom spacing, as in TeX and KaTeX. `a\,=b` previously lost the thick
+  space before `=`, and `a\;+b` set the `+` lopsidedly.
 - An environment nested in an unbraced alignment cell keeps its own `&`, `\\`
   and `\end`. `\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y \end{cases}
   \end{aligned}` previously produced a one-cell `cases` and spilled the rest

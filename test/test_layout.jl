@@ -336,6 +336,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(spaces) == 1
     end
 
+    @testset "Inter-atom: explicit spaces are transparent (a\\,=b keeps thick spaces)" begin
+        thin = (3 / 18) * size_scale(Text, mt.constants)
+        thick = (5 / 18) * size_scale(Text, mt.constants)
+        medium = (4 / 18) * size_scale(Text, mt.constants)
+        widths(s) = sort([b.element.width for b in find_spaces(layout(parse_latex(s), family, Text))])
+        @test widths(raw"a\,=b") ≈ sort([thin, thick, thick])
+        # The binary operator is spaced on both sides, not only after the space.
+        @test widths(raw"a\;+b") ≈ sort([thick, medium, medium])
+        # A leading binary operator stays an ordinary atom after a space.
+        @test widths(raw"\,+b") ≈ [thin]
+    end
+
     @testset "\\quad produces a Space element of width 1 em" begin
         boxes = layout(parse_latex("a\\quad b"), family, Text)
         spaces = find_spaces(boxes)
