@@ -457,6 +457,14 @@ function _emit_texbox!(boxes::Vector{LayoutBox}, box, x0::Float64, y0::Float64)
     return nothing
 end
 
+# `$…$` inside `\text{…}`: restart math in text style at the current size, as
+# amsmath's `\text` does (an inner subscript is one script level smaller than
+# the surrounding text, whatever style the `\text` itself sits in).
+function _layout_inline_math!(node, ctx, style, x0, y0, scale, boxes)
+    isempty(node.children) && return 0.0
+    return _layout_node!(node.children[1], _with_math_mode(ctx), Text, x0, y0, scale, boxes)
+end
+
 function _layout_text!(node, ctx, style, x0, y0, scale, boxes)
     isempty(node.children) && return 0.0
 

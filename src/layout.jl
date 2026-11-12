@@ -148,6 +148,14 @@ end
     LayoutMode.Text, ctx.font_variant, ctx.text_shaper,
 )
 
+# Return a copy of `ctx` back in math mode with no font variant.  Used by
+# NodeKind.InlineMath (`$…$` inside `\text{…}`), where math restarts from scratch.
+@inline _with_math_mode(ctx::_LayoutCtx) = _LayoutCtx(
+    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
+    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    LayoutMode.Math, :default, ctx.text_shaper,
+)
+
 # Return the TeX atom class for a given AST node.
 # Scripted nodes (NodeKind.Superscript, NodeKind.Subscript, NodeKind.Decorated) inherit from their
 # base (first child).  Groups and sequences are treated as ordinary atoms.
@@ -733,6 +741,7 @@ function _layout_node!(
     k === NodeKind.StyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
     k === NodeKind.Sizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
     k === NodeKind.XArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.InlineMath     && return _layout_inline_math!(node, ctx, style, x0, y0, scale, boxes)
     # NodeKind.Middle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end

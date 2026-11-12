@@ -1008,6 +1008,15 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test int_sub.x ≈ int.element.advance_width / mt.upm - ic(int.element.glyph_name)
     end
 
+    @testset "Math inside \\text{…} is laid out in math mode" begin
+        boxes = layout(parse_latex(raw"\text{if $x_1$}"), family, Display)
+        glyphs = find_glyphs(boxes)
+        x = only(filter(g -> g.element.glyph_name == "u1D465", glyphs))   # math italic x
+        one = only(filter(g -> g.scale < 0.99, glyphs))
+        @test x.element.font_slot === TeXLayout.FontSlot.Math
+        @test one.y < 0                                                   # a real subscript
+    end
+
     @testset "Accent: Rule 12 attaches scripts to the accented character" begin
         # Script positions on an accented single character match the bare
         # character: the accent neither lowers a subscript nor raises a superscript.

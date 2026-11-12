@@ -17,6 +17,9 @@ const _MAKIE_EXTENSION_PACKAGES = (
     @test !TeXLayout._is_inline_math(raw"$x\\$$")
     @test !TeXLayout._is_inline_math(raw"$x$ and $y$")
     @test !TeXLayout._is_inline_math(raw"$$x$$")
+    # A `$` nested in a group belongs to that group (`\text{if $x$}`).
+    @test TeXLayout._is_inline_math(raw"$\text{if $x>0$}$")
+    @test !TeXLayout._is_inline_math(raw"$a$ {$b$}")
 
     # Delimiter stripping must use valid UTF-8 indices at both ends.
     @test TeXLayout._strip_math_delimiters(raw"$α$") == "α"

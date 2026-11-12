@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Inside `\text{…}` it stays an apostrophe. Fonts' `ssty` script variants are
   not applied, so the prime is the scaled U+2032 glyph (as XeLaTeX draws it
   with unicode-math and New Computer Modern).
+- `$…$` inside math `\text{…}` is laid out as math, as amsmath and KaTeX allow
+  (`\text{if $x>0$}`). It previously printed literal dollar signs and upright
+  text. A `$` nested in braces no longer forces a `LaTeXString` onto the
+  document route in the Makie adapters.
 - `\operatorname*{…}` and `\displaylimits` place limits above and below in
   display style. `\operatorname*` previously rendered a literal asterisk.
 - `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,

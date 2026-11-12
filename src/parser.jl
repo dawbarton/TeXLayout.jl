@@ -196,6 +196,16 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
         if k === TokenKind.Space
             push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
+        elseif k === TokenKind.MathShift
+            # `\text{if $x>0$}`: math nested in text, as amsmath and KaTeX allow.
+            # The math stops at the closing `$` or, if that is missing, at the
+            # `}` that closes the text group.
+            _advance!(p)   # consume opening $
+            body = _parse_math_until!(
+                p, t -> t.kind === TokenKind.MathShift || t.kind === TokenKind.RBrace,
+            )
+            _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
+            push!(children, Node(NodeKind.InlineMath, [body]))
         else
             literal = _parse_text_literal_command!(p)
             push!(children, literal === nothing ? _parse_atom!(p; math = false) : literal)

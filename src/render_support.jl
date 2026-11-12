@@ -28,12 +28,23 @@ end
 # Return already-tokenized inline math when the whole string is one `$…$` span,
 # or `nothing` when it must use document routing.  Reusing TeXLayout's lexer
 # keeps escaped-dollar and comment semantics in one place: `\$` is a command,
-# while an unescaped `$` inside the outer delimiters is a MathShift token.
+# while an unescaped `$` inside the outer delimiters is a MathShift token.  A
+# `$` nested in braces (`\text{if $x>0$}`) belongs to that group, so only one
+# at brace depth 0 ends the formula.
 function _inline_math_tokens(s::AbstractString)::Union{Vector{Token}, Nothing}
     length(s) >= 2 || return nothing
     (first(s) == '$' && last(s) == '$') || return nothing
     tokens = tokenize(_strip_math_delimiters(s))
-    any(token -> token.kind === TokenKind.MathShift, tokens) && return nothing
+    depth = 0
+    for token in tokens
+        if token.kind === TokenKind.LBrace
+            depth += 1
+        elseif token.kind === TokenKind.RBrace
+            depth = max(depth - 1, 0)
+        elseif token.kind === TokenKind.MathShift && depth == 0
+            return nothing
+        end
+    end
     return tokens
 end
 

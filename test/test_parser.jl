@@ -850,6 +850,19 @@
         @test [c.value for c in text.children[1].children] == ["d", "o", "n", "'", "t"]
     end
 
+    @testset "Math inside \\text{…}" begin
+        text = only(parse_latex(raw"\text{if $x>0$ else}").children)
+        kinds = [c.kind for c in text.children[1].children]
+        @test NodeKind.InlineMath in kinds
+        math = text.children[1].children[findfirst(==(NodeKind.InlineMath), kinds)]
+        @test [c.value for c in math.children[1].children] == ["x", ">", "0"]
+        @test text.children[1].children[end].value == "e"   # text resumes after $
+        # An unclosed $ stops at the end of the text group.
+        unclosed = parse_latex(raw"\text{a $x} b")
+        @test length(unclosed.children) == 2
+        @test unclosed.children[2].value == "b"
+    end
+
     @testset "\\operatorname* uses display limits" begin
         node = only(parse_latex(raw"\operatorname*{argmax}_x").children)
         @test node.children[1].kind === NodeKind.LimitsOverride
