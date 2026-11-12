@@ -227,6 +227,15 @@ Three functions with different portability:
   by `NodeKind.Operator` and default `MetricShaper` `\text{}`/`\mbox{}` rendering.
 
 Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
+`glyph_metrics` results are also memoised per (math-font path, glyph name) in
+`_NAMED_METRICS_CACHE`, because FreeType's name lookup otherwise dominates
+layout time.
+
+Script and scriptscript glyphs are replaced by the font's GSUB `ssty`
+alternates (`MathTable.script_alternates`, applied by `_script_glyph` in
+`layout.jl`), as unicode-math does.  The alternates are looked up by the
+math font's own PS names, so they are another place where a name, not a
+codepoint, is the key.
 
 ### `LayoutBox` / `TeXElement` (`layout.jl`)
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
@@ -367,10 +376,14 @@ at the end of that file.
   `descent` the same way so `align` behaves like it does for a plain string.
   Reporting bare ink bounds instead makes `align = (:*, :center)` scatter
   baselines across labels and makes axis tick-label space content-dependent.
-- **`align` column-spacing approximation** — `\begin{align}` reuses the matrix column
-  machinery and its column-separation model.  Cells after `&` do insert the
-  ordinary atom needed for TeX-style spacing before leading relations such as
-  `=`, but the environment is not a full amsmath alignment template.
+- **Display alignments are set as their inline forms** — `align` and `gather`
+  reuse the matrix machinery with amsmath's `aligned` / `gathered` spacing
+  (`_MATRIX_SPACING`: a `\strut@` per row, `\openup\jot` interline glue, and
+  `\minalignsep` between column pairs).  Cells after `&` insert the ordinary
+  atom needed for TeX-style spacing before leading relations such as `=`.
+  There is no display width, so `align` does not spread its column pairs
+  across the line, and equations are not numbered.  `equation` is a plain
+  display (`vcenter = false`, no strut), identical to `\[…\]`.
 - **Display alignment environments use Display style for cells** — the
   environments in `_DISPLAY_MATH_ENVS` (`align`, `aligned`, `split`, `gather`,
   `gathered`, `equation`) typeset each cell in Display style, so fractions,
@@ -384,11 +397,12 @@ at the end of that file.
   left, last line flush right, middle lines centred) measured against the target
   line width.  Adding it requires a width-aware layout path rather than the
   matrix machinery; `split`/`gathered` were aliasable but `multline` is not.
-- **Matrix vertical spacing helpers not yet implemented** — `\strut`,
-  `\phantom`/`\vphantom`/`\hphantom`, and effective matrix row-spacing arguments
-  such as `\\[0.2em]` are future work.  The parser currently recognises and skips
-  bracketed row-spacing arguments in matrix bodies, but layout does not apply
-  them.  See `future.md` for the current focused backlog.
+- **Matrix vertical spacing helpers not yet implemented** — `\strut` and
+  `\phantom`/`\vphantom`/`\hphantom` are future work.  Row spacing `\\[len]`
+  is applied with LaTeX's semantics (units in `_TEX_UNIT_EM`, at
+  10 pt = 1 em), but register lengths such as `\\[\jot]` count as zero, and
+  `\hline`, `@{…}`, `\\*`, and `[t]` / `[b]` positions are ignored.  See
+  `future.md` for the current focused backlog.
 - **Whitespace conventions** — document text mode follows LaTeX: single newlines
   collapse to one space, continuation-line indentation collapses, blank lines
   start a new paragraph, and leading/trailing whitespace at line and block
@@ -457,10 +471,13 @@ it falls back to the legacy `generate_tex_elements` assertions.  Protocol-level
 assertions should use `Makie.layout_text` rather than `Text` compute-graph node
 names, which changed when MakieOrg/Makie.jl#5717 merged.  Inline-math routing is
 tested unconditionally because it lives in `src/render_support.jl` and needs no
-weak dependency.  Until Makie 0.25 is released, only the 0.24 branch runs in CI,
-so handler changes must additionally be checked against Makie's
-`ff/breaking-0.25` branch (develop its `ComputePipeline`, `Makie`, and
-`CairoMakie` subdirectories into a scratch environment).
+weak dependency.  Until Makie 0.25 is released, the main CI matrix runs the
+0.24 branch.  The experimental `makie-0-25` job develops `ComputePipeline` and
+`Makie` from Makie's `ff/breaking-0.25` branch into a scratch environment and
+runs the suite there.  It is `continue-on-error`, so a failure does not fail
+CI: check its result after every handler change.  To reproduce it locally,
+develop the same subdirectories (plus `CairoMakie` for the `makie_cairo`
+stress suite) into a scratch environment.
 
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with
@@ -474,6 +491,21 @@ refactors do not count as layout changes.  If a snapshot hash changes, either
 the geometry/metrics changed or the normalization changed.  Do not update a
 hash casually; inspect the rendered/serialized difference and document whether
 the change is an intentional bug fix or feature change.
+
+### Measuring against TeX
+
+Check layout constants and spacing fixes numerically against TeX, not by eye.
+Use LuaLaTeX (or XeLaTeX) with `amsmath` and `unicode-math` at 10 pt, loading
+the bundled font file by path,
+`\setmathfont{<file>.otf}[Path=<artifact dir>/]`.  With a bare file name,
+TinyTeX may not find the font and silently falls back to Latin Modern Math:
+check the log for "not loadable" before trusting a number.  Measure boxes with
+`\setbox0\hbox{$…$}` and `\typeout{\the\wd0\space\the\ht0\space\the\dp0}`, converting at
+10 pt = 1 em.  Measure at 10 pt, because unicode-math does not apply `ssty`
+script alternates at large sizes.  LuaTeX and XeTeX occasionally disagree
+(LuaTeX adds a `\left` delimiter variant's italic correction; XeTeX does not);
+TeXLayout follows XeTeX, and such disagreements are recorded in
+`katex_rules.md` or `future.md`.
 
 ## Benchmarks
 
