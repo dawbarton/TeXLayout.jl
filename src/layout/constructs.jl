@@ -90,8 +90,13 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
         arrow_bot = arrow_y - 0.3 * scale
     end
 
-    # Place the extensible arrow body.
-    _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
+    # Place the extensible arrow body.  A font that cannot stretch the arrow
+    # through its MATH table gets one built from pieces, as amsmath does.
+    fill = get(_XARROW_FILL_PIECES, cmd, nothing)
+    filled = fill !== nothing && g_ref !== nothing && arrow_w > natural_w &&
+        _horiz_construction_falls_short(ctx, arrow_ps, arrow_w, scale) &&
+        _layout_arrow_fill!(ctx, fill, g_ref, arrow_w, arrow_y, x0, scale, boxes)
+    filled || _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
 
     # Place the above label: bottom of ink at arrow_top + kern.
     if above_start <= above_stop

@@ -99,6 +99,35 @@ const _XARROW_CODEPOINTS = Dict{String, UInt32}(
     "\\xlongequal" => 0x003D,  # = (plain equals; extensible via horiz_constructions)
 )
 
+# Pieces `(left, filler, right)` from which an extensible arrow is built when the
+# font has no horizontal construction able to reach the required width.  This is
+# amsmath's `\arrowfill@`: `\xrightarrow` is `\relbar` leaders followed by
+# `\rightarrow`, `\xRightarrow` uses `\Relbar` (an equals sign), and so on.
+# Arrows whose tail is not a plain shaft (`\xmapsto`, the hook arrows, and the
+# stacked harpoons) have no single-codepoint tail piece and are absent: they keep
+# the arrow glyph at its natural width.
+const _XARROW_FILL_PIECES = let minus = UInt32(0x2212), equal = UInt32(0x003D)
+    Dict{String, NTuple{3, UInt32}}(
+        "\\xrightarrow" => (minus, minus, 0x2192),
+        "\\xleftarrow" => (0x2190, minus, minus),
+        "\\xleftrightarrow" => (0x2190, minus, 0x2192),
+        "\\xRightarrow" => (equal, equal, 0x21D2),
+        "\\xLeftarrow" => (0x21D0, equal, equal),
+        "\\xLeftrightarrow" => (0x21D0, equal, 0x21D2),
+        "\\xrightharpoonup" => (minus, minus, 0x21C0),
+        "\\xrightharpoondown" => (minus, minus, 0x21C1),
+        "\\xleftharpoonup" => (0x21BC, minus, minus),
+        "\\xleftharpoondown" => (0x21BD, minus, minus),
+        "\\xtwoheadrightarrow" => (minus, minus, 0x21A0),
+        "\\xtwoheadleftarrow" => (0x219E, minus, minus),
+        "\\xlongequal" => (equal, equal, equal),
+    )
+end
+
+# Minimum ink overlap between adjacent pieces of a filled arrow, as a fraction of
+# the filler's ink width, so that antialiased edges do not leave visible seams.
+const _XARROW_FILL_OVERLAP = 0.1
+
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
 # (notably FiraMath) name using the "uni{HHHH}" convention instead of the
 # traditional Adobe Glyph List (AGL) name.  Used in two places:

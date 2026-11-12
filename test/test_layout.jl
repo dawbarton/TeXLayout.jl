@@ -1608,6 +1608,40 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test w_long > w_short
     end
 
+    @testset "extensible arrows without a MATH construction" begin
+        # Fira Math has no horizontal constructions for its arrows and STIX Two
+        # none for ↠ or =; these used to render no arrow at all.
+        fira = font_family(:fira_math)
+        fira_upm = Float64(load_math_table(fira.math).upm)
+        ink(b, upm) = (b.x + b.element.x_min / upm * b.scale, b.x + b.element.x_max / upm * b.scale)
+        cp_of(fam, b) = b.element isa Glyph &&
+            something(findfirst(c -> TeXLayout.glyph_name_by_codepoint(fam, UInt32(c)) == b.element.glyph_name, collect("→−↦=↠")), 0)
+
+        # \xrightarrow under a wide label: minus fillers then →, one continuous
+        # ink run (amsmath's \arrowfill@) reaching beyond the label's ink.
+        label = TeXLayout.layout(parse_latex(raw"\text{long label}"), fira, TeXLayout.Script)
+        label_w = TeXLayout.measure(label, fira_upm).width
+        boxes = TeXLayout.layout(parse_latex(raw"\xrightarrow{\text{long label}}"), fira, Text)
+        pieces = filter(b -> cp_of(fira, b) in (1, 2), boxes)
+        @test count(b -> cp_of(fira, b) == 1, pieces) == 1
+        @test count(b -> cp_of(fira, b) == 2, pieces) >= 2
+        @test length(unique(b.y for b in pieces)) == 1   # one shared baseline
+        spans = sort([ink(b, fira_upm) for b in pieces])
+        @test all(spans[i + 1][1] < spans[i][2] for i in 1:(length(spans) - 1))
+        @test cp_of(fira, last(sort(pieces; by = b -> b.x))) == 1   # head on the right
+        @test spans[end][2] - spans[1][1] > label_w
+
+        # Arrows with no single-codepoint tail fall back to the natural glyph.
+        @test count(b -> cp_of(fira, b) == 3, TeXLayout.layout(parse_latex(raw"\xmapsto{abc}"), fira, Text)) == 1
+
+        stix = font_family(:stix_two)
+        twohead = TeXLayout.layout(parse_latex(raw"\xtwoheadrightarrow{abc}"), stix, Text)
+        @test count(b -> cp_of(stix, b) == 5, twohead) == 1
+        @test count(b -> cp_of(stix, b) == 2, twohead) >= 1
+        longeq = TeXLayout.layout(parse_latex(raw"\xlongequal{\text{def}}"), stix, Text)
+        @test count(b -> cp_of(stix, b) == 4, longeq) >= 2
+    end
+
     # ── Binomial coefficients ──────────────────────────────────────────────────
 
     @testset "\\binom{a}{b} produces more boxes than \\frac{a}{b}" begin

@@ -342,7 +342,8 @@ end
 # `base_w_em` (em units) at vertical position `accent_y`.  Selects the smallest
 # pre-built variant whose advance width covers the base; if none exists, assembles
 # the glyph from parts using the same helpers used for vertical assemblies.
-# Falls back to the largest variant (or the base glyph) if the assembly is empty.
+# Falls back to the largest variant if the assembly is empty, and to the base glyph
+# at its natural size if the font has no construction for it.
 function _layout_wide_accent!(
         ctx::_LayoutCtx,
         accent_ps::String,
@@ -357,7 +358,6 @@ function _layout_wide_accent!(
     required_du = base_w_em / scale * upm   # convert em to design units
 
     hc = get(ctx.horiz_constructions, accent_ps, nothing)
-    hc === nothing && return nothing
 
     # Helper: centre a named glyph over the base and push it to boxes.
     # Uses ink midpoint (x_min+x_max)/2 rather than advance_width/2: this correctly
@@ -368,6 +368,12 @@ function _layout_wide_accent!(
         g === nothing && return
         ink_center = (g.x_min + g.x_max) / (2.0 * upm) * scale
         return push!(boxes, LayoutBox(g, x0 + base_w_em / 2 - ink_center, accent_y, scale))
+    end
+
+    # No construction at all: the glyph can only be set at its natural size.
+    if hc === nothing
+        _place(accent_ps)
+        return nothing
     end
 
     # Try pre-built variants first (smallest that covers the base).
@@ -415,6 +421,64 @@ function _layout_wide_accent!(
     # Fall back to the largest pre-built variant, or the base glyph.
     _place(isempty(hc.variants) ? accent_ps : last(hc.variants).glyph_name)
     return nothing
+end
+
+# True when the font's horizontal construction for `ps` cannot reach `width_em`:
+# there is no construction, or it has no assembly and no variant wide enough.
+function _horiz_construction_falls_short(
+        ctx::_LayoutCtx, ps::String, width_em::Float64, scale::Float64
+    )::Bool
+    hc = get(ctx.horiz_constructions, ps, nothing)
+    hc === nothing && return true
+    hc.assembly === nothing || return false
+    required_du = width_em / scale * ctx.upm
+    return isempty(hc.variants) || Float64(last(hc.variants).advance) < required_du
+end
+
+# Build an extensible arrow of advance `width_em` from a left piece, repeated
+# fillers, and a right piece (codepoints), as amsmath's `\arrowfill@` does, for
+# fonts whose MATH table cannot stretch the arrow itself.  Every piece sits on
+# the same baseline `y`, so their shafts line up as the font designed them to
+# (TeX sets `\relbar\joinrel\rightarrow` the same way).  The ink spans the
+# advance less the side bearings of `g_ref`, the arrow at its natural width.
+# Adjacent pieces overlap by at least `_XARROW_FILL_OVERLAP` of the filler's ink
+# width.  Returns false, emitting nothing, when a piece is missing from the font.
+function _layout_arrow_fill!(
+        ctx::_LayoutCtx,
+        pieces::NTuple{3, UInt32},
+        g_ref::Glyph,
+        width_em::Float64,
+        y::Float64,
+        x0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Bool
+    upm = ctx.upm
+    left, filler, right = (_char_glyph(ctx, Char(cp)) for cp in pieces)
+    (left === nothing || filler === nothing || right === nothing) && return false
+    em(du) = Float64(du) / upm * scale
+
+    # Ink span of the stretched arrow.
+    ink_left = x0 + em(g_ref.x_min)
+    ink_right = x0 + width_em - em(g_ref.advance_width - g_ref.x_max)
+    push!(boxes, LayoutBox(left, ink_left - em(left.x_min), y, scale))
+    push!(boxes, LayoutBox(right, ink_right - em(right.x_max), y, scale))
+
+    # Cover the gap between the end pieces' inner ink edges with fillers.
+    f_w = em(filler.x_max - filler.x_min)
+    f_w > 0 || return true
+    ov = _XARROW_FILL_OVERLAP * f_w
+    gap_left = ink_left + em(left.x_max - left.x_min) - ov
+    gap_right = ink_right - em(right.x_max - right.x_min) + ov
+    span = gap_right - gap_left
+    span > 0 || return true
+    n = span <= f_w ? 1 : 1 + ceil(Int, (span - f_w) / (f_w - ov))
+    step = n == 1 ? 0.0 : (span - f_w) / (n - 1)
+    first_left = n == 1 ? gap_left + (span - f_w) / 2 : gap_left
+    for i in 0:(n - 1)
+        push!(boxes, LayoutBox(filler, first_left + i * step - em(filler.x_min), y, scale))
+    end
+    return true
 end
 
 # Lay out a horizontal brace node with optional script note.

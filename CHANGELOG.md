@@ -86,6 +86,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scaled by the math font's units per em, so a 2048-unit TrueType text font
   beside a 1000-unit math font set its text about twice too wide. The FreeType
   tools render these glyphs from their font file.
+- Extensible arrows render in fonts whose MATH table cannot stretch them.
+  Fira Math has no horizontal arrow constructions and STIX Two none for `↠`,
+  `⇌`, or `=`, so `\xrightarrow`, `\xlongequal`, and similar drew no arrow at
+  all. Such arrows are now built from a head and repeated shaft pieces, as
+  amsmath's `\arrowfill@` builds them, and `\xmapsto`, the hook arrows, and the
+  stacked harpoons fall back to the arrow glyph at its natural width.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
