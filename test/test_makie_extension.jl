@@ -153,7 +153,7 @@ if Base.find_package("Makie") !== nothing &&
             @test multi.baseline ≈ minimum(o[2] for o in multi.origins)
             @test multi.baseline < 0
             @test Makie.layout_text(handler, LaTeXString(raw"one line"), attributes()).baseline == 0
-            @test Makie.layout_text(handler, L"x_t", attributes()).baseline == 0
+            @test Makie.layout_text(handler, LaTeXString(raw"$x_t$"), attributes()).baseline == 0
 
             # Escaped literals give exactly one glyph, as on the legacy path.
             for command in (raw"\#", raw"\$", raw"\%", raw"\&", raw"\_", raw"\{", raw"\}")
