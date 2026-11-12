@@ -60,6 +60,8 @@ const _SPACE_WIDTHS = Dict{String, Float64}(
     "\\quad" => 1.0,
     "\\qquad" => 2.0,
     "\\ " => _NORMAL_SPACE_EM,   # control space
+    "\\\n" => _NORMAL_SPACE_EM,  # backslash at end of line: also a control space
+    "\\\t" => _NORMAL_SPACE_EM,
     "\\space" => _NORMAL_SPACE_EM,
     "\\nobreakspace" => _NORMAL_SPACE_EM,
 )

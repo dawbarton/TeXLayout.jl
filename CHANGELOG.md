@@ -44,6 +44,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.21 em under the V), superscripts got none (`f^2` touched the hook of the f),
   and a compound base such as `{fa}` used its first glyph's correction. Large
   operators are unchanged. Layouts containing italic letters widen slightly.
+- Document text keeps explicit spaces: `\ `, `\space`, and `\nobreakspace`
+  give an interword space, and `\quad`, `\qquad`, `\enspace`, `\,`, `\:` and
+  `\;` give spaces of their exact width. They were previously dropped, so
+  `Mr.\ Smith` printed as "Mr.Smith". As in TeX, a control word such as
+  `\quad` swallows the spaces after it.
+- In document text an unbraced argument is one token (`\textbf x and more`
+  bolds only the x) and a space before a braced argument is skipped
+  (`\textbf {x} y`). Both previously applied the style to the rest of the
+  document, and the first could swallow a paragraph break.
+- The body of an environment with no layout of its own (`center`, `quote`, …)
+  is kept as ordinary text in documents instead of being discarded.
 - Explicit spaces (`\,`, `\;`, `\quad`, `\kern`, …) are transparent to
   inter-atom spacing, as in TeX and KaTeX. `a\,=b` previously lost the thick
   space before `=`, and `a\;+b` set the `+` lopsidedly.

@@ -131,31 +131,60 @@ end
 const _DISPLAY_ENVS = _DISPLAY_MATH_ENVS
 const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
 
+# Control spaces that produce one significant interword space in text, like `~`.
+const _TEXT_INTERWORD_SPACES = ("\\ ", "\\\n", "\\\t", "\\space", "\\nobreakspace")
+
+# Skippable whitespace after a control word or before an undelimited argument:
+# ordinary spaces and single newlines, but not a blank line, which still ends
+# the paragraph in TeX.
+@inline _is_skippable_text_space(tok::Token) =
+    _is_ignorable_space(tok) && !occursin(_BLANK_LINE_RE, tok.value)
+
+function _skip_text_spaces!(p::_Parser)
+    while _is_skippable_text_space(_current(p))
+        _advance!(p)
+    end
+    return p
+end
+
+# A control word (`\quad`) swallows the spaces after it; a control symbol
+# (`\,`, `\ `) does not.
+@inline _is_control_word(cmd::AbstractString) =
+    ncodeunits(cmd) > 1 && isletter(cmd[nextind(cmd, 1)])
+
 # ── Recursive text-mode parser ────────────────────────────────────────────────
 
-# Handle a single {…} group, applying new_attrs inside it, then restoring.
-# Called with `{` as the current token in all three calling contexts:
+# Handle a command argument or {…} group, applying new_attrs inside it, then
+# restoring.  Called in three contexts:
 #   - font-switch command (new_attrs differs from builder.attrs)
 #   - \text / \mbox (new_attrs == builder.attrs, just a grouping scope)
 #   - bare { (new_attrs == builder.attrs, plain grouping)
+# As in TeX, spaces before the argument are skipped and an unbraced argument is
+# a single token: `\textbf x and more` bolds only the x.
 function _parse_text_group!(p::_Parser, builder::_DocBuilder, new_attrs::TextAttrs)
+    _skip_text_spaces!(p)
     _flush_span!(builder)
     old_attrs = builder.attrs
     builder.attrs = new_attrs
-    _current(p).kind === TokenKind.LBrace && _advance!(p)   # consume '{'
-    _parse_text_body!(p, builder, true)             # stop at matching '}'
+    braced = _current(p).kind === TokenKind.LBrace
+    braced && _advance!(p)   # consume '{'
+    _parse_text_body!(p, builder, true; single = !braced)   # stop at matching '}'
     _flush_span!(builder)
     builder.attrs = old_attrs
-    return _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
+    return braced && _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
 end
 
 # Core text-mode dispatch loop.
 # `in_group`: when true, stop at the next TokenKind.RBrace (matching the group's '{').
-function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
+# `single`: process one item only (an unbraced command argument).
+function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; single::Bool = false)
     while true
         tok = _current(p)
         tok.kind === TokenKind.EOF && break
         in_group && tok.kind === TokenKind.RBrace && break
+        # An unbraced argument cannot be a paragraph break (TeX reports a
+        # runaway argument); leave it for the enclosing loop.
+        single && tok.kind === TokenKind.Space && occursin(_BLANK_LINE_RE, tok.value) && break
 
         if tok.kind === TokenKind.Char
             in_group || _commit_space!(builder)
@@ -227,12 +256,40 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
                 _end_paragraph!(builder)
                 node = parse_environment!(p, env_name)
                 push!(builder.blocks, DisplayBlock(node, Symbol(env_name)))
-            else
+            elseif haskey(_MATRIX_ENVS, env_name)
                 in_group || _commit_space!(builder)
                 _flush_text_run!(builder)
                 node = parse_environment!(p, env_name)
                 push!(builder.cur_runs, MathRun(node, Text))
             end
+            # Any other environment (`center`, `quote`, …) has no layout of its
+            # own: its body continues as ordinary text and the matching `\end` is
+            # dropped below, rather than the whole body being discarded.
+
+        elseif tok.kind === TokenKind.Command && tok.value == "\\end"
+            _advance!(p)
+            _read_brace_word!(p)   # end of an environment rendered as plain text
+
+        elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_INTERWORD_SPACES
+            # Control space: one significant interword space, like `~` (soft line
+            # breaking does not exist yet, so its breakability is not observable).
+            _advance!(p)
+            if in_group
+                write(builder.buf, " ")
+            else
+                builder.pending_space = true
+                builder.pending_nbsp = true
+            end
+            _is_control_word(tok.value) && _skip_text_spaces!(p)
+
+        elseif tok.kind === TokenKind.Command && haskey(_SPACE_WIDTHS, tok.value)
+            # Fixed-width spaces (`\quad`, `\,`, `\enspace`, …) become an inline
+            # math run holding a space of exactly that width.
+            in_group || _commit_space!(builder)
+            _advance!(p)
+            _flush_text_run!(builder)
+            push!(builder.cur_runs, MathRun(space_node(_SPACE_WIDTHS[tok.value]), Text))
+            _is_control_word(tok.value) && _skip_text_spaces!(p)
 
         elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_STYLE_COMMANDS
             in_group || _commit_space!(builder)
@@ -264,6 +321,7 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool)
         else
             _advance!(p)   # unknown command, stray token — skip
         end
+        single && break
     end
     return
 end

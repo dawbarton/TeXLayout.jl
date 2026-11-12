@@ -748,6 +748,33 @@
             doc = TeXLayout.parse_document("\\begin{unknown}x\\end{unknown}")
             @test !isempty(doc)
             @test doc[1] isa TeXLayout.ParagraphBlock
+            # The body is kept as ordinary text; only the delimiters vanish.
+            @test doc[1].lines[1].runs[1].spans[1].text == "x"
+            centred = TeXLayout.parse_document(raw"\begin{center}Hi\end{center} there")
+            @test only(only(centred).lines[1].runs).spans[1].text == "Hi there"
+        end
+
+        @testset "Unbraced and spaced command arguments take one item" begin
+            span_texts(doc) = [(s.text, s.attrs.slot) for s in only(only(doc).lines).runs[1].spans]
+            unbraced = TeXLayout.parse_document(raw"\textbf x and more")
+            @test span_texts(unbraced) ==
+                [("x", TeXLayout.FontSlot.Bold), (" and more", TeXLayout.FontSlot.Regular)]
+            spaced = TeXLayout.parse_document(raw"\textbf {x} y")
+            @test span_texts(spaced) ==
+                [("x", TeXLayout.FontSlot.Bold), (" y", TeXLayout.FontSlot.Regular)]
+            # An unbraced argument does not swallow a paragraph break.
+            broken = TeXLayout.parse_document("\\textbf x\n\nNext")
+            @test count(b -> b isa TeXLayout.ParagraphBlock, broken) == 2
+        end
+
+        @testset "Explicit spaces in text" begin
+            width(s) = TeXLayout.layout_document(s; family).width
+            @test width(raw"Mr.\ Smith") ≈ width("Mr. Smith")
+            @test width(raw"Mr.\ Smith") > width("Mr.Smith")
+            # Control words swallow the following space; control symbols do not.
+            @test width(raw"a\quad b") ≈ width("ab") + 1.0
+            @test width(raw"a\,b") ≈ width("ab") + 3 / 18
+            @test width(raw"a\qquad b") ≈ width("ab") + 2.0
         end
 
         @testset "The worked example: document structure (spec §3 worked example)" begin
