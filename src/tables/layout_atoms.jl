@@ -277,6 +277,8 @@ const _CMD_ATOM_CLASS = Dict{String, Symbol}(
     "aleph" => :ord, "beth" => :ord,
     "gimel" => :ord, "daleth" => :ord,
     "prime" => :ord, "backprime" => :ord,
+    "dprime" => :ord, "trprime" => :ord, "qprime" => :ord,
+    "backdprime" => :ord, "backtrprime" => :ord,
     "complement" => :ord,
     "surd" => :ord,
     "top" => :ord, "bot" => :ord,

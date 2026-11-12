@@ -129,6 +129,8 @@ struct MathTable
     min_connector_overlap::Int                        # MathVariants.MinConnectorOverlap
     vert_constructions::Dict{String, GlyphConstruction}
     horiz_constructions::Dict{String, GlyphConstruction}
+    # GSUB 'ssty': glyph name → (Script, ScriptScript) alternate glyph names
+    script_alternates::Dict{String, Tuple{String, String}}
 end
 
 # Parsed MATH tables are immutable and depend only on the math-font path, so
@@ -753,6 +755,92 @@ end
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+# ── GSUB 'ssty' (script-style alternates) ─────────────────────────────────────
+
+# Glyph substitutions of one GSUB lookup subtable as 0-based glyph ID → list of
+# substitutes: one for a single substitution (type 1), the alternates in order
+# for an alternate substitution (type 3).  Extension subtables (type 7) are
+# followed; other lookup types are ignored.
+function _gsub_subtable_alternates!(
+        out::Dict{Int, Vector{Int}}, data::Vector{UInt8}, p::Int, lookup_type::Int
+    )
+    if lookup_type == 7
+        ext_type = Int(_u16(data, p + 2))
+        ext_off = Int(_u32(data, p + 4))
+        return _gsub_subtable_alternates!(out, data, p + ext_off, ext_type)
+    end
+    fmt = Int(_u16(data, p))
+    coverage = _read_coverage(data, p + Int(_u16(data, p + 2)))
+    if lookup_type == 1 && fmt == 1
+        delta = Int(_i16(data, p + 4))
+        for g in coverage
+            get!(out, g, [mod(g + delta, 65536)])
+        end
+    elseif lookup_type == 1 && fmt == 2
+        for (i, g) in enumerate(coverage)
+            get!(out, g, [Int(_u16(data, p + 6 + 2 * (i - 1)))])
+        end
+    elseif lookup_type == 3 && fmt == 1
+        for (i, g) in enumerate(coverage)
+            set = p + Int(_u16(data, p + 6 + 2 * (i - 1)))
+            n = Int(_u16(data, set))
+            n > 0 || continue
+            get!(out, g, [Int(_u16(data, set + 2 + 2 * (k - 1))) for k in 1:n])
+        end
+    end
+    return out
+end
+
+# Parse the GSUB 'ssty' feature: glyph name → (Script alternate, ScriptScript
+# alternate).  XeTeX and LuaTeX load script-size math fonts with `ssty=0` and
+# scriptscript sizes with `ssty=1` (unicode-math), selecting the first and second
+# alternate; a single substitution, or a glyph with one alternate, uses it for
+# both.  Every 'ssty' feature record is used, whatever script or language system
+# lists it; math fonts register it once, under the 'math' script.  Returns an
+# empty table when the font has no GSUB table, no 'ssty' feature, or no glyph
+# names to key it by.
+function _parse_script_alternates(
+        data::Vector{UInt8}, glyph_names::Vector{String}
+    )::Dict{String, Tuple{String, String}}
+    result = Dict{String, Tuple{String, String}}()
+    isempty(glyph_names) && return result
+    loc = _find_table_opt(data, "GSUB")
+    loc === nothing && return result
+    gsub = loc[1]
+    feature_list = gsub + Int(_u16(data, gsub + 6))
+    lookup_list = gsub + Int(_u16(data, gsub + 8))
+
+    lookup_indices = Int[]
+    for i in 0:(Int(_u16(data, feature_list)) - 1)
+        rec = feature_list + 2 + 6 * i
+        String(data[rec:(rec + 3)]) == "ssty" || continue
+        feature = feature_list + Int(_u16(data, rec + 4))
+        for k in 0:(Int(_u16(data, feature + 2)) - 1)
+            push!(lookup_indices, Int(_u16(data, feature + 4 + 2 * k)))
+        end
+    end
+
+    subs = Dict{Int, Vector{Int}}()
+    for li in unique(lookup_indices)
+        lookup = lookup_list + Int(_u16(data, lookup_list + 2 + 2 * li))
+        lookup_type = Int(_u16(data, lookup))
+        for s in 0:(Int(_u16(data, lookup + 4)) - 1)
+            sub = lookup + Int(_u16(data, lookup + 6 + 2 * s))
+            _gsub_subtable_alternates!(subs, data, sub, lookup_type)
+        end
+    end
+
+    name(g) = g + 1 <= length(glyph_names) ? glyph_names[g + 1] : ""
+    for (g, alts) in subs
+        base = name(g)
+        script = name(alts[1])
+        scriptscript = name(alts[min(2, end)])
+        (isempty(base) || isempty(script) || isempty(scriptscript)) && continue
+        result[base] = (script, scriptscript)
+    end
+    return result
+end
+
 """
     load_math_table(font_path) -> MathTable
 
@@ -779,9 +867,12 @@ function load_math_table(font_path::AbstractString)::MathTable
         min_overlap, vert_constructions, horiz_constructions =
             _parse_math_variants(data, math_start + var_off, glyph_names)
 
+        script_alternates = _parse_script_alternates(data, glyph_names)
+
         return MathTable(
             upm, constants, italic_corrections, top_accent_attachments,
-            extended_shapes, min_overlap, vert_constructions, horiz_constructions
+            extended_shapes, min_overlap, vert_constructions, horiz_constructions,
+            script_alternates,
         )
     end
 end

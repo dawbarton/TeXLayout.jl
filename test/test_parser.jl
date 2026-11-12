@@ -837,7 +837,17 @@
         @test sig.(only(tree.children).children[2].children) == [prime]
         twice = only(parse_latex("f''^2").children)
         @test twice.kind === NodeKind.Superscript
-        @test sig.(twice.children[2].children) == [prime, prime, sig(TeXLayout.Node(NodeKind.Char, "2"))]
+        # As in unicode-math, two to four primes are one multiple-prime
+        # character, and a longer run is kerned single primes.
+        dprime = sig(TeXLayout.Node(NodeKind.Command, "\\dprime"))
+        @test sig.(twice.children[2].children) == [dprime, sig(TeXLayout.Node(NodeKind.Char, "2"))]
+        for (src, cmd) in (("f'''", "\\trprime"), ("f''''", "\\qprime"))
+            @test sig.(only(parse_latex(src).children).children[2].children) == [sig(TeXLayout.Node(NodeKind.Command, cmd))]
+        end
+        five = only(parse_latex("f'''''").children).children[2].children
+        @test count(n -> sig(n) == prime, five) == 5
+        @test all(n -> n.width ≈ -1.5 / 18, filter(n -> n.kind === NodeKind.Space, five))
+        @test count(n -> n.kind === NodeKind.Space, five) == 4
         decorated = only(parse_latex("f'_1").children)
         @test decorated.kind === NodeKind.Decorated
         @test decorated.children[2].value == "1"

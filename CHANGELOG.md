@@ -8,11 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `'` in math is a prime, as in TeX and KaTeX: `f'` is `f^{\prime}`, `f''^2`
-  is `f^{\prime\prime 2}`, and `f'_1` stacks the prime over the subscript.
-  Inside `\text{…}` it stays an apostrophe. Fonts' `ssty` script variants are
-  not applied, so the prime is the scaled U+2032 glyph (as XeLaTeX draws it
-  with unicode-math and New Computer Modern).
+- `'` in math is a prime, as in TeX and KaTeX: `f'` is `f^{\prime}`, and
+  `f'_1` stacks the prime over the subscript. As in unicode-math, a run of two
+  to four primes is one multiple-prime character (`f''^2` is `f^{\dprime 2}`),
+  a longer run is single primes with a -1.5 mu kern between them, and a font
+  without the multiple-prime character gets the kerned single primes. Inside
+  `\text{…}` it stays an apostrophe. `\dprime`, `\trprime`, `\qprime`,
+  `\backdprime`, and `\backtrprime` are available as commands.
+- Glyphs set in Script and ScriptScript style use the font's OpenType `ssty`
+  script alternates (the first alternate in Script, the second in
+  ScriptScript), as XeTeX and LuaTeX do with unicode-math. Script letters,
+  digits, primes, and radical degrees are slightly larger and wider than the
+  scaled base glyphs, as the font designers intended; widths now agree with
+  LuaLaTeX to 0.001 pt at 10 pt in New Computer Modern and TeX Gyre Bonum.
+  `MathTable` has a new `script_alternates` field.
 - `$…$` inside math `\text{…}` is laid out as math, as amsmath and KaTeX allow
   (`\text{if $x>0$}`). It previously printed literal dollar signs and upright
   text. A `$` nested in braces no longer forces a `LaTeXString` onto the
@@ -31,6 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inline-math routing and cached glyph/face resolution moved from the two
   renderer extensions into `src/render_support.jl`, so both adapters share one
   implementation and one per-`FontFamily` runtime cache.
+- Matrix environments are spaced as in LaTeX + amsmath. Columns are 1 em
+  apart (5 mu each side before), `array` keeps 0.5 em outside its first and
+  last columns, the matrix family has no outer margin, and `cases` puts a
+  `\quad` between its columns. Rows carry `\arraystretch` struts (1.2 em
+  baseline to baseline for short entries, 1.2 × that in `cases`) instead of
+  ink-tight rows with a 3 mu gap, and the matrix delimiters (and `\left…\right`
+  around a lone matrix) are sized against that box by rule 19 instead of
+  covering the ink. `||` in an array spec adds `\doublerulesep` (0.2 em).
+  `smallmatrix` sets its entries in script style (with `ssty` alternates)
+  rather than at 0.9×, with amsmath's spacing. Widths agree with LuaLaTeX to
+  0.001 pt across 30 cases in New Computer Modern and TeX Gyre Bonum. The
+  display alignments (`align`, `gather`, …) are unchanged.
+- `glyph_metrics(family, name)` is memoised per font and glyph name. Layouts
+  with delimiters, large operators, or scripts are 1.5–6× faster in the
+  benchmark suite (FreeType's name lookup dominated them).
 
 ### Fixed
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8

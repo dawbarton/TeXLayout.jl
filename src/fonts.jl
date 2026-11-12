@@ -133,7 +133,18 @@ if the glyph is absent.  `glyph_name` is the PostScript name (e.g. `"f"`,
 `"parenleft"`, `"alpha"`).
 """
 function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetrics, Nothing}
-    face, hmtx = _load_font(family.math)
+    return get!(_NAMED_METRICS_CACHE, (family.math, glyph_name)) do
+        _named_metrics(family.math, glyph_name)
+    end
+end
+
+# Metrics by glyph name, memoised per (font path, name): FreeType's name lookup
+# and glyph load are slow enough to double layout time when every script glyph
+# is swapped for its `ssty` alternate by name.
+const _NAMED_METRICS_CACHE = Dict{Tuple{String, String}, Union{GlyphMetrics, Nothing}}()
+
+function _named_metrics(path::String, glyph_name::String)::Union{GlyphMetrics, Nothing}
+    face, hmtx = _load_font(path)
     gid = Int(FreeTypeAbstraction.glyph_index(face, glyph_name))
     gid == 0 && return nothing
 

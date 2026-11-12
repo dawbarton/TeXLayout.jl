@@ -366,6 +366,15 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     end
     push!(segments, current_seg)
 
+    # Around a lone array the delimiters are sized against the array's box,
+    # struts included, as TeX does; that box is not visible in the glyphs.
+    if isempty(middles)
+        m = _sole_matrix(segments[1])
+        if m !== nothing && _takes_outer_delimiters(m)
+            return _layout_matrix!(m, ctx, style, x0, y0, scale, boxes; left = left_name, right = right_name)
+        end
+    end
+
     # Lay out each segment at the origin; record ranges for allocation-free
     # measurement and later in-place positioning.
     seg_starts = Vector{Int}(undef, length(segments))
@@ -395,8 +404,8 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     axis_em = y0 + mc.axis_height / upm * scale
     h_above = max(0.0, content_top - axis_em)
     h_below = max(0.0, axis_em - content_bot)
-    # A matrix inside the delimiters is ink-tight here but strutted in TeX, so
-    # it gets full coverage, as matrix environments' own delimiters do.
+    # A matrix among other content is measured by its ink here but by its
+    # strutted box in TeX, so it gets full coverage instead.
     δ = max(h_above, h_below)
     required_du = any(_contains_matrix, node.children) ? 2δ / scale * upm :
         _left_right_required_du(δ, scale, upm)

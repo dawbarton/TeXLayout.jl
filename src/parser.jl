@@ -87,6 +87,23 @@ function _peek_past_spaces(p::_Parser)::Token
     return p.tokens[i]
 end
 
+# unicode-math's single characters for a run of two, three, or four primes.
+const _MULTI_PRIME_COMMANDS = Dict(2 => "\\dprime", 3 => "\\trprime", 4 => "\\qprime")
+
+# Kern between repeated primes: unicode-math's `\g__um_primekern_muskip`,
+# -\thinmuskip/2 = -1.5 mu.
+const _PRIME_KERN = -1.5 / 18
+
+# `n` single primes separated by `_PRIME_KERN`, as unicode-math sets a run of
+# more than four primes.
+function _kerned_primes(n::Int)::Vector{Node}
+    out = Node[Node(NodeKind.Command, "\\prime")]
+    for _ in 2:n
+        push!(out, space_node(_PRIME_KERN), Node(NodeKind.Command, "\\prime"))
+    end
+    return out
+end
+
 # Tokens that continue the atom before them: scripts, primes, and the
 # \limits / \nolimits / \displaylimits modifiers.
 @inline _is_prime(tok::Token) = tok.kind === TokenKind.Char && tok.value == "'"
@@ -234,7 +251,9 @@ end
 #
 # In math mode (`math = true`) whitespace between the primary and its scripts is
 # insignificant (`x ^2`, `\sum \limits_0`), and `'` is a prime: `f'` is
-# `f^{\prime}`, `f''^2` is `f^{\prime\prime 2}`, as in TeX and KaTeX.  Inside
+# `f^{\prime}` and `f''^2` is `f^{\dprime 2}`.  As in unicode-math, a run of
+# two to four primes is one multiple-prime character (U+2033, U+2034, U+2057);
+# layout falls back to repeated primes for a font without it.  Inside
 # `\text{…}` (`math = false`) spaces are content and `'` is an apostrophe, so
 # neither rule applies.
 function _parse_atom!(p::_Parser, isstop = _is_group_end; math::Bool = true)::Node
@@ -291,6 +310,12 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end; math::Bool = true)::No
                 push!(primes, Node(NodeKind.Command, "\\prime"))
             end
             has_primes = true
+            n = length(primes)
+            if 2 <= n <= 4
+                primes = [Node(NodeKind.Command, _MULTI_PRIME_COMMANDS[n])]
+            elseif n > 4
+                primes = _kerned_primes(n)
+            end
         else
             break
         end

@@ -202,6 +202,8 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "daleth" => 0x2138, "angle" => 0x2220,
     "top" => 0x22A4, "bot" => 0x22A5,
     "prime" => 0x2032, "backprime" => 0x2035,
+    "dprime" => 0x2033, "trprime" => 0x2034, "qprime" => 0x2057,
+    "backdprime" => 0x2036, "backtrprime" => 0x2037,
     "surd" => 0x221A, "complement" => 0x2201,
     "eth" => 0x00F0,
     # Binary operators

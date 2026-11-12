@@ -286,7 +286,7 @@ function _layout_radical!(
 end
 
 # True when `n` is, or groups, a matrix-like environment (`matrix`, `array`,
-# `aligned`, …), whose rows lack TeX's struts in this layout.
+# `aligned`, …), whose struts and row gaps the emitted glyphs do not show.
 _contains_matrix(n::Node)::Bool = n.kind === NodeKind.Matrix ||
     (n.kind in (NodeKind.Group, NodeKind.Sequence) && any(_contains_matrix, n.children))
 

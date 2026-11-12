@@ -168,9 +168,8 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   `RadicalKernAfterDegree` separate it from the sign, with the negative
   after-kern clamped so that the degree and kerns never have negative width.
   Checked against LuaLaTeX + unicode-math with NewCMMath: the degree baseline
-  agrees to 0.001 pt at 10 pt in Text and Display style.  LuaTeX also uses the
-  font's `ssty` script variants for the degree, which TeXLayout does not, so
-  degree widths differ slightly.
+  agrees to 0.001 pt at 10 pt in Text and Display style, and with the `ssty`
+  degree glyph (see 18) `\sqrt[3]{x}` is 14.675 pt wide in both.
 
 ---
 
@@ -369,7 +368,35 @@ before 2026-11 (`\int_D f`).  This is TeX's arithmetic (the operator width
 loses δ under a subscript): measured with the real font files in LuaLaTeX,
 `\int_D f` is 0.64–0.71 pt wider at 10 pt in Termes, Bonum, Pagella and
 NewCM, entirely because LuaTeX sets the subscript with the wider `ssty`
-script glyphs.
+script glyphs.  With `ssty` applied (below) TeXLayout's `\int_D` widths
+agree with LuaLaTeX's to 0.001 pt in all four fonts.
+
+### Script alternates (`ssty`)
+
+XeTeX and LuaTeX with unicode-math load the script-size math font with the
+OpenType feature `ssty=0` and the scriptscript size with `ssty=1`, so every
+glyph set in Script or ScriptScript style is replaced by the first or second
+alternate of the font's GSUB `ssty` lookup (letters, digits, primes, and
+some symbols; Luciole and STIX Two also cover delimiters, and Luciole large
+operators).  TeXLayout parses the lookup into `MathTable.script_alternates`
+and swaps characters, symbols, and large operators in `_script_glyph`; the
+alternate carries its own italic correction and accent attachment.
+Delimiters and accents are not yet substituted, and neither are text-mode
+glyphs (`\text{…}` in a script), which come from the text font.
+KaTeX has no equivalent (its fonts are already script-designed per size).
+Verified against LuaLaTeX with the bundled font files at 10 pt: `\scriptstyle
+x`, `x_x`, `x_V`, and `\iiint_V` in Bonum, `\scriptscriptstyle 3` and
+`\sqrt[3]{x}` in NewCM, and `\int_D` in four fonts all agree to 0.001 pt.
+
+### Primes
+
+`'` is `^{\prime}`, as in TeX.  unicode-math additionally replaces a run of
+two, three, or four primes with one multiple-prime character (U+2033,
+U+2034, U+2057) when the font has it, and otherwise sets single primes with
+`\g__um_primekern_muskip` = -1.5 mu between them; TeXLayout does the same in
+the parser (`_MULTI_PRIME_COMMANDS`, `_kerned_primes`) and falls back to the
+kerned primes in layout.  `f'`, `f''`, …, `f'''''` and `f''^2` agree with
+LuaLaTeX to 0.001 pt in NewCM and Bonum.  KaTeX sets repeated `\prime`s.
 
 ---
 
@@ -394,7 +421,7 @@ constants are noted for quick lookup.
 
 | Feature | NodeKind | Key implementation detail |
 |---------|----------|--------------------------|
-| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matches LuaLaTeX's variant choice for NewCMMath in every case tried; XeLaTeX differs for `\left(\frac{\frac{a}{b}}{c}\right)` and `\left(\int_0^1 f\right)`, where its fraction and script placement differ (see 18a).  `\\left…\\right` around a matrix also keeps full coverage.  Matrix delimiters still cover the whole grid, because the grid has no `\arraystretch` struts |
+| `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matches LuaLaTeX's variant choice for NewCMMath in every case tried; XeLaTeX differs for `\left(\frac{\frac{a}{b}}{c}\right)` and `\left(\int_0^1 f\right)`, where its fraction and script placement differ (see 18a).  Matrix environments size their delimiters by the same rule against the array's strutted box, and `\left…\right` around a lone array-like environment hands its delimiters to the matrix layout so that they do too (as in LuaLaTeX, a parenthesis can then fall short of a tall entry's ink); a matrix among other content gets full ink coverage, because its struts are not visible to the measurement |
 | `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
 | `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
 | Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
@@ -409,7 +436,7 @@ constants are noted for quick lookup.
 | Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
 | `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
 | `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
-| Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout |
+| Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout.  Spacing follows LaTeX + amsmath (`_MATRIX_SPACING`): `array` has `\arraycolsep` (0.5 em) on both sides of every column, the matrix family drops the outer two, `cases` is `@{}l@{\quad}l@{}` with `\arraystretch` 1.2, and every row has an `\@arstrut` of 0.84/0.36 em × `\arraystretch` with no further row gap; a `|` takes no width and `||` adds `\doublerulesep` (0.2 em).  `smallmatrix` sets `\scriptstyle` entries 0.2777 em apart, inside thin spaces, on a 0.6 em `\baselineskip` with 0.15 em `\lineskip`.  Widths agree with LuaLaTeX to 0.001 pt for 30 cases in NewCM and Bonum, except that LuaTeX adds a `\left` delimiter variant's italic correction (XeTeX does not).  The display alignments keep their own spacing (future.md) |
 | `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
 | Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |
 | Escaped literal characters (`\#`, `\$`, `\%`, …) | `NodeKind.Char` in math; text buffer characters in documents | Shared special-character table plus mode-specific math/text aliases in `parser_tables.jl`; escaped dollars are excluded from Makie's math-shift count |

@@ -195,7 +195,8 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     @testset "Sqrt with degree places root index" begin
         boxes = layout(parse_latex("\\sqrt[3]{x}"), family, Text)
         glyphs = find_glyphs(boxes)
-        degree = only(filter(b -> b.element.glyph_name == "three", glyphs))
+        # The degree is set in ScriptScript style, so it uses the ssty=1 alternate.
+        degree = only(filter(b -> b.element.glyph_name == "three.sts", glyphs))
         radical = only(filter(b -> startswith(b.element.glyph_name, "radical"), glyphs))
         body = only(filter(b -> b.element.glyph_name == "u1D465", glyphs))
 
@@ -218,7 +219,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # the height of \sqrt[\rule{1pt}{60pt}]{x}).  A degree with a descender
         # hangs below that baseline rather than raising it.
         for (style, expected) in ((Text, 0.3605), (Display, 0.4095))
-            for (src, degree_ps) in (("\\sqrt[3]{x}", "three"), ("\\sqrt[p]{x}", "u1D45D"))
+            for (src, degree_ps) in (("\\sqrt[3]{x}", "three.sts"), ("\\sqrt[p]{x}", "u1D45D.sts"))
                 degree = only(
                     filter(
                         b -> b.element.glyph_name == degree_ps,
@@ -229,11 +230,12 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             end
         end
         # The negative after-degree kern never pulls the sign left of where it
-        # sits without a degree (LuaTeX gives both 14.05 pt wide).
-        plain = layout(parse_latex("\\sqrt{x}"), family, Text)
-        rooted = layout(parse_latex("\\sqrt[3]{x}"), family, Text)
-        sign_x(bs) = only(b.x for b in find_glyphs(bs) if startswith(b.element.glyph_name, "radical"))
-        @test sign_x(rooted) ≈ sign_x(plain) atol = 1.0e-9
+        # sits without a degree.  A narrow degree leaves the sign in place; the
+        # ssty-wide 3 overflows the kern and pushes it right (LuaTeX: \sqrt{x}
+        # is 14.05 pt wide and \sqrt[3]{x} 14.675 pt).
+        sign_x(src) = only(b.x for b in find_glyphs(layout(parse_latex(src), family, Text)) if startswith(b.element.glyph_name, "radical"))
+        @test sign_x(raw"\sqrt[.]{x}") ≈ sign_x(raw"\sqrt{x}") atol = 1.0e-9
+        @test sign_x(raw"\sqrt[3]{x}") - sign_x(raw"\sqrt{x}") ≈ 0.0625 atol = 1.0e-4
     end
 
     @testset "Nested sqrt: radicand starts at radical advance width" begin
@@ -524,17 +526,19 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test paren(raw"\left(x^2\right)", Text) == "parenleft.v1"
         @test paren(raw"\left(\frac{a}{b}\right)", Display) == "parenleft.v4"
         @test paren(raw"\left(\frac{\frac{a}{b}}{c}\right)", Text) == "parenleft.v4"
-        # Matrix delimiters still cover the whole (strut-less) grid, whether
-        # from a matrix environment or from \left…\right around a matrix.
-        for src in (
-                raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}",
-                raw"\left( \begin{matrix} \frac{1}{2} & b \\ c & \frac{1}{2} \end{matrix} \right)",
+        # Matrix delimiters follow the same rule against the array's strutted
+        # box, whether from a matrix environment or from \left…\right around a
+        # lone matrix; like TeX's, they may fall short of tall entries' ink.
+        # LuaLaTeX widths at 10 pt: 35.45 pt and 37.486 pt.
+        for (src, wd) in (
+                (raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}", 3.545),
+                (raw"\left( \begin{matrix} a & b \\ c & d \end{matrix} \right)", 3.545),
+                (raw"\begin{pmatrix} \frac{1}{2} & b \\ c & \frac{1}{2} \end{pmatrix}", 3.7486),
+                (raw"\left( \begin{matrix} \frac{1}{2} & b \\ c & \frac{1}{2} \end{matrix} \right)", 3.7486),
             )
             pm = layout(parse_latex(src), family, Text)
-            p = only(b for b in find_glyphs(pm) if startswith(b.element.glyph_name, "parenleft"))
-            cells = [b for b in find_glyphs(pm) if !startswith(b.element.glyph_name, "paren")]
-            @test p.y + p.element.y_max / FONT_UPM >= maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in cells)
-            @test p.y + p.element.y_min / FONT_UPM <= minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in cells)
+            @test paren(src, Text) == "parenleft.v6"
+            @test TeXLayout.measure(pm, Float64(FONT_UPM)).width ≈ wd atol = 1.0e-4
         end
     end
 
@@ -1092,7 +1096,13 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         fic = get(mt.italic_corrections, "u1D453", 0) / mt.upm
         @test fic > 0
         fadv = glyph_metrics_by_codepoint(family, UInt32(0x0001D453)).advance_width / mt.upm
-        kern_after_f(src) = (bs = layout(parse_latex(src), family, Text); any(b -> b.element isa Space && b.element.width ≈ fic * b.scale, bs))
+        # In a script f is its ssty alternate, which carries its own correction.
+        function kern_after_f(src)
+            bs = layout(parse_latex(src), family, Text)
+            f = only(b for b in find_glyphs(bs) if startswith(b.element.glyph_name, "u1D453"))
+            fic = get(mt.italic_corrections, f.element.glyph_name, 0) / mt.upm
+            return fic > 0 && any(b -> b.element isa Space && b.element.width ≈ fic * b.scale, bs)
+        end
         for src in ("f", raw"\frac{f}{2}", raw"\sqrt{f}", raw"x^{f}", raw"\overline{f}")
             @test kern_after_f(src)
         end
@@ -1107,6 +1117,36 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test count(b -> b.element isa Space, mathit) == 1
         plain = sort(find_glyphs(layout(parse_latex("ff"), family, Text)); by = b -> b.x)
         @test plain[2].x - plain[1].x ≈ fadv + fic atol = 1.0e-9
+    end
+
+    @testset "Scripts use the font's ssty alternates" begin
+        # XeTeX and LuaTeX set script sizes with GSUB ssty=0 and scriptscript
+        # sizes with ssty=1.  Widths are LuaLaTeX + unicode-math at 10 pt with
+        # the bundled font files, in em; a trailing digit marks the end of a
+        # scripted atom so that \scriptspace is included.
+        names(src, fam = family) = Set(b.element.glyph_name for b in find_glyphs(layout(parse_latex(src), fam, Text)))
+        @test names("x") == Set(["u1D465"])
+        @test "u1D465.st" in names("a_x")
+        @test "u1D465.sts" in names("a_{b_x}")
+        @test "three.sts" in names(raw"\sqrt[3]{x}")
+        @test "minute.st" in names("f'")
+        # Text inside a script stays in the text font.
+        @test !any(endswith(".st"), names(raw"a_{\text{x}}"))
+        width(src, fam) = TeXLayout.measure(layout(parse_latex(src), fam, Text), Float64(load_math_table(fam.math).upm)).width
+        marker(src, fam) = only(b.x for b in find_glyphs(layout(parse_latex(src * "1"), fam, Text)) if b.element.glyph_name == "one")
+        @test width(raw"{\scriptscriptstyle 3}", family) ≈ 0.3405 atol = 1.0e-4
+        @test width(raw"\sqrt[3]{x}", family) ≈ 1.4675 atol = 1.0e-4
+        bonum = font_family(:bonum)
+        @test width(raw"{\scriptstyle x}", bonum) ≈ 0.5598 atol = 1.0e-4
+        @test width(raw"{\scriptstyle V}", bonum) ≈ 0.71995 atol = 1.0e-4
+        @test marker("x_x", bonum) ≈ 1.1398 atol = 1.0e-4
+        @test marker("x_V", bonum) ≈ 1.29995 atol = 1.0e-4
+        # Primes: the ssty prime, unicode-math's multiple-prime characters, and
+        # its -1.5 mu kern between the primes of a longer run.
+        for (src, wd) in (("f'", 0.920898), ("f''", 1.088899), ("f'''", 1.256898), ("f''''", 1.4249), ("f'''''", 1.827167), ("f''^2", 1.4872))
+            @test marker(src, family) ≈ wd atol = 1.0e-4
+        end
+        @test marker("f'''''", bonum) ≈ 2.054642 atol = 1.0e-4
     end
 
     @testset "Math inside \\text{…} is laid out in math mode" begin
@@ -1253,7 +1293,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     @testset "HorizBrace: notes keep the enclosing size factor" begin
         # The note is a script of the brace: under \large it is as large as an
         # ordinary superscript there, and inside a script it shrinks once more.
-        script_scale(src, ps) = only(b.scale for b in find_glyphs(layout(parse_latex(src), family, Text)) if b.element.glyph_name == ps)
+        script_scale(src, ps) = only(b.scale for b in find_glyphs(layout(parse_latex(src), family, Text)) if startswith(b.element.glyph_name, ps))
         for (brace, plain) in (
                 ("{\\large \\overbrace{x}^{n}}", "{\\large x^{n}}"),
                 ("{\\large \\underbrace{x}_{n}}", "{\\large x_{n}}"),
@@ -1552,6 +1592,44 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # The leftmost glyph of lcr should be left of the leftmost glyph of ccc
         # (since ccc centres within the column, lcr flushes left).
         @test g_lcr[1].x <= g_ccc[1].x + 1.0e-6
+    end
+
+    @testset "array geometry matches LaTeX + amsmath" begin
+        # Widths in em: LuaLaTeX + unicode-math at 10 pt with the bundled font
+        # files.  array has \arraycolsep on both sides of every column, the
+        # amsmath matrices drop the outer two, cases is @{}l@{\quad}l@{}, a `|`
+        # takes no width and `||` adds \doublerulesep, and smallmatrix sets
+        # script-style entries \thickspace apart inside thin spaces.
+        width(src, fam = family) = TeXLayout.measure(layout(parse_latex(src), fam, Text), Float64(load_math_table(fam.math).upm)).width
+        for (src, wd) in (
+                (raw"\begin{matrix} a & b \\ c & d \end{matrix}", 2.073),
+                (raw"\begin{array}{cc} a & b \end{array}", 2.972),
+                (raw"\begin{array}{|c|c|} a & b \end{array}", 2.972),
+                (raw"\begin{array}{c||c} a & b \end{array}", 3.172),
+                (raw"\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}", 5.25),
+                (raw"\begin{cases} a & b \\ c & d \end{cases}", 3.095),
+                (raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", 5.832542),
+                (raw"\begin{smallmatrix} a & b \\ c & d \end{smallmatrix}", 1.467119),
+                (raw"\left[\begin{smallmatrix} a & b \\ c & d \end{smallmatrix}\right]", 2.147118),
+            )
+            @test width(src) ≈ wd atol = 1.0e-4
+        end
+        bonum = font_family(:bonum)
+        @test width(raw"\begin{pmatrix} a & b \\ c & d \end{pmatrix}", bonum) ≈ 3.911 atol = 1.0e-4
+        @test width(raw"\begin{bmatrix} a & b \\ c & d \end{bmatrix}", bonum) ≈ 3.575 atol = 1.0e-4
+
+        # Rows carry \arraystretch × (0.84 em, 0.36 em) struts and touch, so
+        # short entries sit 1.2 em apart (1.44 em in cases, stretch 1.2), and
+        # the grid is centred on the axis by its strutted box.
+        baseline(src, ps) = only(b.y for b in find_glyphs(layout(parse_latex(src), family, Text)) if b.element.glyph_name == ps)
+        @test baseline(raw"\begin{matrix} a \\ b \end{matrix}", "u1D44E") - baseline(raw"\begin{matrix} a \\ b \end{matrix}", "u1D44F") ≈ 1.2 atol = 1.0e-9
+        @test baseline(raw"\begin{cases} a \\ b \end{cases}", "u1D44E") - baseline(raw"\begin{cases} a \\ b \end{cases}", "u1D44F") ≈ 1.44 atol = 1.0e-9
+        axis = mt.constants.axis_height / mt.upm
+        @test baseline(raw"\begin{matrix} a \end{matrix}", "u1D44E") ≈ axis - (0.84 - 0.36) / 2 atol = 1.0e-9
+        # smallmatrix entries are script style, so they take ssty alternates.
+        small = layout(parse_latex(raw"\begin{smallmatrix} a \end{smallmatrix}"), family, Text)
+        @test only(find_glyphs(small)).element.glyph_name == "u1D44E.st"
+        @test only(find_glyphs(small)).scale ≈ mt.constants.script_percent_scale_down / 100
     end
 
     @testset "align inserts relation spacing after alignment marker" begin

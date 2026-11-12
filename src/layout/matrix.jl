@@ -1,21 +1,18 @@
 # Matrix and array environment layout.
 
-# Inter-column and inter-row spacing constants for matrix environments.
-# _MATRIX_COLSEP is the margin added on each side of a column (total gap between
-# adjacent cells = 2 × _MATRIX_COLSEP).  This is amsmath's `smallmatrix` value
-# (\thickspace, 5 mu); LaTeX's \arraycolsep is 5 pt (0.5 em, article.cls), so
-# other matrices are set narrower than in TeX (see future.md).
-# _MATRIX_ROWGAP is extra baseline-to-baseline clearance added between rows.
+# Spacing of the display alignment environments (`align`, `gather`, …), which
+# have no `_MATRIX_SPACING` entry: `_MATRIX_COLSEP` on each side of a column and
+# `_MATRIX_ROWGAP` between ink-tight rows.  amsmath sets these rows with
+# `\strut@` and `\jot` instead (see future.md).
 const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
 const _MATRIX_ROWGAP = 3 / 18   # extra row gap in em
-const _MATRIX_DOUBLERULESEP = 2 / 18   # gap between two adjacent rules (≈ TeX \doublerulesep = 2pt)
 
 # Parse a column-spec string (e.g. "|l||c|r|") into per-column alignment symbols
 # and a vertical-rule count vector.
 # col_aligns[c] ∈ {:l, :c, :r} for each column c = 1..ncol.
 # vrule[c] = number of rules immediately before column c (c=1..ncol),
 # vrule[ncol+1] = number of rules after the last column.
-# '||' → vrule count 2 (double rule with _MATRIX_DOUBLERULESEP gap).
+# '||' → vrule count 2 (two rules `_DOUBLERULESEP` apart).
 # Unknown tokens (e.g. @{}, p{width}) are silently ignored.
 function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Int}}
     col_aligns = Symbol[]
@@ -34,9 +31,32 @@ function _parse_colspec(spec::AbstractString)::Tuple{Vector{Symbol}, Vector{Int}
     return col_aligns, vrule
 end
 
+# The lone array-like environment that is the whole content of `children`, if
+# any, looking through groups.
+function _sole_matrix(children::Vector{Node})::Union{Node, Nothing}
+    length(children) == 1 || return nothing
+    c = only(children)
+    c.kind === NodeKind.Matrix && return c
+    c.kind in (NodeKind.Group, NodeKind.Sequence) && return _sole_matrix(c.children)
+    return nothing
+end
+
+# True when `\left…\right` around matrix node `m` should size its delimiters as
+# the environment's own: an array-like environment (rows with TeX's struts, or
+# smallmatrix) with no delimiters of its own.
+function _takes_outer_delimiters(m::Node)::Bool
+    env = _decode_matrix_payload(m.value).env_name
+    haskey(_MATRIX_SPACING, env) || return false
+    info = get(_MATRIX_ENVS, env, _MATRIX_ENVS["matrix"])
+    return isempty(info.left) && isempty(info.right)
+end
+
 # Lay out a matrix/array environment (NodeKind.Matrix node).
-# Two-pass algorithm: measure all cells first, then place on a rectangular grid.
-# Cells are laid out in Text style (even in Display), centred on the math axis.
+# Two-pass algorithm: measure all cells first, then place them on a grid
+# centred on the math axis.  `left` and `right`, when given, replace the
+# environment's delimiters: `\left…\right` around a lone array passes its
+# delimiters here so that they are sized against the array's strutted box, as
+# in TeX, which the emitted glyphs do not show.
 # Returns the total horizontal advance in em units.
 function _layout_matrix!(
         node::Node,
@@ -45,7 +65,9 @@ function _layout_matrix!(
         x0::Float64,
         y0::Float64,
         scale::Float64,
-        boxes::Vector{LayoutBox},
+        boxes::Vector{LayoutBox};
+        left::Union{Nothing, String} = nothing,
+        right::Union{Nothing, String} = nothing,
     )::Float64
     payload = _decode_matrix_payload(node.value)
     env_name = payload.env_name
@@ -55,21 +77,26 @@ function _layout_matrix!(
     (nrow == 0 || ncol == 0) && return 0.0
 
     info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
+    spacing = get(_MATRIX_SPACING, env_name, nothing)
+    left_name = something(left, info.left)
+    right_name = something(right, info.right)
     upm = ctx.upm
     mc = ctx.mc
 
     # Display alignment environments (align/gather/split/…) typeset each cell in
     # Display style, so fractions, scripts and big operators keep their full
     # display size.  Genuine array environments (matrix/array/cases) typeset
-    # cells in Text style, following TeX's rule for array entries.
+    # cells in Text style, following TeX's rule for array entries, and
+    # smallmatrix in script style.
+    small = spacing !== nothing && spacing.rows === :baselineskip
     cell_style = if env_name ∈ _DISPLAY_MATH_ENVS
         is_cramped(style) ? CrampedDisplay : Display
+    elseif small
+        Script
     else
         is_cramped(style) ? CrampedText : Text
     end
-
-    # Scale factor for this environment (smallmatrix uses 0.9).
-    cell_scale = scale * info.scale
+    cell_scale = small ? scale * mc.script_percent_scale_down / 100 : scale
 
     # ── First pass: lay out each cell into the shared buffer, record ranges ──
     cell_starts = Matrix{Int}(undef, nrow, ncol)
@@ -99,8 +126,27 @@ function _layout_matrix!(
 
     # Provisional baseline y for each row (row 1 at y = 0).
     row_y = zeros(Float64, nrow)
-    for r in 2:nrow
-        row_y[r] = row_y[r - 1] - (row_depths[r - 1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
+    if spacing === nothing
+        for r in 2:nrow
+            row_y[r] = row_y[r - 1] - (row_depths[r - 1] + _MATRIX_ROWGAP * cell_scale + row_heights[r])
+        end
+    elseif spacing.rows === :strut
+        # Every row is at least as tall and deep as \@arstrut; rows then touch.
+        row_heights .= max.(row_heights, spacing.stretch * _ARRAY_STRUT_HEIGHT * cell_scale)
+        row_depths .= max.(row_depths, spacing.stretch * _ARRAY_STRUT_DEPTH * cell_scale)
+        for r in 2:nrow
+            row_y[r] = row_y[r - 1] - (row_depths[r - 1] + row_heights[r])
+        end
+    else
+        # TeX's interline glue: baselines \baselineskip apart unless that
+        # leaves less than \lineskiplimit between the rows, else \lineskip.
+        baselineskip = _SMALLMATRIX_BASELINESKIP * scale
+        lineskip = _SMALLMATRIX_LINESKIP * scale
+        for r in 2:nrow
+            clearance = row_depths[r - 1] + row_heights[r]
+            step = baselineskip - clearance >= lineskip ? baselineskip : clearance + lineskip
+            row_y[r] = row_y[r - 1] - step
+        end
     end
 
     # Vertical extent of the provisional grid.
@@ -116,38 +162,40 @@ function _layout_matrix!(
     # so the spacing around a leading relation comes solely from the math-list
     # relation atom (see the empty-group insertion in the parser). Space is only
     # added between successive pairs, and the grid carries no outer margin.
-    tight_pairs = env_name ∈ ("align", "aligned", "split")
+    tight_pairs = spacing === nothing && env_name ∈ ("align", "aligned", "split")
+    outer = spacing !== nothing ? spacing.outer * scale :
+        tight_pairs ? 0.0 : _MATRIX_COLSEP * cell_scale
+    gap = spacing !== nothing ? spacing.gap * scale : 2 * _MATRIX_COLSEP * cell_scale
+    # A `|` rule takes no width; each further rule in a slot adds \doublerulesep.
+    rule_sep = _DOUBLERULESEP * cell_scale
+    rules_extra(n) = max(n - 1, 0) * rule_sep
     # Gap inserted to the left of column c (c = 2..ncol).
-    col_gap(c) = tight_pairs && iseven(c) ? 0.0 : 2 * _MATRIX_COLSEP * cell_scale
-    outer_margin = tight_pairs ? 0.0 : _MATRIX_COLSEP * cell_scale
+    col_gap(c) = (tight_pairs && iseven(c) ? 0.0 : gap) + rules_extra(vrule[c])
 
     # Column left-edge positions (relative to content origin, before adding left delimiter).
-    # Vertical rules occupy space within the column separations.
-    vrule_thick = mc.fraction_rule_thickness / upm * cell_scale
     x_col = zeros(Float64, ncol)
-    x_col[1] = outer_margin
+    x_col[1] = outer + rules_extra(vrule[1])
     for c in 2:ncol
         x_col[c] = x_col[c - 1] + col_widths[c - 1] + col_gap(c)
     end
-    content_w = x_col[ncol] + col_widths[ncol] + outer_margin
+    content_w = x_col[ncol] + col_widths[ncol] + outer + rules_extra(vrule[ncol + 1])
 
     # ── Delimiter sizing (if required) ──
     left_w = 0.0; right_w = 0.0
-    if !isempty(info.left) || !isempty(info.right)
+    if left !== nothing || right !== nothing || !isempty(left_name) || !isempty(right_name)
         actual_top = y_shift + grid_top - y0
         actual_bot = y_shift + grid_bot - y0
         h_above = max(0.0, actual_top - axis_em)
         h_below = max(0.0, axis_em - actual_bot)
-        # Cover the whole grid.  amsmath uses \left…\right here, whose rule 19
-        # lets a delimiter fall short of its content (`_left_right_required_du`),
-        # but TeX's rows carry \arraystretch struts that make the content box far
-        # taller than its ink.  This grid is ink-tight, so the same allowance
-        # would leave the delimiters shorter than the entries.
-        required_em = 2.0 * max(h_above, h_below)
-        required_du = required_em / scale * upm
-        left_w = _layout_delim!(ctx, info.left, required_du, x0, y0, scale, boxes)
+        δ = max(h_above, h_below)
+        # amsmath's delimiters are \left…\right around the array's box, which
+        # rule 19 lets fall short of it (`_left_right_required_du`).  The
+        # display alignments' rows here are ink-tight, without amsmath's
+        # struts, so their delimiters cover the whole grid instead.
+        required_du = spacing === nothing ? 2δ / scale * upm : _left_right_required_du(δ, scale, upm)
+        left_w = _layout_delim!(ctx, left_name, required_du, x0, y0, scale, boxes)
         right_w = _layout_delim!(
-            ctx, info.right, required_du,
+            ctx, right_name, required_du,
             x0 + left_w + content_w, y0, scale, boxes
         )
     end
@@ -168,32 +216,36 @@ function _layout_matrix!(
     end
 
     # ── Emit vertical rules from colspec ──
+    # Rules span the full grid, struts included, as TeX's `|` spans every row.
+    # vrule[1]: before col 1; vrule[c]: before col c; vrule[ncol+1]: after the
+    # last.  Each rule is centred on its position; a slot's rules start at the
+    # outer edge or in the middle of the column gap and are `rule_sep` apart.
+    vrule_thick = mc.fraction_rule_thickness / upm * cell_scale
     vrule_bot = y_shift + grid_bot
     vrule_height = grid_top - grid_bot
-    # Base x positions of rule groups within the content area (relative to x0+left_w).
-    # vrule[1]: before col 1; vrule[c+1]: between col c and c+1; vrule[ncol+1]: after last.
-    # Multiple rules per slot (vrule[i] > 1) are emitted with _MATRIX_DOUBLERULESEP gaps.
-    rule_sep = (vrule_thick + _MATRIX_DOUBLERULESEP * cell_scale)
-    function emit_vrules!(base_x::Float64, n::Int)
-        n == 0 && return
-        # Centre the rule group around base_x.
-        group_w = n * vrule_thick + (n - 1) * _MATRIX_DOUBLERULESEP * cell_scale
-        x_start = base_x - group_w / 2
+    function emit_vrules!(start_x::Float64, n::Int)
         for k in 0:(n - 1)
             push!(
                 boxes, LayoutBox(
                     VRule(vrule_height, vrule_thick),
-                    x0 + left_w + x_start + k * rule_sep, vrule_bot, scale
+                    x0 + left_w + start_x + k * rule_sep - vrule_thick / 2, vrule_bot, scale
                 )
             )
         end
         return
     end
     emit_vrules!(0.0, vrule[1])
-    for c in 1:(ncol - 1)
-        emit_vrules!(x_col[c] + col_widths[c] + _MATRIX_COLSEP * cell_scale, vrule[c + 1])
+    for c in 2:ncol
+        emit_vrules!(x_col[c - 1] + col_widths[c - 1] + gap / 2, vrule[c])
     end
-    emit_vrules!(content_w, vrule[ncol + 1])
+    emit_vrules!(x_col[ncol] + col_widths[ncol] + outer, vrule[ncol + 1])
+
+    # The trailing margin is part of the array's box, as the leading one is;
+    # a Space keeps it in measured extents (`measure`, Makie bounding boxes).
+    trailing = outer + rules_extra(vrule[ncol + 1])
+    if spacing !== nothing && trailing > 0
+        push!(boxes, LayoutBox(Space(trailing), x0 + left_w + content_w - trailing, y_shift + row_y[nrow], scale))
+    end
 
     return left_w + content_w + right_w
 end

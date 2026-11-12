@@ -24,7 +24,7 @@ the Makie integration).
 `\infty`, `\partial`, `\nabla`, `\forall`, `\exists`, `\nexists`, `\emptyset`,
 `\varnothing`, `\angle`, `\measuredangle`, `\sphericalangle`, `\ell`, `\imath`,
 `\jmath`, `\hbar`, `\hslash`, `\Re`, `\Im`, `\wp`, `\aleph`, `\beth`, `\gimel`,
-`\daleth`, `\prime`, `\backprime`, `\complement`, `\surd`, `\top`, `\bot`, `\flat`,
+`\daleth`, `\prime`, `\dprime`, `\trprime`, `\qprime`, `\backprime`, `\backdprime`, `\backtrprime`, `\complement`, `\surd`, `\top`, `\bot`, `\flat`,
 `\natural`, `\sharp`, `\triangle`, `\triangledown`, `\square`, `\blacksquare`,
 `\lozenge`, `\blacklozenge`, `\bigstar`, `\eth`, `\vdots`, `\checkmark`
 
@@ -205,7 +205,7 @@ rows are terminated by `\\`.
 | `Bmatrix` | `\{ \}` | centred |
 | `vmatrix` | `\| \|` | centred |
 | `Vmatrix` | `‖ ‖` | centred |
-| `smallmatrix` | none | centred (0.9× scale) |
+| `smallmatrix` | none | centred, script-style entries |
 | `cases` | `\{` left only | left-aligned |
 | `array` | none | per `{colspec}` |
 

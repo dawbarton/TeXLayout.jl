@@ -110,6 +110,7 @@ struct _LayoutCtx
     top_accent_attachments::Dict{String, Int}  # PS glyph name → x position (design units)
     italic_corrections::Dict{String, Int}      # PS glyph name → design units (from MATH table)
     min_connector_overlap::Int
+    script_alternates::Dict{String, Tuple{String, String}}  # GSUB 'ssty' (Script, ScriptScript)
     mode::LayoutMode.T
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
     text_shaper
@@ -120,6 +121,7 @@ end
 @inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    ctx.script_alternates,
     ctx.mode, variant, ctx.text_shaper,
 )
 
@@ -145,6 +147,7 @@ end
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    ctx.script_alternates,
     LayoutMode.Text, ctx.font_variant, ctx.text_shaper,
 )
 
@@ -153,6 +156,7 @@ end
 @inline _with_math_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
+    ctx.script_alternates,
     LayoutMode.Math, :default, ctx.text_shaper,
 )
 
@@ -624,6 +628,25 @@ end
 # `\boldsymbol`, `\mathcal`, …) keep it.
 const _TEXT_ALPHABETS = (:mathrm, :mathit, :mathbf, :mathsf, :mathtt, :mathsfit)
 
+# Swap a math-font glyph for its GSUB 'ssty' alternate in Script and
+# ScriptScript style.  XeTeX and LuaTeX do this for every glyph of a script-size
+# math font (unicode-math loads script sizes with `ssty=0` and scriptscript sizes
+# with `ssty=1`); the alternates are drawn for small sizes, so letters, digits,
+# and primes come out somewhat larger and wider than the scaled base glyphs.
+function _script_glyph(ctx::_LayoutCtx, g::Glyph, style::TexStyle)::Glyph
+    level = is_script_script(style) ? 2 : is_script(style) ? 1 : 0
+    (level == 0 || g.font_slot !== FontSlot.Math) && return g
+    alts = get(ctx.script_alternates, g.glyph_name, nothing)
+    alts === nothing && return g
+    name = alts[level]
+    m = glyph_metrics(ctx.family, name)
+    m === nothing && return g
+    return Glyph(
+        name, FontSlot.Math, m.advance_width, m.left_side_bearing,
+        m.x_min, m.y_min, m.x_max, m.y_max,
+    )
+end
+
 # Design units per em of the font an emitted glyph element came from.
 _element_upm(ctx::_LayoutCtx, g::Glyph)::Float64 = ctx.upm
 _element_upm(::_LayoutCtx, g::GlyphID)::Float64 = _font_upm(g.font_path)
@@ -650,6 +673,7 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
         _char_glyph(ctx, ch)
     end
     g === nothing && return 0.0
+    g isa Glyph && ctx.mode === LayoutMode.Math && (g = _script_glyph(ctx, g, style))
     # Text-mode glyphs come from a text font, where TeX adds no italic kern.
     g isa Glyph && ctx.mode === LayoutMode.Math && g.font_slot === FontSlot.Math &&
         return _push_math_char!(boxes, g, ctx, x0, y0, scale)
@@ -680,6 +704,7 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         end
         g = _cmd_glyph(ctx, chosen)
         g === nothing && return 0.0
+        g = _script_glyph(ctx, g, style)
         # Centre large operator on the math axis (same logic as _layout_delim!).
         glyph_center = (g.y_min + g.y_max) / (2.0 * upm)
         y_op = y0 + (mc.axis_height / upm - glyph_center) * scale
@@ -709,17 +734,27 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         end
     end
     m = glyph_metrics_by_codepoint(ctx.family, cp)
-    m === nothing && return 0.0
+    if m === nothing
+        # unicode-math sets kerned single primes when the font has no
+        # multiple-prime character.
+        n = get(_MULTI_PRIME_COUNT, name, 0)
+        n == 0 && return 0.0
+        return _layout_node!(Node(NodeKind.Sequence, _kerned_primes(n)), ctx, style, x0, y0, scale, boxes)
+    end
     ps = glyph_name_by_codepoint(ctx.family, cp)
     g = Glyph(
         isempty(ps) ? name : ps, FontSlot.Math,
         m.advance_width, m.left_side_bearing,
         m.x_min, m.y_min, m.x_max, m.y_max
     )
-    ctx.mode === LayoutMode.Math && return _push_math_char!(boxes, g, ctx, x0, y0, scale)
+    ctx.mode === LayoutMode.Math &&
+        return _push_math_char!(boxes, _script_glyph(ctx, g, style), ctx, x0, y0, scale)
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / upm * scale
 end
+
+# Number of primes in each multiple-prime command (`"dprime" => 2`, …).
+const _MULTI_PRIME_COUNT = Dict(String(lstrip(cmd, '\\')) => n for (n, cmd) in _MULTI_PRIME_COMMANDS)
 
 # Operator names that amsmath spells with a thin space (`lim\,sup`).
 const _SPACED_OPERATOR_NAMES = Dict("limsup" => "lim sup", "liminf" => "lim inf")
@@ -811,7 +846,7 @@ function layout(
         family, mt.constants, Float64(mt.upm), mt.vert_constructions,
         mt.horiz_constructions, mt.top_accent_attachments,
         mt.italic_corrections,
-        mt.min_connector_overlap, LayoutMode.Math, :default, shaper
+        mt.min_connector_overlap, mt.script_alternates, LayoutMode.Math, :default, shaper
     )
     boxes = LayoutBox[]
     _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)

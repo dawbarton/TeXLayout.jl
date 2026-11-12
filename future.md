@@ -23,20 +23,23 @@ this file records the intended implementation direction.
   box representation.
 - Preserve optional matrix row-spacing dimensions such as `\\[0.2em]` in the
   parsed matrix representation and apply them when computing row baselines.
-- Set matrix column spacing per environment, as amsmath and KaTeX do:
-  `\arraycolsep` is 5 pt (0.5 em, `article.cls`; KaTeX `array.ts` likewise), so
-  columns are 1 em apart and matrix environments drop the outer
-  `\arraycolsep`; only `smallmatrix` uses `\thickspace` (5 mu).  TeXLayout
-  uses 5 mu everywhere (`_MATRIX_COLSEP`), so matrix columns are 0.44 em
-  closer than in TeX, and `pmatrix` keeps 5 mu of padding inside its
-  parentheses.
+- Matrix-family environments, `array`, `cases`, and `smallmatrix` follow
+  LaTeX + amsmath (`_MATRIX_SPACING`; widths agree with LuaLaTeX to 0.001 pt).
+  Remaining differences: a one-column `cases` omits the trailing `\quad` that
+  amsmath's `l@{\quad}l` template leaves after the first column; array entries
+  inside a script shrink with it, where TeX sets them at full Text size
+  (`x_{\begin{matrix}a\\b\end{matrix}}`, measured in LuaLaTeX); `\hline` and `@{…}` are
+  ignored.
+- The display alignments (`align`, `gather`, `split`, …) keep ink-tight rows
+  with `_MATRIX_ROWGAP` and 5 mu column margins.  amsmath sets them with
+  `\strut@` rows, `\jot`, and its own column spacing; measure them in LuaLaTeX
+  before changing, and compare against the snapshot fonts.
 - Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
   compare any proposed default change against TeX, KaTeX, and all snapshot
   fonts.
-- Give matrix rows TeX's `\arraystretch` strut height and depth, then size
-  matrix delimiters with rule 19 (`_left_right_required_du`) as `\left…\right`
-  already is.  Until then the grid is ink-tight, so the delimiters must cover
-  it fully; XeLaTeX's `pmatrix` rows are noticeably taller than TeXLayout's.
+- LuaTeX adds a delimiter variant's italic correction after a `\left`
+  delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
+  neither does TeXLayout.
 - Size `\binom` and `\genfrac` delimiters from fixed sizes, as TeX does with
   `delim1` / `delim2` (OpenType has no such constant; check what LuaTeX uses),
   instead of fitting them to the content.
@@ -45,7 +48,9 @@ this file records the intended implementation direction.
   Layout is ink-based, so `RadicalExtraAscender` (space TeX keeps above a
   radical's rule) cannot be represented and is ignored: `\frac{1}{\sqrt{x}}`
   sets the fraction bar 0.04 em (NewCM) to 0.14 em (Termes) closer to the
-  radical than TeX does.  The same element would carry matrix row struts.
+  radical than TeX does.  The same element would let `\left…\right` see the
+  row struts of a matrix among other content (a lone matrix already passes
+  its delimiters to the matrix layout).
 
 ## Extensible glyph assemblies
 
@@ -89,12 +94,13 @@ this file records the intended implementation direction.
   stretch.
 - An unknown command that is dropped still counts as an atom for spacing:
   `\unknown + x` gives the leading `+` binary spacing.
-- Apply the OpenType `ssty` feature (script-style alternates) to glyphs set in
-  Script and ScriptScript style.  XeLaTeX and LuaLaTeX both do, so primes,
-  script digits, and radical degrees come out slightly larger and wider there
-  (a ScriptScript "3" is 3.4 pt wide at 10 pt in LuaLaTeX, 2.5 pt here).  The
-  prime in `f'` currently matches XeLaTeX only because `\prime` is set as an
-  ordinary superscript of the U+2032 glyph.
+- `ssty` script alternates are applied to characters, symbols, and large
+  operators but not to delimiters or accents set in a script.  STIX Two and
+  Luciole have script delimiters (`parenleft.ssty`, `lparen.st`); substituting
+  them needs the vertical-construction lookup to follow the alternate's name.
+  Measure `x_{(a)}` and `x^{\hat{a}}` in LuaLaTeX first.  Conversely, the text
+  alphabets (`\mathrm`, `\mathit`, …) are text fonts in unicode-math and get
+  no `ssty` there, but take the math font's alternates here.
 - Extensible arrows without a single-codepoint tail piece (`\xmapsto`, the hook
   arrows, the stacked harpoons) stay at natural width in fonts lacking a
   horizontal construction (Fira Math).  They could be built from a vertical
