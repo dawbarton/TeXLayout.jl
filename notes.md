@@ -1636,3 +1636,33 @@
   `stress_test_reference.tar` (1344 images, self-compare identical); not
   uploaded.  The `v0.3.0-stress` default reference is now stale for 791+
   images, so `stress_test_suite.jl all` will report CHANGED until replaced.
+
+## 2026-11-12T17:28+00:00 `\\[len]` row spacing, amsmath alignments, and `equation`
+
+- **`\\[len]`.** Carried as a fourth matrix-payload field (omitted when all
+  zero, so existing payloads are unchanged).  LaTeX array (`\@xargarraycr`): a
+  positive len makes the row depth `max(d, strut_d + len)`; zero or negative
+  is `\noalign{\vskip len}`.  amsmath smallmatrix and alignments: always
+  additive.  amsmath reads the bracket with `\new@ifnextchar` (no space
+  skipping), so `\\ [x]` starts the next row with `[x]`.  Registers such as
+  `\jot` are not evaluated (0).
+- **Units.** `_TEX_UNIT_EM` at 10 pt = 1 em; `ex` = 0.431 em (Latin Modern's
+  x-height, the fontspec default text font), so it is wrong by the x-height
+  ratio in other fonts.  Matters only for `ex`.
+- **Alignments.** One row model for all environments (`_MATRIX_SPACING`:
+  `rows = :touch` for array, `:interline` for TeX glue).  amsmath alignments:
+  `\strut@` 0.84/0.36 em, `\openup\jot` gives baselineskip 1.5, lineskip 0.4,
+  lineskiplimit 0.3 em; pairs `\minalignsep` (1 em) apart, no outer margin.
+  Verified against LuaLaTeX for widths, heights, and depths (1–3 rows, gaps,
+  tall rows, fraction rows) to 0.001 pt in NewCM and Bonum.
+- **`equation`.** Found in the stress review: it is a plain display in
+  amsmath (no strut, no `\vcenter`), but we laid it out as an axis-centred
+  one-cell array, so its baseline sat ~0.1 em off the reported one (before
+  and after the alignment change).  New `vcenter` flag; `equation` now
+  equals `\[…\]` exactly (regression test in `test_text.jl`).
+- **Stress review.** 40 changed images (5 display-block cases × 8 fonts),
+  all reviewed side by side; align/gather rows spread to 1.5 em, `equation`
+  now on its baseline.  No other changes.
+- **Open.** `align` is still set as `aligned` (no spreading of column pairs
+  over the display width, no numbering); array entries inside scripts shrink
+  where TeX keeps Text size; `\hline`, `@{…}`, `\\*`, `[t]`/`[b]` ignored.
