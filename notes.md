@@ -1581,3 +1581,58 @@
 - **Not done, by design or deferred:** `\textsc` under `MetricShaper` still
   throws inside the Makie handler (feature-bearing spans need HarfBuzz); `ssty`
   script alternates; CI job for Makie 0.25; fixed-size `\binom` delimiters.
+
+## 2026-11-12T16:27+00:00 ssty script alternates, unicode-math primes, amsmath array spacing
+
+- **ssty.** GSUB `ssty` is parsed into `MathTable.script_alternates` (single,
+  alternate, and extension lookups) and applied by `_script_glyph` to math
+  characters, symbols, and large operators in Script/ScriptScript style.
+  unicode-math loads script sizes with `ssty=0` and scriptscript with
+  `ssty=1` (first/second alternate), and both XeTeX and LuaTeX honour it.
+  Script widths now agree with LuaLaTeX to 0.001 pt (Bonum `x_x`, `x_V`,
+  `\iiint_V`; NewCM `\scriptscriptstyle 3`, `\sqrt[3]{x}`; `\int_D` in four
+  fonts).  The earlier note that the prime "matches XeLaTeX" without ssty was
+  wrong: both engines use `minute.st`.
+- **Primes.** unicode-math merges 2–4 primes into U+2033/2034/2057 when the
+  font has the glyph, else (and for runs > 4) sets single primes with
+  `\g__um_primekern_muskip` = −1.5 mu (read from `unicode-math-xetex.sty`).
+  Implemented in the parser; `f'`…`f'''''`, `f''^2`, `f'_1` agree with
+  LuaLaTeX in NewCM and Bonum.
+- **Arrays.** Spacing from amsmath.sty and measurement: `array` 5 pt
+  `\arraycolsep` both sides; matrix family cancels the outer two; `cases` is
+  `@{}l@{\quad}l@{}` with `\arraystretch` 1.2; `smallmatrix` is
+  `\null\,\vcenter{…}\,` with `\scriptstyle` cells, `\thickspace` (text-mode
+  0.2777 em) between columns, 6 pt `\baselineskip`, 1.5 pt `\lineskip`.  Rows
+  carry 8.4/3.6 pt struts and touch (tall entries such as fractions touch, as
+  in TeX/KaTeX).  `|` is zero-width; `||` adds 2 pt.  Delimiters: rule 19
+  against the strutted box; `\left…\right` around a lone array delegates to
+  the matrix layout.  30 cases × 2 fonts agree in width with LuaLaTeX to
+  0.001 pt, except LuaTeX adds a `\left` variant's italic correction (XeTeX
+  does not; we follow XeTeX).
+- **Trailing margins.** `measure` only sees emitted boxes, so an array's right
+  margin vanished from Makie bounding boxes; the matrix layout now emits it as
+  a `Space`.  Display alignments unchanged (still ink-tight rows).
+- **Performance.** Name-based `glyph_metrics` was uncached and doubled script
+  layout time once ssty used it; memoised per (path, name), layouts are now
+  1.5–6× faster than before this session's work.
+- **CI.** Experimental `makie-0-25` job (continue-on-error) develops
+  `ComputePipeline` and `Makie` from `ff/breaking-0.25`; simulated locally in a
+  fresh environment: 1800/1800 pass.
+- **Stress review.** 711 changed images (8 fonts) reviewed in full by four
+  reviewers against before/after sheets; no regressions.  Visible changes
+  that look worse but match LuaLaTeX/XeTeX at 10 pt (checked numerically):
+  rows of fractions touch (`\left[\begin{matrix}\frac12…`), entries sit flush
+  against `‖`/`(` in the matrix family, scriptscript letters look loosely
+  spaced (`.sts` side bearings).  At `\Huge`/60 pt unicode-math does not apply
+  `ssty`, so compare at 10 pt only.  Pre-existing, unchanged: `K_\text{eq}`
+  overlap in Bonum/Termes, Pagella harpoon depth clipped, `gather` rows
+  tighter than `align`, Luciole arrow tips crowding the next atom.
+- **Atom classes (found during the review).** LaTeX's `\frac`/`\binom` are
+  `{…\over…}` (Ord) and undelimited arrays are `\vcenter` (Ord); we had Inner,
+  adding thin spaces LaTeX does not (`\frac12 a`, `\frac12(`, `\frac{x}{n!},`).
+  Fixed; `\left…\right` and delimited environments stay Inner.  `\overbrace`
+  is `\mathop` in the kernel (future.md).
+- **Reference.** Final outputs packed to the session scratchpad as
+  `stress_test_reference.tar` (1344 images, self-compare identical); not
+  uploaded.  The `v0.3.0-stress` default reference is now stale for 791+
+  images, so `stress_test_suite.jl all` will report CHANGED until replaced.
