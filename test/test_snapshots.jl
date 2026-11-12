@@ -1,20 +1,20 @@
 using SHA
 
 const SNAPSHOT_MATH_CASES = [
-    ("simple_atom", raw"x+y=z", "c406b97f98f6af05b1c4ebd3799146c83cbb0d3954eb459706ac6e10e213c3f4"),
+    ("simple_atom", raw"x+y=z", "89a80264270cc3247752bca2a9fb9db97664c671a3a0e4d43c1bc1f2af75015b"),
     ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "8590527a7489dd33a2f7c5ae9db6cdf8c42ccc64dd8f89b0b5e4268cf1f88aca"),
-    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "413d86661ebf097751806d50b9f63148fd8758d5b880d113fe41b15cf7880716"),
-    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "d9e0cafba1bfb7f18ec3a45d3e2d576b8b20639919ad8c41953afbf705633f8b"),
-    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "e5733c68ddfc5dd66a8ca3e69387c56e7d26062f05fe985cb889d1c8901828be"),
+    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "23ab2a4f832e4ec3a2605f40bdbaefc7b05e2e2b85b20e360df95c6cde2e195f"),
+    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "9d6d0826eaafb71b4453a080254614f6d7397969d7aa10ef110c3accf8723c23"),
+    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "72458b7ec3aebcac5dc84732b38c7cc104e56edcde41cf982ef5c97801b7d7ac"),
     ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "e1950914fa964ae4c7f30c182137d7750da18a2de46ed0be1aa5440b0828b075"),
     # Display alignment environments typeset cells in Display style: fractions and
     # scripts keep full display size (contrast with the text-sized matrix cells above).
-    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "aa578c377988691ecc2fa19c38bb2458c9b6805ddf58bc33016c4be598309a70"),
+    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "367f6e4f32adfc80ef10403fde0328d711e968041cd644c8ddd6569183b55b32"),
     ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "f54bd6a7425b58b1e466221d5e924f33bb7844ff2bdcac07ca38a9b1cde4c4a2"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "ffce075175996408630eb01c5b0e6abd579476b12d10d8ae68ec0fe8d70bdbb0"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "e64e449a7fdd6b98353f0291190bcf88c0108693c4c12ce3a90cc42d781f88e5"),
     ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "7d6a2b3a26baa8504f046bc567a05c109c7f4e81d8f18f7a6478161da24417e0"),
 ]
 

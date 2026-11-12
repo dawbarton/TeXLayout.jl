@@ -301,6 +301,24 @@ if (supShift − supm.depth) − (subm.height − subShift) < maxWidth:
 implemented using OpenType constants `SubSuperscriptGapMin` (min gap) and
 `SuperscriptBottomMaxWithSubscript` (psi threshold). ✓
 
+### Rules 13 and 17 — Italic correction of the base
+
+TeX appends a character's italic correction δ as a kern unless a subscript
+follows (rule 17), then sets the superscript δ to the right of the subscript
+(rule 18f).  KaTeX does the same with `margin-right` on italic symbols and
+`marginLeft = −italic` on the subscript (`supsub.ts`).
+
+**Status — matches KaTeX/TeX.**  `_push_math_char!` emits the kern (as a
+`Space` box) after every math-font character with a `MathItalicsCorrection`
+entry, so `f(x)` clears f's hook and a lone `f` measures its kern.  The script
+helpers subtract δ again for the subscript, which puts the subscript of `V_i`
+at V's advance and the superscript of `f^2` at advance + δ.  Large operators
+(rule 13) emit no kern because an OpenType operator's advance already spans its
+ink; subtracting δ tucks the subscript of `\int_0` under the stroke.  Compound
+bases (`{fa}_i`) get no correction from their first glyph.  Before 2026-11 no
+kern was emitted and δ was subtracted for every base, which pushed letter
+subscripts δ to the left of the advance.
+
 ---
 
 ## Rule 19 — Binary atom spacing context (pg. 446)

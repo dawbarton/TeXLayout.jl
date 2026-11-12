@@ -272,7 +272,18 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(glyphs) == 3
     end
 
-    find_spaces(boxes) = find_elements(boxes, e -> e isa Space)
+    # Spacing boxes other than the italic-correction kern that follows a math
+    # character (TeX rule 17), which these spacing tests do not count.
+    function is_italic_kern(box, boxes)
+        box.element isa Space || return false
+        return any(boxes) do g
+            g.element isa Glyph || return false
+            ic = get(mt.italic_corrections, g.element.glyph_name, 0) / mt.upm * g.scale
+            ic > 0 && isapprox(box.element.width, ic; atol = 1.0e-9) &&
+                isapprox(box.x, g.x + g.element.advance_width / mt.upm * g.scale; atol = 1.0e-9)
+        end
+    end
+    find_spaces(boxes) = filter(b -> b.element isa Space && !is_italic_kern(b, boxes), boxes)
 
     # ── Inter-atom spacing ──────────────────────────────────────────────────────
 
@@ -957,6 +968,34 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Italic correction: kern after math characters, scripts per TeX rule 17" begin
+        ic(name) = get(mt.italic_corrections, name, 0) / mt.upm
+        # V carries a large italic correction in New Computer Modern Math.
+        v_boxes = layout(parse_latex("V_i"), family, Display)
+        v = first(find_glyphs(v_boxes))
+        v_adv = v.element.advance_width / mt.upm
+        @test ic(v.element.glyph_name) > 0.1
+        sub = only(filter(b -> b.element isa Glyph && b.scale < 0.99, v_boxes))
+        @test sub.x ≈ v_adv atol = 1.0e-9                       # subscript at the advance
+        f_boxes = layout(parse_latex("f^2"), family, Display)
+        f = first(find_glyphs(f_boxes))
+        sup = only(filter(b -> b.element isa Glyph && b.scale < 0.99, f_boxes))
+        @test sup.x ≈ f.element.advance_width / mt.upm + ic(f.element.glyph_name) atol = 1.0e-9
+        # A lone italic letter is followed by its italic kern (it counts in the width).
+        lone = TeXLayout.measure(layout(parse_latex("f"), family, Display), Float64(mt.upm))
+        @test lone.width ≈ f.element.advance_width / mt.upm + ic(f.element.glyph_name)
+        # A compound base gets no correction from its first glyph.
+        fa = layout(parse_latex("{fa}_i"), family, Display)
+        fa_sub = only(filter(b -> b.element isa Glyph && b.scale < 0.99, fa))
+        a = find_glyphs(fa)[2]
+        @test fa_sub.x ≈ a.x + a.element.advance_width / mt.upm + ic(a.element.glyph_name)
+        # Large operators keep the subscript tucked under the slanted stroke.
+        int_boxes = layout(parse_latex(raw"\int_0"), family, Text)
+        int = first(find_glyphs(int_boxes))
+        int_sub = only(filter(b -> b.element isa Glyph && b.scale < 0.99, int_boxes))
+        @test int_sub.x ≈ int.element.advance_width / mt.upm - ic(int.element.glyph_name)
+    end
+
     @testset "Accent: Rule 12 attaches scripts to the accented character" begin
         # Script positions on an accented single character match the bare
         # character: the accent neither lowers a subscript nor raises a superscript.
@@ -1046,11 +1085,9 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes_over = layout(parse_latex("\\overline{xy}"), family, Text)
         boxes_plain = layout(parse_latex("xy"), family, Text)
         hrule = find_hrules(boxes_over)[1]
-        # Width of overline rule should match the body advance.
-        plain_w = maximum(
-            b.x + b.element.advance_width / Float64(mt.upm) * b.scale
-                for b in find_glyphs(boxes_plain)
-        )
+        # Width of overline rule should match the body advance, including the
+        # italic kern after the last character.
+        plain_w = TeXLayout.measure(boxes_plain, Float64(mt.upm)).width
         @test (hrule.element::HRule).width ≈ plain_w atol = 0.01
     end
 

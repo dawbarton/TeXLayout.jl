@@ -435,6 +435,21 @@ end
 _base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx, scale::Float64)::Float64 =
     _base_italic_correction_em(boxes, firstindex(boxes), lastindex(boxes), ctx, scale)
 
+# Italic correction that separates a side subscript from its superscript.  Only a
+# character box or a large operator has one (TeX rules 13 and 17): a compound
+# base such as `{fa}` gets none, although its first glyph may be slanted.
+# A character's advance already includes the correction (see
+# `_push_math_char!`), so subtracting it puts the subscript at the glyph's
+# advance; a large operator's OpenType advance covers its ink, so subtracting it
+# tucks the subscript under the slanted stroke.
+function _script_italic_correction_em(
+        base::Node, boxes::Vector{LayoutBox}, start::Int, stop::Int,
+        ctx::_LayoutCtx, scale::Float64,
+    )::Float64
+    (_is_char_box(base) || _is_large_op(base)) || return 0.0
+    return _base_italic_correction_em(boxes, start, stop, ctx, scale)
+end
+
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).
 function _use_limits(base::Node, style::TexStyle)::Bool
@@ -551,6 +566,22 @@ end
 @inline _command_name(cmd::AbstractString) =
     startswith(cmd, '\\') ? cmd[2:end] : cmd
 
+# Push a math-font character glyph followed by its italic correction, returning
+# the combined advance.  TeX rule 17 (and KaTeX's margin-right on italic symbols,
+# XeTeX for OpenType math fonts) appends the correction as a kern after every
+# math character; the script helpers remove it again for a subscript, which is
+# what places a subscript at the advance and a superscript at advance + IC.
+# The kern is an explicit Space box so `measure` counts it at the end of a run.
+function _push_math_char!(boxes, g::Glyph, ctx, x0, y0, scale)::Float64
+    push!(boxes, LayoutBox(g, x0, y0, scale))
+    adv = g.advance_width / ctx.upm * scale
+    ic = get(ctx.italic_corrections, g.glyph_name, 0)
+    ic > 0 || return adv
+    ic_em = ic / ctx.upm * scale
+    push!(boxes, LayoutBox(Space(ic_em), x0 + adv, y0, scale))
+    return adv + ic_em
+end
+
 function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
     ch = only(node.value)
     g = if ctx.font_variant !== :default
@@ -572,6 +603,9 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
         _char_glyph(ctx, ch)
     end
     g === nothing && return 0.0
+    # Text-mode glyphs come from a text font, where TeX adds no italic kern.
+    ctx.mode === LayoutMode.Math && g.font_slot === FontSlot.Math &&
+        return _push_math_char!(boxes, g, ctx, x0, y0, scale)
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / ctx.upm * scale
 end
@@ -634,6 +668,7 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         m.advance_width, m.left_side_bearing,
         m.x_min, m.y_min, m.x_max, m.y_max
     )
+    ctx.mode === LayoutMode.Math && return _push_math_char!(boxes, g, ctx, x0, y0, scale)
     push!(boxes, LayoutBox(g, x0, y0, scale))
     return g.advance_width / upm * scale
 end
