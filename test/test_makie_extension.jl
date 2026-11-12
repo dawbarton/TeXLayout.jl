@@ -100,7 +100,6 @@ if Base.find_package("Makie") !== nothing &&
                 fontsize = 20,
             )
             @test length(fraction.glyph_indices[]) == 2
-            @test length(fraction.text_specs[]) == 1
             @test length(fraction.text_spec_bboxes[]) == 1
             @test fraction.block_baselines[] == Float32[0]
 
@@ -112,16 +111,54 @@ if Base.find_package("Makie") !== nothing &&
             )
             @test length(unicode_math.glyph_indices[]) == 1
 
-            ruled_matrix = Makie.text!(
-                scene,
-                Makie.Point2f(0);
-                text = LaTeXString(raw"$\begin{array}{|c|}a\\b\end{array}$"),
-                text_handler = handler,
+            # Protocol-level checks go through the public `layout_text` call rather
+            # than Text's compute-graph node names, which Makie may rename.
+            family = TeXLayout.default_font_family()
+            attributes(; kwargs...) = Makie.TextAttributes(;
+                font = Makie.to_font(something(family.regular, family.math)),
                 fontsize = 20,
+                kwargs...,
             )
-            @test length(ruled_matrix.text_specs[]) == 1
-            @test length(first(ruled_matrix.text_specs[]).args[1]) >= 4
-            @test Makie.width(first(ruled_matrix.text_spec_bboxes[])) > 0
+
+            ruled_matrix = Makie.layout_text(
+                handler,
+                LaTeXString(raw"$\begin{array}{|c|}a\\b\end{array}$"),
+                attributes(),
+            )
+            @test length(ruled_matrix.specs) == 1
+            @test length(first(ruled_matrix.specs).args[1]) >= 4
+            @test Makie.width(first(ruled_matrix.spec_bboxes)) > 0
+
+            # `lineheight` scales the document baselineskip instead of replacing it,
+            # and a pinned handler line height is honoured.
+            two_lines = LaTeXString(raw"first\\second")
+            line_pitch(layout) = -minimum(o[2] for o in layout.origins) / 20
+            default_line_height = TeXLayout.default_layout_options().line_height
+            @test line_pitch(Makie.layout_text(handler, two_lines, attributes())) ≈
+                default_line_height atol = 1.0e-4
+            @test line_pitch(
+                Makie.layout_text(handler, two_lines, attributes(lineheight = 2)),
+            ) ≈ 2 * default_line_height atol = 1.0e-4
+            pinned = TeXLayout.TeXLayoutHandler(
+                options = TeXLayout.LayoutOptions(line_height = 2.0),
+            )
+            @test line_pitch(Makie.layout_text(pinned, two_lines, attributes())) ≈
+                2.0 atol = 1.0e-4
+
+            # `valign = :baseline` anchors the last line, as Makie's own layouts do.
+            multi = Makie.layout_text(handler, two_lines, attributes())
+            @test multi.baseline ≈ minimum(o[2] for o in multi.origins)
+            @test multi.baseline < 0
+            @test Makie.layout_text(handler, LaTeXString(raw"one line"), attributes()).baseline == 0
+            @test Makie.layout_text(handler, L"x_t", attributes()).baseline == 0
+
+            # Escaped literals give exactly one glyph, as on the legacy path.
+            for command in (raw"\#", raw"\$", raw"\%", raw"\&", raw"\_", raw"\{", raw"\}")
+                math = Makie.layout_text(handler, LaTeXString("\$" * command * "\$"), attributes())
+                text = Makie.layout_text(handler, LaTeXString(command), attributes())
+                @test length(math.glyphindices) == 1
+                @test length(text.glyphindices) == 1
+            end
 
             mixed = Makie.text!(
                 scene,

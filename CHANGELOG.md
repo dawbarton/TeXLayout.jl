@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
   string indices, so formulas ending in a multibyte character such as `$α$` do
   not raise a `StringIndexError`.
+- `TeXLayoutHandler` treats Makie's `lineheight` as a multiplier of the
+  document baselineskip. It previously replaced the baselineskip outright, so
+  handler documents were set 1.0 em apart instead of 1.2 em and a pinned
+  `LayoutOptions(line_height = …)` was ignored.
+- `TeXLayoutHandler` reports the last line's baseline for multi-line documents,
+  so `valign = :baseline` anchors them the way it anchors Makie's own text.
+- The Makie handler tests use the public `Makie.layout_text` protocol instead of
+  `Text` compute-graph node names that changed when Makie's text-handler pull
+  request merged, and `tools/Project.toml` accepts CairoMakie 0.16.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`

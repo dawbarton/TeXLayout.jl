@@ -424,7 +424,9 @@ at the end of that file.
 - **Makie text-handler wrapping and justification** — `TeXLayoutHandler` honors
   the handler's pinned/default font family and layout options, and maps Makie's
   `lineheight`, `word_wrap_width`, and resolved justification into document
-  options. TeXLayout does not yet perform soft line breaking, so
+  options. Makie's `lineheight` is a multiplier and scales the options'
+  `line_height`; the reported `baseline` is the last line's, matching Makie's
+  own layouts. TeXLayout does not yet perform soft line breaking, so
   `word_wrap_width` sets the document box width without wrapping content.
   `LayoutOptions.align` is a three-value enum, so arbitrary fractional Makie
   justification is currently mapped to the nearest left/centre/right choice.
@@ -450,11 +452,15 @@ core `MetricShaper` path stays independent.
 
 `test/test_makie_extension.jl` selects its assertions from what the installed
 Makie exposes: with Makie 0.25 it exercises `TeXLayoutHandler` through real
-`text!` calls, and with Makie 0.24 it falls back to the legacy
-`generate_tex_elements` assertions.  Inline-math routing is tested
-unconditionally because it lives in `src/render_support.jl` and needs no weak
-dependency.  Until Makie 0.25 is released, only the 0.24 branch runs in CI, so
-handler changes must additionally be checked against a PR checkout of Makie.
+`text!` calls and the public `Makie.layout_text` protocol, and with Makie 0.24
+it falls back to the legacy `generate_tex_elements` assertions.  Protocol-level
+assertions should use `Makie.layout_text` rather than `Text` compute-graph node
+names, which changed when MakieOrg/Makie.jl#5717 merged.  Inline-math routing is
+tested unconditionally because it lives in `src/render_support.jl` and needs no
+weak dependency.  Until Makie 0.25 is released, only the 0.24 branch runs in CI,
+so handler changes must additionally be checked against Makie's
+`ff/breaking-0.25` branch (develop its `ComputePipeline`, `Makie`, and
+`CairoMakie` subdirectories into a scratch environment).
 
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with

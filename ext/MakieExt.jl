@@ -25,12 +25,15 @@ if _HAS_LAYOUT_TEXT_INTERFACE
         return TeXLayout.Alignment.Center
     end
 
+    # Returns the laid-out box and the y of the baseline that `valign = :baseline`
+    # should anchor. For multi-line documents that is the last line's baseline,
+    # matching Makie's own layouts.
     function _layout_source(
             handler::TeXLayout.TeXLayoutHandler,
             source::LaTeXString,
             attributes::Makie.TextAttributes,
             family::TeXLayout.FontFamily,
-        )::TeXLayout.TeXBox
+        )::Tuple{TeXLayout.TeXBox, Float64}
         base_options = something(handler.options, TeXLayout.default_layout_options())
         inline_tokens = TeXLayout._inline_math_tokens(source)
         if inline_tokens !== nothing
@@ -41,7 +44,7 @@ if _HAS_LAYOUT_TEXT_INTERFACE
                 TeXLayout.Display;
                 shaper = base_options.shaper,
             )
-            return TeXLayout.measure(boxes, TeXLayout._font_upm(family.math))
+            return (TeXLayout.measure(boxes, TeXLayout._font_upm(family.math)), 0.0)
         end
 
         fontsize_x = Float64(attributes.fontsize[1])
@@ -50,13 +53,16 @@ if _HAS_LAYOUT_TEXT_INTERFACE
         else
             base_options.width
         end
+        # Makie's `lineheight` is a multiplier of the font's natural line height,
+        # not a distance, so it scales TeXLayout's baselineskip (which is the
+        # handler's or session default) rather than replacing it.
         options = TeXLayout._merge_options(
             base_options;
             align = _document_alignment(attributes.justification),
-            line_height = Float64(attributes.lineheight),
+            line_height = base_options.line_height * Float64(attributes.lineheight),
             width = wrap_width,
         )
-        return TeXLayout.layout_document(String(source), options; family)
+        return TeXLayout._layout_document_with_baseline(String(source), options; family)
     end
 
     # ── Metrics ───────────────────────────────────────────────────────────────
@@ -198,6 +204,7 @@ if _HAS_LAYOUT_TEXT_INTERFACE
 
     function _text_layout(
             texbox::TeXLayout.TeXBox,
+            baseline::Float64,
             runtime::TeXLayout.GlyphRuntime,
             attributes::Makie.TextAttributes,
         )
@@ -262,7 +269,7 @@ if _HAS_LAYOUT_TEXT_INTERFACE
             origins,
             extents;
             bbox = _block_bbox(acc, texbox, fontsize),
-            baseline = 0.0f0,
+            baseline = Float32(baseline * fontsize[2]),
             scales,
             colors = attributes.color,
             strokecolors = attributes.strokecolor,
@@ -278,8 +285,8 @@ if _HAS_LAYOUT_TEXT_INTERFACE
             attributes::Makie.TextAttributes,
         )
         family = something(handler.family, TeXLayout.default_font_family())
-        texbox = _layout_source(handler, source, attributes, family)
-        return _text_layout(texbox, TeXLayout._glyph_runtime(family), attributes)
+        texbox, baseline = _layout_source(handler, source, attributes, family)
+        return _text_layout(texbox, baseline, TeXLayout._glyph_runtime(family), attributes)
     end
 
 end

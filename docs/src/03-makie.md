@@ -97,10 +97,16 @@ handler = TeXLayoutHandler(
 ```
 
 The document path also receives Makie's line-height, wrapping-width, and
-resolved-justification attributes. TeXLayout does not yet perform soft line
-breaking, so `word_wrap_width` controls the document box width but does not wrap
-a paragraph. Arbitrary fractional justification is mapped to the nearest of
-TeXLayout's left, centre, and right alignments.
+resolved-justification attributes. Makie's `lineheight` is a multiplier, so it
+scales the handler's `line_height` (TeXLayout's baselineskip, 1.2 em by default)
+rather than replacing it. Makie's justification always sets the text alignment,
+so a pinned `options.align` has no effect through the handler. TeXLayout does not
+yet perform soft line breaking, so `word_wrap_width` controls the document box
+width but does not wrap a paragraph. Arbitrary fractional justification is mapped
+to the nearest of TeXLayout's left, centre, and right alignments.
+
+With `align = (:left, :baseline)` a multi-line block is anchored on the baseline
+of its last line, as Makie's own text layout is.
 
 To use HarfBuzz for document text and math-internal `\text{…}` fragments, load
 `HarfBuzz_jll` and configure the handler or session default:
