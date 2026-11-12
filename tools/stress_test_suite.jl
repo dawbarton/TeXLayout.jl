@@ -104,8 +104,22 @@ function _write_png(path::String, canvas::Matrix{UInt8})
     return path
 end
 
+# Read a PNG as 8-bit greyscale.  CairoMakie writes RGBA; reinterpreting its
+# pixels as bytes directly would stack the channels into a 4×-tall image.
 function _read_png(path::String)::Matrix{UInt8}
-    return collect(reinterpret(UInt8, PNGFiles.load(path)))
+    return collect(reinterpret(UInt8, Gray{N0f8}.(PNGFiles.load(path))))
+end
+
+# Crop a greyscale canvas to its ink plus `margin` pixels, so captures do not
+# depend on where Makie's alignment put the label on the canvas.
+function _crop_to_ink(img::Matrix{UInt8}; margin::Int = 24, threshold::UInt8 = 0xf5)::Matrix{UInt8}
+    ink = findall(<(threshold), img)
+    isempty(ink) && return img
+    r1, r2 = extrema(i[1] for i in ink)
+    c1, c2 = extrema(i[2] for i in ink)
+    rows = max(1, r1 - margin):min(size(img, 1), r2 + margin)
+    cols = max(1, c1 - margin):min(size(img, 2), c2 + margin)
+    return img[rows, cols]
 end
 
 function _font_name(family::FontFamily)::String
@@ -210,8 +224,11 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
             (0.0, 4.0, -1.0, 1.0) :
             MathStress.em_bbox(boxes, mt.upm; pad = 0.4)
 
+        # Makie aligns the label by its own block box, padded to the font's
+        # ascender and descender, rather than TeXLayout's ink box, so leave 1.5 em
+        # of slack on every side and crop to the ink afterwards.
         px = MathStress.BASE_PX
-        margin = 32
+        margin = 32 + ceil(Int, 1.5 * px)
         w = max(240, 2margin + ceil(Int, (bx2 - bx1) * px))
         h = max(160, 2margin + ceil(Int, (by2 - by1) * px))
         fig = CairoMakie.Figure(size = (w, h), backgroundcolor = :white)
@@ -236,7 +253,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         tmp = tempname() * ".png"
         try
             CairoMakie.save(tmp, fig)
-            return _read_png(tmp)
+            return _crop_to_ink(_read_png(tmp))
         finally
             rm(tmp; force = true)
         end

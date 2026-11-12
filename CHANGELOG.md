@@ -133,6 +133,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `\neg`, `\lnot`, and the harpoon relations (`\leftharpoonup`,
   `\rightleftharpoons`, `\upharpoonright`, …) render instead of drawing nothing,
   and `\limsup` / `\liminf` have amsmath's thin space (`lim sup`).
+- The stress suite's `makie_cairo` captures are usable: CairoMakie's RGBA
+  output was reinterpreted as bytes (a striped, 4×-tall image), and the label
+  was clipped at the top because Makie aligns its padded block box rather
+  than the ink. Captures are now converted to greyscale and cropped to the
+  ink. Existing `makie_cairo` reference images need regenerating.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
