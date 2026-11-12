@@ -233,6 +233,14 @@ reasonable minimum gap via `FractionNumeratorGapMin`.
 Rule 15e (`\genfrac` arbitrary delimiters) and `\atop` (no-rule, no delimiters)
 are not implemented.
 
+Null delimiters are implemented: `\frac` is flanked by spaces of
+`_NULL_DELIMITER_SPACE` (0.12 em, TeX's `\nulldelimiterspace` of 1.2 pt), and an
+empty delimiter (`\left.`, the right side of `cases`) gives the same space.  As
+in TeX and in KaTeX's `makeNullDelimiter` (which resets to the base size), the
+width is fixed in em of the formula's base size and does not shrink in script
+styles.  Checked against XeLaTeX: `\scriptstyle\frac{a}{a}` is exactly 2.4 pt
+wider than its numerator at 10 pt.
+
 ---
 
 ## Rules 18a–f — Superscripts and subscripts (pg. 445–446)

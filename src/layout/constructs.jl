@@ -169,13 +169,19 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     num_shift = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
     den_shift = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
 
+    # Rule 15e: the fraction is flanked by null delimiters, so the rule stops
+    # `_NULL_DELIMITER_SPACE` short of the neighbouring atoms on each side.
     frac_w = max(num_w, den_w)
+    nds = _NULL_DELIMITER_SPACE
+    xf = x0 + nds
     Δnum = (frac_w - num_w) / 2
     Δden = (frac_w - den_w) / 2
-    _translate_range!(boxes, num_start, num_stop, x0 + Δnum, y0 + num_shift)
-    _translate_range!(boxes, den_start, den_stop, x0 + Δden, y0 - den_shift)
-    push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
-    return frac_w
+    _translate_range!(boxes, num_start, num_stop, xf + Δnum, y0 + num_shift)
+    _translate_range!(boxes, den_start, den_stop, xf + Δden, y0 - den_shift)
+    push!(boxes, LayoutBox(Space(nds), x0, y0, scale))
+    push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), xf, rule_y, scale))
+    push!(boxes, LayoutBox(Space(nds), xf + frac_w, y0, scale))
+    return frac_w + 2nds
 end
 
 # Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction wrapped
@@ -236,14 +242,14 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     # Place left delimiter, fraction content (centred), right delimiter.
     cursor = x0
-    left_w = !isempty(left_name) ? _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes) : 0.0
+    left_w = _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes)
     cursor += left_w
     Δnum = (inner_w - num_w) / 2
     Δden = (inner_w - den_w) / 2
     _translate_range!(boxes, num_start, num_stop, left_w + x0 + Δnum, y0 + num_shift)
     _translate_range!(boxes, den_start, den_stop, left_w + x0 + Δden, y0 - den_shift)
     cursor += inner_w
-    !isempty(right_name) && (cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes))
+    cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes)
     return cursor - x0
 end
 

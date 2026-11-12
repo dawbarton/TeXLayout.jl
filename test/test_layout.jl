@@ -1683,11 +1683,33 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
 
     # ── Binomial coefficients ──────────────────────────────────────────────────
 
-    @testset "\\binom{a}{b} produces more boxes than \\frac{a}{b}" begin
+    @testset "\\binom{a}{b} produces more glyphs than \\frac{a}{b}" begin
         # \binom adds two delimiter glyphs (parenleft + parenright) that \frac lacks.
         boxes_frac = layout(parse_latex(raw"\frac{a}{b}"), family, Display)
         boxes_binom = layout(parse_latex(raw"\binom{a}{b}"), family, Display)
-        @test length(boxes_binom) > length(boxes_frac)
+        @test length(find_glyphs(boxes_binom)) == length(find_glyphs(boxes_frac)) + 2
+    end
+
+    @testset "Null delimiters are \\nulldelimiterspace wide" begin
+        # TeX flanks \frac with null delimiters of \nulldelimiterspace (1.2 pt at
+        # 10 pt), unscaled in script styles: XeLaTeX sets \scriptstyle\frac{a}{a}
+        # exactly 2.4 pt wider than \scriptscriptstyle a.
+        nds = TeXLayout._NULL_DELIMITER_SPACE
+        @test nds == 0.12
+        for style in (Display, Text, Script)
+            frac = layout(parse_latex(raw"\frac{a}{a}"), family, style)
+            numer = layout(parse_latex("a"), family, frac_num_style(style))
+            rule = only(find_hrules(frac))
+            @test rule.x ≈ nds
+            @test TeXLayout.measure(frac, Float64(FONT_UPM)).width ≈
+                TeXLayout.measure(numer, Float64(FONT_UPM)).width + 2nds atol = 1.0e-9
+        end
+        # \left. and the missing delimiter of cases give the same space.
+        left_dot = layout(parse_latex(raw"\left. x \right|"), family, Text)
+        x = only(b for b in find_glyphs(left_dot) if b.element.glyph_name == "u1D465")
+        @test x.x ≈ nds
+        cases = layout(parse_latex(raw"\begin{cases} x \end{cases}"), family, Text)
+        @test any(b -> b.element isa Space && b.element.width == nds, cases)
     end
 
     @testset "\\binom{a}{b}: numerator above denominator" begin

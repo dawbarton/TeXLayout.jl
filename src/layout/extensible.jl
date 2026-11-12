@@ -303,7 +303,10 @@ function _layout_delim!(
         scale::Float64,
         boxes::Vector{LayoutBox},
     )::Float64
-    isempty(glyph_name) && return 0.0
+    if isempty(glyph_name)
+        push!(boxes, LayoutBox(Space(_NULL_DELIMITER_SPACE), x0, y0, scale))
+        return _NULL_DELIMITER_SPACE
+    end
     upm = ctx.upm
     mc = ctx.mc
 

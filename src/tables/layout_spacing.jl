@@ -5,6 +5,12 @@ const _THIN = 3 / 18
 const _MEDIUM = 4 / 18
 const _THICK = 5 / 18
 
+# Width of a null delimiter (`\left.`, the missing delimiters of `\frac`), in em
+# of the formula's base size.  TeX's `\nulldelimiterspace` is a fixed 1.2 pt at
+# 10 pt, unscaled in script styles, and KaTeX resets the null delimiter to the
+# base size likewise.
+const _NULL_DELIMITER_SPACE = 0.12
+
 # Automatic inter-atom spacing for Display/Text style: (prev, next) → em.
 # Derived from KaTeX spacingData.ts; pairs with no entry have zero spacing.
 const _SPACINGS = Dict{Tuple{Symbol, Symbol}, Float64}(

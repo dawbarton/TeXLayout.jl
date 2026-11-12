@@ -101,6 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Notes on `\overbrace`, `\underbrace`, and the other horizontal braces keep
   the enclosing size factor: under `\large` the note of
   `\overbrace{x}^{n}` was set at normal script size (0.7) instead of 0.84.
+- Fractions are flanked by TeX's null delimiter space (`\nulldelimiterspace`,
+  0.12 em, unscaled in scripts), and `\left.`, `\right.`, and the open side of
+  `cases` give the same space. The fraction rule previously ran into the
+  neighbouring atoms (`x\frac{a}{b}x` was 0.24 em narrower than in TeX).
+  Layouts containing fractions or null delimiters widen accordingly.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
