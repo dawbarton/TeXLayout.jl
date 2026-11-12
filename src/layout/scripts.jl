@@ -12,7 +12,7 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, boxes)
         base_stop = lastindex(boxes)
         sup_start = lastindex(boxes) + 1
-        sup_w = _layout_clean!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
+        sup_w = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
         sup_stop = lastindex(boxes)
         base_top = _boxes_top(boxes, base_start, base_stop, upm)
         s = scale / upm
@@ -30,10 +30,10 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     base_start = lastindex(boxes) + 1
-    base_adv = _layout_script_base!(base, ctx, style, x0, y0, scale, boxes)
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
     base_stop = lastindex(boxes)
     sup_start = lastindex(boxes) + 1
-    sup_adv = _layout_clean!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
+    sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
     sup_stop = lastindex(boxes)
     s = scale / upm
     min_sup = is_cramped(style) ?
@@ -61,7 +61,7 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, boxes)
         base_stop = lastindex(boxes)
         sub_start = lastindex(boxes) + 1
-        sub_w = _layout_clean!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
+        sub_w = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
         sub_stop = lastindex(boxes)
         base_bot = _boxes_bottom(boxes, base_start, base_stop, upm)
         s = scale / upm
@@ -79,10 +79,10 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     base_start = lastindex(boxes) + 1
-    base_adv = _layout_script_base!(base, ctx, style, x0, y0, scale, boxes)
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
     base_stop = lastindex(boxes)
     sub_start = lastindex(boxes) + 1
-    sub_adv = _layout_clean!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
+    sub_adv = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
     sub_stop = lastindex(boxes)
     s = scale / upm
     min_sub = mc.subscript_shift_down * s
@@ -114,10 +114,10 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
         base_w = _layout_node!(_limits_base(base), ctx, style, 0.0, 0.0, scale, boxes)
         base_stop = lastindex(boxes)
         sub_start = lastindex(boxes) + 1
-        sub_w = _layout_clean!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
+        sub_w = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
         sub_stop = lastindex(boxes)
         sup_start = lastindex(boxes) + 1
-        sup_w = _layout_clean!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
+        sup_w = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
         sup_stop = lastindex(boxes)
         base_top = _boxes_top(boxes, base_start, base_stop, upm)
         base_bot = _boxes_bottom(boxes, base_start, base_stop, upm)
@@ -145,13 +145,13 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     end
 
     base_start = lastindex(boxes) + 1
-    base_adv = _layout_script_base!(base, ctx, style, x0, y0, scale, boxes)
+    base_adv = _layout_node!(base, ctx, style, x0, y0, scale, boxes)
     base_stop = lastindex(boxes)
     sub_start = lastindex(boxes) + 1
-    sub_adv = _layout_clean!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
+    sub_adv = _layout_node!(sub, ctx, sub_s, 0.0, 0.0, sub_scale, boxes)
     sub_stop = lastindex(boxes)
     sup_start = lastindex(boxes) + 1
-    sup_adv = _layout_clean!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
+    sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
     sup_stop = lastindex(boxes)
     script_x = x0 + base_adv
     # Italic correction (TeX rules 13 and 17; KaTeX supsub.ts): the subscript

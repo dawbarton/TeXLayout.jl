@@ -1083,27 +1083,24 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test int_sub.x ≈ int.element.advance_width / mt.upm - ic(int.element.glyph_name)
     end
 
-    @testset "Italic correction: clean_box drops it after a lone character" begin
-        # tex.web §721: a fraction part, script, radicand, or accent nucleus that
-        # is one character loses its italic-correction kern.
+    @testset "Italic correction: kept on a lone character, dropped inside text-alphabet words" begin
+        # XeTeX and LuaTeX with OpenType math fonts keep a lone character's
+        # correction as a fraction part, script, or accent nucleus (measured with
+        # TeX Gyre Bonum Math: \hat{f}( sets the parenthesis where f( does, and
+        # \overline{f}, \frac{f}{f}, x^{f}, and x_V all keep it).  TeX82's
+        # clean_box would drop it there; TeXLayout follows the OpenType engines.
         fic = get(mt.italic_corrections, "u1D453", 0) / mt.upm
         @test fic > 0
         fadv = glyph_metrics_by_codepoint(family, UInt32(0x0001D453)).advance_width / mt.upm
-        width(src, style = Text) = TeXLayout.measure(layout(parse_latex(src), family, style), Float64(mt.upm)).width
-        trailing_kern(src) = (bs = layout(parse_latex(src), family, Text); any(b -> b.element isa Space && b.element.width ≈ fic, bs))
-        @test width("f") ≈ fadv + fic                     # in a math list the kern stays
-        @test !trailing_kern(raw"\frac{f}{2}")
-        @test !trailing_kern(raw"\sqrt{f}")
-        @test !trailing_kern(raw"x^{f}")
-        # The accent nucleus is cleaned: what follows \hat{f} moves left by the kern.
+        kern_after_f(src) = (bs = layout(parse_latex(src), family, Text); any(b -> b.element isa Space && b.element.width ≈ fic * b.scale, bs))
+        for src in ("f", raw"\frac{f}{2}", raw"\sqrt{f}", raw"x^{f}", raw"\overline{f}")
+            @test kern_after_f(src)
+        end
         star_x(src) = only(b.x for b in find_glyphs(layout(parse_latex(src), family, Text)) if b.element.glyph_name == "asteriskmath")
-        @test star_x(raw"\hat{f}*") ≈ star_x("f*") - fic atol = 1.0e-9
-        # …but an accented character with scripts keeps it (rule 12), so the
-        # superscript still clears the slant.
-        hat_sq = layout(parse_latex(raw"\hat{f}^2"), family, Text)
-        two = only(b for b in find_glyphs(hat_sq) if b.element.glyph_name == "two")
-        @test two.x ≈ fadv + fic atol = 1.0e-9
-        # Text alphabets add no correction between letters, only after the word.
+        @test star_x(raw"\hat{f}*") ≈ star_x("f*") atol = 1.0e-9
+        # Text alphabets add no correction between letters, only after the word
+        # (tex.web §752; unicode-math's \mathit is a text font, while the
+        # math-font \symit keeps a correction after every letter).
         mathit = layout(parse_latex(raw"\mathit{ff}"), family, Text)
         fs = sort([b for b in find_glyphs(mathit)]; by = b -> b.x)
         @test fs[2].x - fs[1].x ≈ fadv atol = 1.0e-9

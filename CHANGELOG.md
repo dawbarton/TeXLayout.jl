@@ -112,11 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   previously had to cover the content completely, so `\left(\frac{a}{b}\right)`
   in text style took a parenthesis two sizes larger than TeX's. Matrix
   delimiters are unchanged, because the matrix grid lacks TeX's row struts.
-- A single character as a fraction part, script, radicand, accent nucleus, or
-  over/underline nucleus drops its italic-correction kern, as TeX's
-  `clean_box` does, and the text alphabets (`\mathit`, `\mathrm`, `\mathbf`,
-  `\mathsf`, `\mathtt`) add none between letters. `\hat{f}*` had a visible gap
-  before the `*`, and `\mathit{AaBbXx}` was letter-spaced.
+- The text alphabets (`\mathit`, `\mathrm`, `\mathbf`, `\mathsf`, `\mathtt`)
+  add no italic correction between letters, as LaTeX's text fonts do, so
+  `\mathit{AaBbXx}` is no longer letter-spaced.
 - `\left…\right` around a matrix keeps full delimiter coverage, like the
   matrix environments' own delimiters, since the matrix grid lacks TeX's row
   struts.

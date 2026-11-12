@@ -554,7 +554,7 @@ function _layout_children!(
             # Mid-word letters of a text alphabet carry no italic correction.
             if ctx.font_variant in _TEXT_ALPHABETS && i < lastindex(nodes) &&
                     nodes[i + 1].kind === NodeKind.Char
-                w = _clean_char_box!(boxes, start, lastindex(boxes), nodes[i], w)
+                w = _drop_italic_kern!(boxes, start, lastindex(boxes), nodes[i], w)
             end
             cursor += w
             prev_left_class = left_cls
@@ -602,45 +602,21 @@ function _push_math_char!(boxes, g::Glyph, ctx, x0, y0, scale)::Float64
     return adv + ic_em
 end
 
-# True when `node` is a lone math character (a Char or symbol command, possibly
-# braced or under a font switch), the nucleus whose italic correction TeX's
-# `clean_box` discards.
-function _is_lone_char(node::Node)::Bool
-    n = node
-    while n.kind in (NodeKind.Group, NodeKind.Sequence) && length(n.children) == 1
-        n = n.children[1]
-    end
-    return n.kind !== NodeKind.Accent && _is_char_box(n)
-end
-
-# TeX's `clean_box` (tex.web §720–721): when a fraction part, script, radicand,
-# accent or over/underline nucleus is one character, the box drops the
-# character's trailing italic-correction kern.  `start:stop` is the range just
-# emitted for `node` (it must end the vector) and `w` its advance; returns the
-# advance without the kern.
-function _clean_char_box!(boxes::Vector{LayoutBox}, start::Int, stop::Int, node::Node, w::Float64)::Float64
-    (stop == lastindex(boxes) && stop == start + 1 && _is_lone_char(node)) || return w
+# Drop the italic-correction kern that `_push_math_char!` emitted after a lone
+# character: `start:stop` is the range just emitted for character node `node`
+# (it must end the vector) and `w` its advance; returns the advance without the
+# kern.  Used only between letters of a text alphabet.  TeX82's `clean_box`
+# (tex.web §720–721) also drops it for a lone character as a fraction part,
+# script, radicand, or accent nucleus, but XeTeX and LuaTeX with OpenType math
+# fonts keep it there (measured: `\hat{f}`, `\overline{f}`, `x^{f}`, `x_V`, and
+# `\frac{f}{f}` all keep f's or V's correction), so TeXLayout keeps it too.
+function _drop_italic_kern!(boxes::Vector{LayoutBox}, start::Int, stop::Int, node::Node, w::Float64)::Float64
+    (node.kind === NodeKind.Char && stop == lastindex(boxes) && stop == start + 1) || return w
     kern = boxes[stop]
     (kern.element isa Space && boxes[start].element isa Glyph) || return w
     pop!(boxes)
     return w - kern.element.width
 end
-
-# Lay out a fraction part, script, radicand, or over/underline nucleus as TeX's
-# `clean_box` does: a lone character loses its italic-correction kern.
-function _layout_clean!(node, ctx, style, x0, y0, scale, boxes)::Float64
-    start = lastindex(boxes) + 1
-    w = _layout_node!(node, ctx, style, x0, y0, scale, boxes)
-    return _clean_char_box!(boxes, start, lastindex(boxes), node, w)
-end
-
-# Lay out the base of a scripted atom.  An accented character keeps its italic
-# correction here: rule 12 attaches the scripts to the character, so the
-# correction still places the superscript.
-_layout_script_base!(base, ctx, style, x0, y0, scale, boxes)::Float64 =
-    base.kind === NodeKind.Accent ?
-    _layout_accent!(base, ctx, style, x0, y0, scale, boxes; clean = false) :
-    _layout_node!(base, ctx, style, x0, y0, scale, boxes)
 
 # Math alphabets that LaTeX takes from text fonts.  TeX adds no italic
 # correction between consecutive letters of a text font (tex.web §752), so

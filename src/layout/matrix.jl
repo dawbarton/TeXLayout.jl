@@ -2,9 +2,11 @@
 
 # Inter-column and inter-row spacing constants for matrix environments.
 # _MATRIX_COLSEP is the margin added on each side of a column (total gap between
-# adjacent cells = 2 × _MATRIX_COLSEP), matching LaTeX's \arraycolsep ≈ 5 mu.
+# adjacent cells = 2 × _MATRIX_COLSEP).  This is amsmath's `smallmatrix` value
+# (\thickspace, 5 mu); LaTeX's \arraycolsep is 5 pt (0.5 em, article.cls), so
+# other matrices are set narrower than in TeX (see future.md).
 # _MATRIX_ROWGAP is extra baseline-to-baseline clearance added between rows.
-const _MATRIX_COLSEP = 5 / 18   # 5 mu per side, matches LaTeX \arraycolsep
+const _MATRIX_COLSEP = 5 / 18   # 5 mu per side
 const _MATRIX_ROWGAP = 3 / 18   # extra row gap in em
 const _MATRIX_DOUBLERULESEP = 2 / 18   # gap between two adjacent rules (≈ TeX \doublerulesep = 2pt)
 

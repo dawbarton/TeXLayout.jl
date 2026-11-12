@@ -347,13 +347,17 @@ bases (`{fa}_i`) get no correction from their first glyph.  Before 2026-11 no
 kern was emitted and δ was subtracted for every base, which pushed letter
 subscripts δ to the left of the advance.
 
-Two TeX refinements keep the kern from opening gaps:
+**`clean_box` is deliberately not applied.**  TeX82 (tex.web §720–721) drops
+the kern when a fraction part, script, radicand, or accent nucleus is a single
+character, but XeTeX and LuaTeX with OpenType math fonts keep it.  Measured with
+the real TeX Gyre Bonum Math file at 10 pt: `\hat{f}(` sets the parenthesis
+exactly where `f(` does, `\overline{f}` is as wide as `f`, and `\frac{f}{f}`,
+`x^{f}`, and `x_V` include the script's correction.  A version that dropped it
+(2026-11-12, reverted the same day) made Bonum's f collide with a following
+parenthesis and subscripts collide with an integrand.
 
-- **`clean_box`** (tex.web §720–721): a fraction part, script, radicand, degree,
-  accent nucleus, or over/underline nucleus that is a single character loses
-  its trailing kern (`_layout_clean!`).  So `\hat{f}*` and `\frac{e}{f}` set
-  as in TeX.  The base of a scripted accent keeps it, because rule 12 attaches
-  the scripts to the character (`_layout_script_base!`).
+One TeX refinement does apply:
+
 - **Text alphabets** (tex.web §752): `\mathrm`, `\mathit`, `\mathbf`,
   `\mathsf`, `\mathtt` and `\mathsfit` are text fonts in LaTeX, which add no
   correction between consecutive letters, so `\mathit{diff}` is not
