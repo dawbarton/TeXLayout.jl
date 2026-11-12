@@ -1192,6 +1192,20 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "HorizBrace: notes keep the enclosing size factor" begin
+        # The note is a script of the brace: under \large it is as large as an
+        # ordinary superscript there, and inside a script it shrinks once more.
+        script_scale(src, ps) = only(b.scale for b in find_glyphs(layout(parse_latex(src), family, Text)) if b.element.glyph_name == ps)
+        for (brace, plain) in (
+                ("{\\large \\overbrace{x}^{n}}", "{\\large x^{n}}"),
+                ("{\\large \\underbrace{x}_{n}}", "{\\large x_{n}}"),
+                ("{\\large \\overbrace{x}^{m}_{n}}", "{\\large x_{n}}"),
+                ("a_{\\overbrace{x}^{n}}", "a_{x^{n}}"),
+            )
+            @test script_scale(brace, "u1D45B") ≈ script_scale(plain, "u1D45B")
+        end
+    end
+
     @testset "HorizBrace: \\overbrace brace ink extends above body ink" begin
         # Overbrace glyph (uni23DE) sits entirely above the baseline; its presence
         # must push the overall ink top higher than the plain body glyph alone.

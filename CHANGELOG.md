@@ -98,6 +98,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the degree floated 0.25–0.4 em too high and, on tall radicands, above the
   sign altogether. The negative kern after the degree no longer pulls a narrow
   degree's sign left into the preceding material.
+- Notes on `\overbrace`, `\underbrace`, and the other horizontal braces keep
+  the enclosing size factor: under `\large` the note of
+  `\overbrace{x}^{n}` was set at normal script size (0.7) instead of 0.84.
 - `TeXLayoutHandler` reports glyph and block metrics padded to the font's
   ascender and descender rather than bare ink bounds, matching what Makie's own
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
