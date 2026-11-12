@@ -1871,6 +1871,28 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(find_glyphs(boxes_binom)) == length(find_glyphs(boxes_frac)) + 2
     end
 
+    @testset "Fractions and undelimited arrays are Ord atoms" begin
+        # LaTeX's \frac and \binom are `{…\over…}`, an Ord; matrix, array,
+        # aligned, and smallmatrix are a \vcenter, an Ord; \left…\right and the
+        # delimited environments are Inner.  The gap between two atoms is
+        # measured as the marker's origin minus the first atom's width;
+        # LuaLaTeX puts no space in the Ord pairs and a thin space (1/6 em)
+        # in the Inner ones.
+        marker_x(src) = only(b.x for b in find_glyphs(layout(parse_latex(src * "1"), family, Text)) if b.element.glyph_name == "one")
+        advance(src) = TeXLayout.measure(layout(parse_latex(src), family, Text), Float64(FONT_UPM)).width
+        for (atom, gap) in (
+                (raw"\frac{a}{2}", 0.0), (raw"\binom{a}{2}", 0.0), (raw"\dfrac{a}{2}", 0.0),
+                (raw"\begin{matrix} a \end{matrix}", 0.0), (raw"\begin{array}{c} a \end{array}", 0.0),
+                (raw"\begin{smallmatrix} a \end{smallmatrix}", 0.0),
+                (raw"\left(a\right)", 1 / 6), (raw"\begin{pmatrix} a \end{pmatrix}", 1 / 6),
+            )
+            @test marker_x(atom) - advance(atom) ≈ gap atol = 1.0e-9
+        end
+        # LuaLaTeX widths at 10 pt: a\frac{1}{2} 11.673 pt, \frac{1}{2}( 10.273 pt.
+        @test advance(raw"a\frac{1}{2}") ≈ 1.1673 atol = 1.0e-4
+        @test advance(raw"\frac{1}{2}\begin{pmatrix} a \end{pmatrix}") ≈ 2.177962 atol = 1.0e-4
+    end
+
     @testset "Null delimiters are \\nulldelimiterspace wide" begin
         # TeX flanks \frac with null delimiters of \nulldelimiterspace (1.2 pt at
         # 10 pt), unscaled in script styles: XeLaTeX sets \scriptstyle\frac{a}{a}

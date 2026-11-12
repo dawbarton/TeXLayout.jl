@@ -184,7 +184,18 @@ function _atom_class(node::Node)::Symbol
         c == 'c' && return :close
         c == 'r' && return :rel
         return :ord
-    elseif k === NodeKind.Frac || k === NodeKind.Genfrac || k === NodeKind.Delimited || k === NodeKind.HorizBrace || k === NodeKind.Matrix
+    elseif k === NodeKind.Frac || k === NodeKind.Genfrac
+        # LaTeX's \frac, \binom, and \genfrac wrap the fraction in braces
+        # (`{…\over…}`), which makes it an Ord atom, as KaTeX does too; only a
+        # bare `\over` gives TeX's Inner.  LuaLaTeX: `\frac12 a` is exactly
+        # `\frac12` followed by `a`.
+        return :ord
+    elseif k === NodeKind.Matrix
+        # amsmath's delimited environments (pmatrix, cases, …) are
+        # \left…\right, an Inner atom; the others are a \vcenter box, an Ord.
+        info = get(_MATRIX_ENVS, _decode_matrix_payload(node.value).env_name, nothing)
+        return info !== nothing && !(isempty(info.left) && isempty(info.right)) ? :inner : :ord
+    elseif k === NodeKind.Delimited || k === NodeKind.HorizBrace
         return :inner
     elseif k === NodeKind.Sqrt || k === NodeKind.Accent || k === NodeKind.OverUnder || k === NodeKind.Text
         return :ord

@@ -37,6 +37,13 @@ this file records the intended implementation direction.
 - Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
   compare any proposed default change against TeX, KaTeX, and all snapshot
   fonts.
+- `\overbrace` and `\underbrace` are Op atoms in the LaTeX kernel
+  (`\mathop{…}\limits`, fontmath.ltx) and Inner here; unicode-math redeclares
+  them as `\mathover`/`\mathunder` characters, class unverified.  Widths next
+  to an Ord agree in LuaLaTeX (thin space either way), but a following binary
+  operator or opening delimiter would be spaced differently.
+  Changing the class touches limit placement, so check `\overbrace{x}^{n}`
+  and `\overbrace{a}+b` against LuaLaTeX first.
 - LuaTeX adds a delimiter variant's italic correction after a `\left`
   delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
   neither does TeXLayout.

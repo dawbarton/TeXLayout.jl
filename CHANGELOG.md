@@ -57,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   benchmark suite (FreeType's name lookup dominated them).
 
 ### Fixed
+- Fractions (`\frac`, `\dfrac`, `\binom`, …) and the undelimited arrays
+  (`matrix`, `array`, `smallmatrix`, `aligned`, …) are Ord atoms, as in LaTeX
+  (whose `\frac` is `{…\over…}`) and KaTeX. They were Inner, which put a
+  thin space between a fraction and a neighbouring letter, parenthesis,
+  fraction, or matrix (`\frac12 x`, `\frac12(x)`, `a\frac12`) where LaTeX
+  has none. The delimited environments (`pmatrix`, `cases`, …) and
+  `\left…\right` stay Inner.
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
   string indices, so formulas ending in a multibyte character such as `$α$` do
   not raise a `StringIndexError`.
