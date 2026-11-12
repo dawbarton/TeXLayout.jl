@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `'` in math is a prime, as in TeX and KaTeX: `f'` is `f^{\prime}`, `f''^2`
+  is `f^{\prime\prime 2}`, and `f'_1` stacks the prime over the subscript.
+  Inside `\text{…}` it stays an apostrophe. Fonts' `ssty` script variants are
+  not applied, so the prime is the scaled U+2032 glyph (as XeLaTeX draws it
+  with unicode-math and New Computer Modern).
+- `\operatorname*{…}` and `\displaylimits` place limits above and below in
+  display style. `\operatorname*` previously rendered a literal asterisk.
 - `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
   including glyph IDs, exact font faces, horizontal and vertical rule specs,
   block bounds, and per-plot or theme-level selection.
@@ -25,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
   string indices, so formulas ending in a multibyte character such as `$α$` do
   not raise a `StringIndexError`.
+- Whitespace before a script, a `\limits` modifier, a delimiter, or a command
+  argument is ignored in math, as in TeX. `x ^2` and `x _i` previously rendered
+  a literal `^2` or `_i` on the baseline; `\left (` and `\bigl (` were not
+  sized; `\sqrt [3]{x}` took the root of `[`; `\text {abc}` came out in math
+  italic; `\hskip 1em` and `\mkern 3mu` gave no space and typeset the dimension.
+- An environment nested in an unbraced alignment cell keeps its own `&`, `\\`
+  and `\end`. `\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y \end{cases}
+  \end{aligned}` previously produced a one-cell `cases` and spilled the rest
+  into the `aligned` grid.
 - Scripts on an accented single character attach to the character, as TeX's
   rule 12 and KaTeX require. `\hat{y}_{t+1}` previously dropped its subscript
   0.11–0.16 em below that of `y_{t+1}`, and `\tilde{A}^2` raised its
