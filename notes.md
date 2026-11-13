@@ -2098,3 +2098,7 @@
   or notes (#60, and Dependabot's #55, #58, #59) never got the check and
   stayed blocked.  The PR trigger now has no path filter (about 3 minutes of
   CI per PR); pushes to `main` keep theirs.
+- The Dependabot bumps (#55 cache 3.5.0, #58 setup-julia 3.0.3, #59 TagBot
+  1.25.15) were folded into #60 with Dependabot's pinned SHAs, applied to
+  every occurrence: #55 had missed the `makie-0-25` job's cache pin, which
+  was added after it opened.
