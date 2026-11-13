@@ -40,7 +40,7 @@ Av = A * v
 
 fig = Figure(; size = (840, 680), backgroundcolor = :white)
 ax = Axis(fig[1, 1]; aspect = DataAspect(), backgroundcolor = :white)
-TeXLayout.set_default_layout_options!(align = :left, display_align = :center)
+TeXLayout.set_default_layout_options!(; align = :left, display_align = :center)
 
 # Clean page: hide the default decorations, keep only a light frame.
 hidedecorations!(ax)
@@ -97,7 +97,7 @@ end
 # Sample vector and its image: dots + arrow between them.
 scatter!(ax, [v[1], Av[1]], [v[2], Av[2]]; color = :black, markersize = 16)
 arrows2d!(
-    ax, [v[1]], [v[2]], [Av[1] - v[1]], [Av[2] - v[2]],
+    ax, [v[1]], [v[2]], [Av[1] - v[1]], [Av[2] - v[2]];
     color = :black, tipwidth = 8, tiplength = 18, minshaftlength = 0, shaftwidth = 2.5
 )
 text!(

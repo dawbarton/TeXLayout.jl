@@ -163,13 +163,13 @@ function main()
             render_glyph!(canvas, face, Int(el.glyph_id), px_size, pen_cx, pen_cy)
 
         elseif el isa HRule
-            c1 = em_to_px_x(box.x);              c2 = em_to_px_x(box.x + el.width)
+            c1 = em_to_px_x(box.x); c2 = em_to_px_x(box.x + el.width)
             r1 = em_to_px_y(box.y + el.thickness); r2 = em_to_px_y(box.y)
             fill_rect!(canvas, r1, c1, r2, c2, 0x00)
 
         elseif el isa VRule
-            c1 = em_to_px_x(box.x);              c2 = em_to_px_x(box.x + el.thickness)
-            r1 = em_to_px_y(box.y + el.height);  r2 = em_to_px_y(box.y)
+            c1 = em_to_px_x(box.x); c2 = em_to_px_x(box.x + el.thickness)
+            r1 = em_to_px_y(box.y + el.height); r2 = em_to_px_y(box.y)
             fill_rect!(canvas, r1, c1, r2, c2, 0x00)
         end
     end

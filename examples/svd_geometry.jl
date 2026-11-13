@@ -51,9 +51,9 @@ const S_VEC = _SVDF.S    # singular values, descending: [σ₁, σ₂]
 const Vt_MAT = _SVDF.Vt   # Vᵀ
 const V_MAT = _SVDF.V    # right singular vectors — columns are v₁, v₂
 
-const u1 = U_MAT[:, 1];  const u2 = U_MAT[:, 2]
-const v1 = V_MAT[:, 1];  const v2 = V_MAT[:, 2]
-const σ1 = S_VEC[1];      const σ2 = S_VEC[2]
+const u1 = U_MAT[:, 1]; const u2 = U_MAT[:, 2]
+const v1 = V_MAT[:, 1]; const v2 = V_MAT[:, 2]
+const σ1 = S_VEC[1]; const σ2 = S_VEC[2]
 
 # ── Colour palette ─────────────────────────────────────────────────────────────
 
