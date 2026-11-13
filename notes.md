@@ -1381,6 +1381,362 @@
   `fix/visualise-text-glyphid-v0.3.2` and opened
   [PR #31](https://github.com/dawbarton/TeXLayout.jl/pull/31).
 
+## 2026-10-05T13:36+00:00 Runic 1.12 fix and static bug sweep
+
+- CI's Runic job (runic-action resolves to Runic 1.12.0) failed on `main` for a
+  single file: `test/test_layout.jl` around the `\xrightarrow` width test.
+  Runic 1.12 dedents the first line of a multi-line ternary inside a
+  parenthesised generator term by one level. Applied the CI diff verbatim.
+- Julia could not be installed in this cloud session (julialang hosts blocked
+  by the egress policy), so the sweep was a static read of `src/` and `ext/`;
+  tests and Runic were **not** run locally. The new code was hand-formatted to
+  match Runic idioms already present in the repo. Run `runic --check` and
+  `Pkg.test()` before merging.
+- Fixed (each with a regression test written to fail on the old code):
+  whitespace before scripts/`\limits`, after `\left`/`\big`/`\kern`, before
+  `\text` arguments, and around `\sqrt`/xarrow `[…]`; `~` dropped in matrix
+  cells; document `\textbf {x}` swallowing the rest of the input; missing
+  `\sinh \cosh \tanh \coth \lg`; `\vert`-family delimiters (already advertised
+  in `docs/src/04-commands.md`) mapping to null delimiters; `array` cell
+  stride using the colspec column count instead of the observed count;
+  brace-note scale ignoring `\large`/`smallmatrix`; `StringIndexError` in the
+  Makie extension for `L"$2π$"`; latent missing `y0` in Rule 18e's psi.
+- Snapshot hashes should be unchanged: every snapshot case uses colspecs that
+  match their cells, no spaces before scripts, and Display style at scale 1.0
+  (where `_scale_for_child` reduces exactly to `size_scale`).
+- Flagged, not fixed (need a rendering check or a design call):
+  - `\binom` uses Fraction* constants with an axis-relative clamp. The MATH
+    table's Stack* constants (`StackTopShiftUp`, `StackGapMin`, …; already
+    parsed) are, as I recall the OpenType spec, the equivalents of TeX's
+    num3/denom2/3θ/7θ, contrary to the claim in `katex_rules.md` Rule 15c.
+    Spec page not retrievable from this session; verify before changing.
+  - Explicit spaces reset `prev_emit_class`, so `a\,+b` loses the medium space
+    before `+`; TeX and KaTeX ignore glue when computing inter-atom spacing.
+    Snapshot-affecting.
+  - `\bmod`, `\pmod`, `\operatorname*`, `\liminf`/`\limsup` (no thin space)
+    are unsupported or approximated.
+  - Global caches (`_FONT_CACHE`, `_MATH_TABLE_CACHE`, HarfBuzz caches) and the
+    shared FreeType face `glyph` slot are not thread-safe.
+
+## 2026-10-05T15:21+01:00 PR #42 validation (Part 0 of the follow-up)
+
+- Stress comparison of `39867cf` (base) against PR #42 head `f59d869`, with
+  `--include-makie`: 1,344/1,344 images identical (1,024 `math_freetype`, 256
+  `text_freetype`, 64 `makie_cairo`). No regressions; snapshot hashes unchanged.
+- Tests on the PR branch: full suite 1,663/1,663 (HarfBuzz and Makie
+  extensions loaded), core `test/runtests.jl` 1,576/1,576. Every new PR testset
+  fails on the base source except the `\text{a b}` guard, which is meant to pass
+  on both.
+- Local `Pkg.test()` on Julia 1.13.0 fails before running any test with
+  "`MathTeXEngine` is a direct dependency, but does not appear in the manifest"
+  once a root `Manifest.toml` exists (sandbox issue, not a test failure). A
+  separate environment with TeXLayout developed plus the `[extras]` runs the
+  same suite.
+- Parse benchmark (BenchmarkTools, 3 s per case, minimum times): allocations
+  unchanged everywhere; time +0–8% on typical cases, +12% on the `cases`
+  matrix, +29% on a 26-letter space-separated string (about 12 ns per atom,
+  from the extra space lookahead in `_parse_atom!`). Layout dominates
+  `generate_tex_elements` by one to two orders of magnitude, so the end-to-end
+  effect is below noise.
+- `makie_cairo` stress images were unreadable before this session: the RGBA
+  PNG was reinterpreted as rows, and Makie aligns a `LaTeXString` by the bottom
+  of its glyph bounding box (`:baseline` falls back to `:bottom` in Makie's
+  `get_yshift`), so tall formulae lost their tops. Fixed in the stress tool;
+  every `makie_cairo` image changes.
+- Added stress section 38 (spaced/aliased spellings beside canonical forms) and
+  a Makie `2π` case; all render identically pairwise on all eight fonts.
+- Pre-existing issues seen while inspecting (identical on base, not PR #42):
+  Fira Math draws no extensible arrows (`\xrightarrow` and family) and does not
+  stretch `\widehat`/`\widetilde`; `\underbrace{x+y}_{n}^{m}` sets `m` as a side
+  superscript, whereas LaTeX defines `\underbrace` as `\mathop{…}\limits`, so
+  `m` should be a limit above; `\textbf\n\n{x}` drops the paragraph break
+  (TeX raises "Paragraph ended before … was complete" there).
+
+## 2026-10-05T15:56+01:00 Follow-up Part 1: small fixes
+
+- Comparison harness (scratch, not committed): XeLaTeX + unicode-math with the
+  bundled font files themselves (`\setmathfont{math.otf}[Path=…]`, regular font
+  as `\setmainfont`/`\setmathrm`), with TeXLayout's boxes overlaid in the same
+  PDF via `\XeTeXglyph <gid>` at the box positions (TikZ, multiply blend: cyan
+  XeTeX, magenta TeXLayout, dark where they agree). Two corrections make it
+  like-for-like: XeTeX uses `\scriptspace` (LaTeX 0.5pt) after scripts where
+  OpenType MATH, LuaTeX, and TeXLayout use `SpaceAfterScript`, so set
+  `\scriptspace` from the font; and Display cases need `\@displaytrue`
+  (amsmath's `\if@display`), because `$\displaystyle…$` is still inline mode.
+  `tools/stress_test_latex.jl` cannot do this: it loads no OpenType math font.
+- 1.1 CRLF: the lexer's blank-line peek after `%` now uses the same filler set
+  as `_BLANK_LINE_RE` (space, tab, `\r`, `\f`, `\v`).
+- 1.2 amsopn (`amsopn.dtx`, TL 2026): `\liminf` = `\qopname\relax m{lim\,inf}`,
+  likewise `\limsup`, `\injlim`, `\projlim`; `m` means `\displaylimits`.
+  Operators now carry spelling children (characters and spaces) when the body
+  is more than the name; `value` stays the lookup name. Added `\injlim`,
+  `\projlim`; not the `\var…lim` family (`\varinjlim`/`\varprojlim` need
+  `\underrightarrow`/`\underleftarrow`, which TeXLayout lacks).
+- 1.3 `\operatorname*` = `\qopname\newmcodes@ m`: new `"displaylimits"`
+  `LimitsOverride` flag (also the TeX primitive). Consecutive modifiers now
+  replace the flag (last wins) instead of the second one becoming an empty atom.
+- 1.4 `amsmath.dtx` lines 2110–2117: `\bmod` nets 5 mu either side in every
+  style, so it is an ordinary group [5 mu, mod, 5 mu], independent of whether
+  spaces are transparent to atom spacing. `\pod`/`\pmod`/`\mod` use
+  `\if@display` (display *mode*); implemented with a new `\mathchoice`
+  (`NodeKind.MathChoice`, spliced before spacing as in `mlist_to_hlist`), keyed
+  on display *style* as KaTeX does. The follow-up brief's recollection of
+  `\pmod` (always 18 mu) is the plain TeX definition, not amsmath's.
+- 1.5 In Markdown table cells `\|` is an escaped pipe even inside code; Julia's
+  Markdown also renders `<!-- … -->` as visible text, so no explanatory comment.
+- Found while comparing, not fixed (pre-existing): TeXLayout never appends the
+  italic correction after a math character, which TeX does when no subscript
+  follows (visible as drift after `f` in `f(x)`, `y` in `x+y=z`, `d` in New CM);
+  explicit spaces reset inter-atom spacing (Part 2.3), visible after `,\ `.
+- Parse-time cost: a `Dict` lookup in `_is_limits_modifier` slowed every atom
+  (x+y=z 178 → ~205 ns); plain string comparisons restore 181 ns. Layout
+  timings and all allocations unchanged.
+
+## 2026-10-05T16:08+01:00 Follow-up 2.2: radical degree raise
+
+- Spec (learn.microsoft.com, MATH table, MathConstants): `radicalDegreeBottomRaisePercent`
+  is the "height of the bottom of the radical degree, if such is present, in
+  proportion to the height (ascender + descender) of the radical sign.
+  Suggested: 60%". It does not say what the height is measured from.
+- Engines: LuaTeX `make_radical` (`luatexdir/tex/mlist.c`) sets the degree box's
+  shift to `-(h*p/100 - depth(y) - shift_amount(y))`, i.e. the degree's baseline
+  at sign bottom + p × sign height. unicode-math under XeTeX redefines `\r@@t`
+  to raise the root box by `(ht - dp) * fontdimen65 / 100` of the whole radical
+  box. KaTeX `sqrt.ts` and LaTeX's `\root` use `0.6 * (ht - dp)`.
+- TeXLayout measured p × sign height from the formula baseline (and placed the
+  degree's ink bottom there), so the degree floated above deep radical signs.
+  Now follows LuaTeX: degree baseline at sign bottom + p × sign height, with the
+  sign measured from its own boxes.
+- The overlay harness gained `XC_ENGINE=lualatex` (glyphs placed with
+  `luaotfload.aux.slot_of_name`). LuaTeX needs no `\scriptspace` correction
+  because it uses `SpaceAfterScript`; it is the better reference for OpenType
+  behaviour. Degree heights now match LuaLaTeX on all eight fonts.
+- Seen but not changed: TeXLayout picks smaller radical variants than LuaTeX
+  and XeTeX for display-style fractions on New CM, Pagella, Schola, Termes,
+  Bonum, and Luciole (Fira Math and STIX Two match); LuaTeX clamps
+  `RadicalKernAfterDegree` so the sign never starts left of the degree origin.
+- Italic correction after math characters (Part 1 note), rechecked on the same
+  fonts under both engines: XeLaTeX and LuaLaTeX agree. `x+y=z` and `f(x) + d`
+  match TeXLayout exactly in STIX Two, and drift after `y`, `f`, and `d` in New CM
+  and Termes under both, so the difference depends on the font's italic
+  corrections, not on the engine.
+
+## 2026-10-05T16:21+01:00 Follow-up 2.1: \binom and the Stack* constants
+
+- tex.web `make_fraction` (§§743–748): without a rule, display uses num1/denom1
+  and clearance 7θ, otherwise num3/denom2 and 3θ; `delta = half(clr - actual)`
+  is added to both shifts. Delimiters use the fixed sizes delim1/delim2.
+- OpenType spec: `stackGapMin` "Suggested: 3 × default rule thickness",
+  `stackDisplayStyleGapMin` "7 × default rule thickness";
+  `fractionNumeratorDisplayStyleShiftUp` "Suggested: same value as
+  stackTopDisplayStyleShiftUp" (likewise the display denominator).
+- LuaTeX `mlist.c`: rule-less fractions use `stack_num_up`/`stack_denom_down`/
+  `stack_vgap` = StackTop(Display)ShiftUp / StackBottom(Display)ShiftDown /
+  Stack(Display)GapMin; for TFM fonts these are filled from num3, num1, denom2,
+  denom1 (lines ~820–826). XeTeX (`XeTeXOTMath.cpp`, `TeX_sym_to_OT_map`) maps
+  num1/num2/denom1/denom2 to Fraction* and only num3 to StackTopShiftUp; its
+  `make_fraction` uses Stack(Display)GapMin for the clearance.
+- Bundled fonts: Stack* equals Fraction* except New CM text numerator (444 vs
+  394, i.e. CM's num3 vs num2), STIX Two (every shift differs, e.g. StackTopDisplay
+  780 vs 640, StackBottom 385 vs 585), and Luciole's display numerator (580 vs 300).
+- Implemented LuaTeX's mapping. Overlays isolate the shifts by comparing
+  `{num \atop den}` (`\nulldelimiterspace=0pt`) with TeXLayout's binomial minus
+  its delimiters: matches LuaLaTeX on all eight fonts; XeLaTeX agrees except STIX
+  Two and Luciole, as the constants predict.
+- Not changed: TeX sizes binomial delimiters with delim1/delim2 (XeTeX:
+  DelimitedSubFormulaMinHeight and min(1.5 em, delim1)); TeXLayout sizes them to
+  the content. `\atop`, `\choose`, and `\genfrac` remain unsupported.
+
+## 2026-10-05T16:27+01:00 Follow-up 2.3: explicit spaces and inter-atom spacing
+
+- tex.web, `mlist_to_hlist`: in the first pass glue and kern nodes
+  `goto done_with_node`, skipping `r_type:=type(r)`; in the second pass they
+  are appended to the hlist and `goto done`, skipping `r_type:=t`. So the
+  previous atom type survives explicit glue and kerns, and the automatic glue
+  is inserted before the next atom (after the explicit space).
+- KaTeX `buildHTML.ts` `traverseNonSpaceNodes`: "Ignore explicit spaces (e.g.,
+  \;, \,) when determining what implicit spacing should go between atoms";
+  it inserts the glue after the previous atom instead (same total width).
+- TeXLayout's reset was deliberate (2026-05 notes: "neutral explicit spaces
+  reset the context preventing double-spacing") but contradicts both. Removed
+  it; binary reclassification already skipped spaces.
+- Snapshot hashes unchanged; 264 stress images change (33 cases × 8 fonts), all
+  explicit spaces next to bin, rel, op, punct, or inner atoms. Overlays against
+  LuaLaTeX and XeLaTeX for `a\,+b`, `x \quad = y`, `a~=b`, `\int\!\!\int`,
+  `f(x)\,dx`, `x = 1,\ y`, `\sin\,x` now coincide.
+- Interaction with 1.4: `\bmod` was built as an ordinary group [5 mu, mod, 5 mu]
+  so that it is correct both before and after this change; its tests pass.
+
+## 2026-10-05T21:07+01:00 Follow-up 3.1: thread safety of caches and FreeType faces
+
+- Reproducer (scratch `threads_repro.jl`): all 69 stress expressions on four
+  fonts plus two HarfBuzz documents, under `Threads.@threads`, compared with a
+  serial reference. One thread: clean. Two threads: wrong layouts (4 per trial,
+  no exception) and then a segfault. Eight threads: SIGSEGV/SIGILL/SIGABRT on
+  every run, inside FreeType's CFF loader (`cf2_builder_lineTo`), **even with
+  warm caches**, so sharing FT_Face objects is enough; cold caches add unlocked
+  `Dict` mutation.
+- Cause: `glyph_metrics*` and `_codepoint_glyph` call `FT_Load_Glyph` and read the
+  face's shared glyph slot without a lock; `_FONT_CACHE`, `_UPM_CACHE`,
+  `_MATH_TABLE_CACHE`, HarfBuzzExt's two caches, and MathTeXEngineExt's runtime
+  caches use unlocked `get!`. FreeTypeAbstraction's `FTFont.lock` is documented
+  as the lock "for the duration of any FT operation on ft_ptr" and is already
+  taken by its own `glyph_index`.
+- Fix (draft PR): a `ReentrantLock` per module-level cache (values built under
+  it) and `face.lock` around every FreeType call. After: 0 exceptions and 0
+  mismatches over 20 trials × 552 jobs at 2 and 8 threads, cold and warm.
+- Cost: single-thread `layout` minimum time +3–6% (x+y=z 7.13 → 7.58 µs);
+  `layout_document` +1%; allocations unchanged. Cheaper design if needed:
+  resolve the font handles once per `_LayoutCtx` so glyph lookups do not take
+  the cache lock each time.
+- Regression test `test/test_threads.jl` runs a child Julia with four threads
+  (about 3.5 s); it fails on the old code (5/5 crashes) and passes now.
+
+## 2026-10-05T21:21+01:00 Follow-up 3.3: spaces in styled or shaped math \text
+
+- Confirmed: `_text_node_spans` wrote every explicit space node (`\quad`, `\,`,
+  `\kern`) into the span as `" "`, so the shaping path (styled `\text` bodies,
+  or any `\text` with `HarfBuzzShaper`) set them as one interword space. They
+  now stay as widths between spans and become `Space` boxes. Overlay against
+  XeLaTeX (with the family's bold and italic fonts passed to fontspec) matches;
+  the only residue is LaTeX's automatic italic correction after `\textit{…}`.
+- Found alongside: the `\text` parser kept the space after a control word
+  (`\text{a\quad b}` had an extra interword space after the quad). TeX drops it
+  after a control word but not after a control symbol or a closing brace; fixed
+  in the parser, matches XeLaTeX.
+- No stress image changes (no stress case exercises either path). The document
+  layer does not support `\quad`/`\,` at all (`a\quad b` becomes "a b"); not
+  changed.
+
+## 2026-10-05T21:26+01:00 Follow-up 3.2: math alphabets around \text
+
+- XeLaTeX with amsmath and unicode-math (bold and italic text fonts loaded, so
+  the controls `\mathbf{ab}` and `\textbf{a b}` do render bold):
+  `\mathbf{\text{a b}}` and `\boldsymbol{\text{a b}}` are regular "a b";
+  `\mathbf{x\text{ if }y}` is bold x, regular " if ", bold y. amstext's `\text`
+  uses the surrounding text font, which math alphabets do not change.
+- KaTeX deviates deliberately: `buildCommon.makeOrd` has
+  `useFont = mode === "math" || (mode === "text" && !!font)`, and plain `\text`
+  leaves `options.font` set, so `\mathbf{\text{a}}` is bold in KaTeX.
+- TeXLayout kept `font_variant` in `_with_text_mode`, drawing text with Unicode
+  math-alphabet letters and spaces as the math font's `space` glyph. Changed to
+  LaTeX's behaviour (reset the variant); opened as a draft because it reverses
+  KaTeX's choice.
+- Residual difference seen while checking: unicode-math's `\mathbf` uses the
+  bold text font (`\symbf` uses Unicode math bold), so bold letters differ
+  slightly in advance from TeXLayout's U+1D400-block glyphs.
+
+## 2026-10-05T21:33+01:00 Follow-up 3.4: unbraced text commands in document text
+
+- `\textbf x rest` applied bold to everything up to the next unmatched `}` or
+  the end of input: `_parse_text_group!` parsed a group body even without `{`.
+  TeX takes the next token (after the spaces following the control word) as an
+  undelimited argument; XeLaTeX renders `\textbf x rest`, `\textbf xy rest`,
+  and `\textbf\%x y` with only `x`, `x`, and `%` bold.
+- Now: the unbraced form parses exactly one item (`_parse_text_body!` with
+  `single = true`). A nested text command is taken with its own group, where TeX
+  would stop with an error; a paragraph break, `}`, or end of input leaves the
+  argument empty.
+- Also fixed the PR #42 review nit: `_skip_space_before_group!` no longer skips a
+  blank line, so `a \textbf\n\n{x} y` keeps its paragraph break (TeX would report
+  "Paragraph ended before \textbf was complete").
+- No stress image changes.
+
+## 2026-10-05T21:51+01:00 compare_tex.jl and AGENTS.md comparison guidance
+
+- Committed the session's overlay harness as `tools/compare_tex.jl`
+  (`just compare-tex`). LuaLaTeX is the default reference; under LuaLaTeX,
+  TeXLayout glyphs are placed through `luaotfload.aux.slot_of_name`, and shaped
+  `GlyphID` boxes are mapped to glyph names with `FT_Get_Glyph_Name` first.
+  Output goes to `compare_outputs/` (gitignored).
+- AGENTS.md now records the comparison method and the decision to follow LuaTeX
+  where it and XeTeX disagree, and corrects the `\\[dim]` sentence (plain
+  `array` does skip the space; amsmath's matrix environments, `cases`, and
+  `align` do not).
+- Seen while testing the tool: display-style `\sum` differs in size from
+  LuaTeX's in New CM and STIX Two (operator variant selection); not investigated.
+
+## 2026-10-05T22:01+01:00 Extensible arrows without MATH constructions
+
+- Fira Math's MATH table has only six horizontal constructions (over/under
+  braces, brackets, parens): none for arrows or the wide-accent bases. Luciole
+  lacks 9 of the 18 xarrow constructions and STIX Two 5 (paired and single
+  harpoons, two-headed arrows, `\xlongequal`). `_layout_xarrow!` then drew only
+  the labels, because `_layout_wide_accent!` returns without a construction.
+- LuaLaTeX and XeLaTeX both draw these arrows: amsmath's `\arrowfill@` builds
+  them from `\relbar`/`\Relbar` and the arrowhead, which works in any font.
+  TeXLayout now does the same (`_XARROW_PIECES`, `_layout_arrow_from_pieces!`):
+  left piece, minus or equals extenders with a quarter-width overlap, right
+  piece, all on the baseline so shafts line up. Hooks, mapsto, and paired
+  harpoons keep their base glyph at natural width. Verified with
+  `tools/compare_tex.jl` on Fira Math, Luciole, and STIX Two.
+- Fira's `\widehat`/`\widetilde` do not stretch in either TeX engine either (no
+  variants in the font); TeXLayout already matches, so unchanged.
+- Arrow length differs from amsmath's `\ext@arrow` sizing in all fonts
+  (TeXLayout pads the widest label by 0.3 em each side); not changed.
+
+## 2026-10-05T22:08+01:00 Binomial delimiter sizes (Rule 15e)
+
+- TeX (`tex.web` make_fraction) sizes generalized-fraction delimiters with
+  `var_delimiter(…, delim1 or delim2)`, independent of the content. KaTeX's
+  `genfrac.ts` uses delim1 2.390 / delim2 1.010 (cmsy10 fontdimens). LuaTeX
+  uses `FractionDelimiter(DisplayStyle)Size`, which luaotfload defaults to 2.40
+  and 1.01 × size (`fontloader-font-con.lua`); it falls back to the content
+  height only if those are undefined. XeTeX maps delim1 to
+  `DelimitedSubFormulaMinHeight` and delim2 to `min(1.5 em, delim1)`.
+- Implemented TeX's 2.39/1.01 em (`_GENFRAC_DELIM_EM`). The 2.39 vs 2.40
+  rounding matters for New CM, whose paren variants include 2.393 em: TeX and
+  KaTeX pick it, LuaTeX picks 2.991 em. Overlays: STIX Two and Pagella display
+  and text binomials coincide with LuaLaTeX; New CM coincides with XeLaTeX in
+  display and with both engines in text style.
+- Found: amsmath wraps `\frac` and `\binom` in a brace group and KaTeX builds an
+  `mord`, so both are ordinary atoms, but `_atom_class` gives `:inner` for
+  Frac/Genfrac (thin spaces around fractions). Likewise `\underbrace` is
+  `\mathop…\limits` in LaTeX, and a bare `matrix` is an ordinary atom while
+  `pmatrix` and friends (`\left…\right`) are inner. Not changed.
+
+## 2026-10-05T22:36+01:00 Italic correction after math characters
+
+- TeX appends the italic correction as a kern after every math character
+  without a subscript (tex.web §755); with a subscript, δ goes to
+  `make_scripts`: subscript at the uncorrected advance, superscript δ further
+  right, width `max(sub, δ + sup)` plus script space.  LuaTeX's mlist.c keeps
+  the kern for OpenType math fonts ("assume_new_math") but adds it only when
+  there are no scripts at all; the resulting positions are the same.
+- Implemented in `_layout_char!` and the ordinary-symbol path of
+  `_layout_command!` (Math-slot glyphs in math mode only).
+  `_subscript_italic_correction_em` takes it back for a subscript on a
+  character base or a large operator (large operators keep XeTeX's OpenType
+  `make_op` rule: width excludes δ).  `_is_char_box` now treats a one-atom group
+  as its atom (TeX's §1186 simplification), so `{f}_i` behaves like `f_i`.
+- Fixed in passing: scripted atoms counted the correction taken back for the
+  subscript in their width (`\int_0`, `V_i` too wide), and `hlayout_math`
+  measured inline math by box extents, dropping a trailing kern (italic
+  correction, SpaceAfterScript after `$x_i$`).  It now takes
+  `max(advance, extent)`.  Single-glyph accent fallback centres on the glyph
+  advance, as HarfBuzz's default attachment does, not on the corrected width.
+- Measured with LuaLaTeX and XeLaTeX (New CM Math, 10 pt, `\wd` of
+  `\hbox{$…$}`): `f`, `V`, `VW`, `fg`, `\sqrt{f}`, `\overline{fy}`,
+  `b \pmod{n}`, `\beta(t)` now match exactly.  Both engines keep the kern
+  inside fractions, radicals, accents, overlines, and scripts (`\overline{f}`
+  measures the same as `\overline{f\kern0pt}`), although LuaTeX's `clean_box`
+  source contains classic TeX's "unneeded italic correction" removal; why it
+  does not fire was not traced.
+- Remaining width differences are constant per script glyph: TeX uses `ssty`
+  variants (New CM `i.st` 404 units vs `i` 345; `two.st` 569 vs 500).  Also not
+  implemented: `MathKernInfo` kerning, `\nulldelimiterspace` around `\frac`
+  (1.2 pt in LaTeX; `\frac{e}{f}` is 2.4 pt narrower), and accent boxes count
+  the accent glyph's advance (`\hat{f}` 7.14 pt vs TeX's 5.80 pt).
+- Upright/sans/mono math-alphabet letters also get the MATH table's correction
+  (New CM upright `f` 79 units, monospace up to 40), so `\mathrm`/`\mathtt`
+  letters move slightly; this matches LuaTeX's `\symup`/`\symtt`, not
+  unicode-math's default text-font `\mathrm`.  Stress suite (all fonts, with
+  Makie): 1060 changed, 356 identical, none missing; inspected samples show
+  only correction shifts and wider inline math.
+- Seven snapshot hashes re-baselined after diffing the serialised layouts:
+  every change is a trailing correction (`y`, `d`, `b`, `f`, `B`, `C`) or the
+  inline-math width (SpaceAfterScript after `x_i`; the align display recentred
+  by `f`'s correction).
 ## 2026-08-01T10:30+00:00 Makie 0.25 text-handler integration
 
 - Fast-forwarded local `main` to `origin/main` at `eac6b8b` and created
@@ -1666,3 +2022,42 @@
 - **Open.** `align` is still set as `aligned` (no spreading of column pairs
   over the display width, no numbering); array entries inside scripts shrink
   where TeX keeps Text size; `\hline`, `@{…}`, `\\*`, `[t]`/`[b]` ignored.
+
+## 2026-11-13T11:07+00:00 Merging main (PRs #42–#53) into the Makie 0.25 branch
+
+- **Why it was hard.**  The branch left `main` on 2026-07-28 and was never
+  rebased; on 2026-11-12 it reimplemented about nine fixes `main` had merged on
+  2026-10-05/06 (italic correction, transparent explicit spaces, whitespace
+  before scripts and arguments, unbraced text arguments, radical degree,
+  extensible-arrow fallback, brace-note scaling, `makie_cairo` capture, spaces
+  in math `\text`).  46 conflict hunks in 18 files; the real risk was the same
+  fix applied twice in auto-merged code.  Lesson: merge `main` into a
+  long-lived branch before starting new work on it.
+- **Rule used.**  Keep the branch's version of a duplicated feature where later
+  branch work depends on it (italic correction as an explicit `Space` kern via
+  `_push_math_char!`, with `_drop_italic_kern!` for text alphabets; arrow
+  fallback via `_XARROW_FILL_PIECES`, which also covers constructions that fall
+  short; `makie_cairo` crop-to-ink capture, which does not depend on Makie
+  0.24's `texelems_and_glyph_collection`).  Take `main`'s version otherwise
+  (document text arguments, radical degree from the sign's ink, operator
+  spelling children, `_parse_optional_bracket!`, `\operatorname*`, the
+  last-wins `\limits` loop, the Ψ fix in `_layout_decorated!` measured from
+  `y0`).  Helper names standardised on `main`'s (`_subscript_italic_correction_em`,
+  `_math_italic_correction_em`, which also checks the font slot).
+- **Thread safety.**  `main` locks every module-level cache; the branch's new
+  caches were plain `Dict`s.  Added locks for `_NAMED_METRICS_CACHE`,
+  `_GLYPH_RUNTIME_CACHE` (and each runtime's `fonts`/`glyph_indices`), and
+  `_MTE_FAMILY_CACHE`; `test_threads.jl` now also clears the name cache.
+- **Verification.**  Both sides' tests pass unchanged on the merged code.  The
+  eight math snapshots are byte-identical to the branch's; the two document
+  snapshots move by exactly `SpaceAfterScript` (0.056 em) after an inline
+  formula ending in a script, which is `main`'s LuaLaTeX-verified
+  `hlayout_math` fix.
+- **Runic 1.13** (now registered; CI uses `version: '1'`) rejects alignment
+  padding in six files that neither side touched, so `main`'s own Runic check
+  would fail too; reformatted separately.
+- **Docs.**  `main`'s "Comparing against TeX" section absorbed this branch's
+  measurement notes (10 pt for anything with scripts: unicode-math skips `ssty`
+  at `\Huge`; `Path=` font loading; the `\left` italic-correction exception
+  where we follow XeTeX); its "known residual differences" no longer list
+  `ssty` or `\nulldelimiterspace`, which the branch implements.

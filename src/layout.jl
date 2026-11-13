@@ -141,14 +141,16 @@ end
 ) =
     scale * (size_scale(child_s, mc) / size_scale(parent_s, mc))
 
-# Return a copy of `ctx` with mode set to :text, preserving all other fields.
-# Used by NodeKind.Text so that character lookup uses upright (regular-font) glyphs and
-# math-mode italic remapping and inter-atom spacing are suppressed.
+# Return a copy of `ctx` with mode set to :text and no math alphabet.  Used by
+# NodeKind.Text so that character lookup uses upright (regular-font) glyphs and
+# math-mode italic remapping and inter-atom spacing are suppressed.  As in LaTeX,
+# an enclosing \mathbf, \boldsymbol, … does not restyle the text (KaTeX differs:
+# it keeps the math font inside \text).
 @inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
     ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
     ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
     ctx.script_alternates,
-    LayoutMode.Text, ctx.font_variant, ctx.text_shaper,
+    LayoutMode.Text, :default, ctx.text_shaper,
 )
 
 # Return a copy of `ctx` back in math mode with no font variant.  Used by
@@ -313,7 +315,7 @@ function _cmd_glyph(ctx::_LayoutCtx, name::String)::Union{Glyph, Nothing}
     # name ("overbrace").  Parse the codepoint and resolve via the font's own map.
     if cp === nothing
         m2 = match(r"^uni([0-9A-Fa-f]{4,6})$", name)
-        m2 !== nothing && (cp = parse(UInt32, m2.captures[1], base = 16))
+        m2 !== nothing && (cp = parse(UInt32, m2.captures[1]; base = 16))
     end
     cp === nothing && return nothing
     m2 = glyph_metrics_by_codepoint(ctx.family, cp)
@@ -346,7 +348,7 @@ function _horiz_construction_key(ctx::_LayoutCtx, uni_name::String)::String
     haskey(ctx.horiz_constructions, uni_name) && return uni_name
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", uni_name)
     m === nothing && return uni_name
-    cp = parse(UInt32, m.captures[1], base = 16)
+    cp = parse(UInt32, m.captures[1]; base = 16)
     ps = glyph_name_by_codepoint(ctx.family, cp)
     !isempty(ps) && haskey(ctx.horiz_constructions, ps) && return ps
     return uni_name
@@ -451,29 +453,13 @@ function _base_italic_correction_em(
     for i in start:stop
         b = boxes[i]
         b.element isa Glyph || continue
-        ic = get(ctx.italic_corrections, b.element.glyph_name, 0)
-        return ic * scale / ctx.upm
+        return _math_italic_correction_em(ctx, b.element, scale)
     end
     return 0.0
 end
 
 _base_italic_correction_em(boxes::Vector{LayoutBox}, ctx::_LayoutCtx, scale::Float64)::Float64 =
     _base_italic_correction_em(boxes, firstindex(boxes), lastindex(boxes), ctx, scale)
-
-# Italic correction that separates a side subscript from its superscript.  Only a
-# character box or a large operator has one (TeX rules 13 and 17): a compound
-# base such as `{fa}` gets none, although its first glyph may be slanted.
-# A character's advance already includes the correction (see
-# `_push_math_char!`), so subtracting it puts the subscript at the glyph's
-# advance; a large operator's OpenType advance covers its ink, so subtracting it
-# tucks the subscript under the slanted stroke.
-function _script_italic_correction_em(
-        base::Node, boxes::Vector{LayoutBox}, start::Int, stop::Int,
-        ctx::_LayoutCtx, scale::Float64,
-    )::Float64
-    (_is_char_box(base) || _is_large_op(base)) || return 0.0
-    return _base_italic_correction_em(boxes, start, stop, ctx, scale)
-end
 
 # Return true when the script children of a decorated atom should be placed above
 # and below the base (limits style) rather than beside it (side style).
@@ -518,10 +504,55 @@ function _is_char_box(node::Node)::Bool
     # raises a superscript (via the accent's height). KaTeX does the same by
     # delegating such supsub groups to the accent builder (supsub.ts).
     n.kind === NodeKind.Accent && return length(n.children) == 1 && _is_char_box(n.children[1])
+    # TeX replaces a group holding one ordinary atom by that atom, so `{x}` is a
+    # character box like `x`.
+    (n.kind === NodeKind.Group || n.kind === NodeKind.Sequence) && length(n.children) == 1 &&
+        return _is_char_box(n.children[1])
     return false
 end
 
+# Italic correction of a math-font glyph from the MATH table, in em at `scale`.
+# Glyphs from the text font slots (operator names, \text) get none.
+@inline _math_italic_correction_em(ctx::_LayoutCtx, g::Glyph, scale::Float64)::Float64 =
+    g.font_slot === FontSlot.Math ? get(ctx.italic_corrections, g.glyph_name, 0) * scale / ctx.upm : 0.0
+
+# The italic correction to take back from a base's advance when placing a
+# subscript.  A math character's advance includes its italic correction (see
+# _push_math_char!), and TeX sets the subscript at the uncorrected advance and a
+# superscript at the corrected one (tex.web make_ord).  A large operator's
+# advance excludes it, and TeX removes it from the width when there is a
+# subscript (make_op), so the subscript sits under the slanted stroke.  Any
+# other base already ends with its last character's correction.
+function _subscript_italic_correction_em(
+        base::Node, boxes::Vector{LayoutBox}, start::Int, stop::Int, ctx::_LayoutCtx, scale::Float64
+    )::Float64
+    (_is_char_box(base) || _is_large_op(base)) || return 0.0
+    return _base_italic_correction_em(boxes, start, stop, ctx, scale)
+end
+
 # ── Recursive layout ──────────────────────────────────────────────────────────
+
+# The branch of a \mathchoice for `style`: Display, Text, Script, ScriptScript.
+function _math_choice_branch(node::Node, style::TexStyle)::Node
+    i = is_display(style) ? 1 : is_script_script(style) ? 4 : is_script(style) ? 3 : 2
+    return node.children[i]
+end
+
+# TeX resolves \mathchoice before inter-atom spacing and splices the chosen list
+# into the surrounding one (mlist_to_hlist), so spacing sees the chosen atoms.
+function _splice_math_choices(nodes::AbstractVector{Node}, style::TexStyle)::Vector{Node}
+    out = Node[]
+    for node in nodes
+        if node.kind === NodeKind.MathChoice
+            branch = _math_choice_branch(node, style)
+            grouped = branch.kind === NodeKind.Group || branch.kind === NodeKind.Sequence
+            append!(out, _splice_math_choices(grouped ? branch.children : [branch], style))
+        else
+            push!(out, node)
+        end
+    end
+    return out
+end
 
 # Lay out a list of child nodes with inter-atom auto-spacing in math mode.
 # Returns the total advance width.  Used by NodeKind.Sequence, NodeKind.Group, and the inner
@@ -540,6 +571,7 @@ function _layout_children!(
         boxes::Vector{LayoutBox},
     )::Float64
     isempty(nodes) && return 0.0
+    any(n -> n.kind === NodeKind.MathChoice, nodes) && (nodes = _splice_math_choices(nodes, style))
 
     # Emit nodes with inter-atom spacing using the reclassified classes.
     cursor = x0
@@ -548,10 +580,9 @@ function _layout_children!(
     for i in eachindex(nodes)
         raw_cls = _atom_class(nodes[i])
         if raw_cls === :neutral
-            # Explicit spaces are transparent: the next atom is spaced against the
-            # atom before the space, as in TeX (glue is not a noad) and KaTeX
-            # (buildHTML.ts skips `mspace` when pairing atoms), so `a\,=b` keeps
-            # the thick space before `=` in addition to the thin one.
+            # Explicit spaces and kerns are transparent: as in TeX's
+            # mlist_to_hlist, they do not change the previous atom class, so
+            # automatic spacing still applies across them (a\,+b).
             cursor += _layout_node!(nodes[i], ctx, style, cursor, y0, scale, boxes)
         else
             left_cls = _left_reclassified_atom_class(raw_cls, prev_left_class)
@@ -610,9 +641,8 @@ end
 function _push_math_char!(boxes, g::Glyph, ctx, x0, y0, scale)::Float64
     push!(boxes, LayoutBox(g, x0, y0, scale))
     adv = g.advance_width / ctx.upm * scale
-    ic = get(ctx.italic_corrections, g.glyph_name, 0)
-    ic > 0 || return adv
-    ic_em = ic / ctx.upm * scale
+    ic_em = _math_italic_correction_em(ctx, g, scale)
+    ic_em > 0 || return adv
     push!(boxes, LayoutBox(Space(ic_em), x0 + adv, y0, scale))
     return adv + ic_em
 end
@@ -767,19 +797,25 @@ end
 # Number of primes in each multiple-prime command (`"dprime" => 2`, …).
 const _MULTI_PRIME_COUNT = Dict(String(lstrip(cmd, '\\')) => n for (n, cmd) in _MULTI_PRIME_COMMANDS)
 
-# Operator names that amsmath spells with a thin space (`lim\,sup`).
-const _SPACED_OPERATOR_NAMES = Dict("limsup" => "lim sup", "liminf" => "lim inf")
-
 function _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
-    # Render each character of the operator name upright (roman); a space in
-    # the spelling is a thin space.
+    # Render the operator name upright (roman).  When the node has children
+    # they spell the body (characters and explicit spaces, e.g. lim\,inf);
+    # otherwise the body is the name itself.
+    isempty(node.children) && return _layout_upright_chars!(node.value, ctx, x0, y0, scale, boxes)
     cursor = x0
-    for ch in get(_SPACED_OPERATOR_NAMES, node.value, node.value)
-        if ch == ' '
-            push!(boxes, LayoutBox(Space(_THIN * scale), cursor, y0, scale))
-            cursor += _THIN * scale
-            continue
+    for child in node.children
+        if child.kind === NodeKind.Space
+            cursor += _layout_space!(child, ctx, style, cursor, y0, scale, boxes)
+        else
+            cursor += _layout_upright_chars!(child.value, ctx, cursor, y0, scale, boxes)
         end
+    end
+    return cursor - x0
+end
+
+function _layout_upright_chars!(text, ctx, x0, y0, scale, boxes)
+    cursor = x0
+    for ch in text
         g = _upright_glyph(ctx, ch)
         g === nothing && continue
         push!(boxes, LayoutBox(g, cursor, y0, scale))
@@ -808,32 +844,34 @@ function _layout_node!(
         boxes::Vector{LayoutBox},
     )::Float64
     k = node.kind
-    k === NodeKind.Char           && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Command        && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Operator       && return _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Space          && return _layout_space!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Sequence       && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Group          && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Superscript    && return _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Subscript      && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Decorated      && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Frac           && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Genfrac        && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.BigDelim       && return _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Sqrt           && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Delimited      && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.FontSwitch     && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Accent         && return _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.OverUnder      && return _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.HorizBrace     &&
+    k === NodeKind.Char && return _layout_char!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Command && return _layout_command!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Operator && return _layout_operator!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Space && return _layout_space!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sequence && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Group && return _layout_children!(node.children, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Superscript && return _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Subscript && return _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Decorated && return _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Frac && return _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Genfrac && return _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.BigDelim && return _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sqrt && return _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Delimited && return _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.FontSwitch && return _layout_font_switch!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Accent && return _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.OverUnder && return _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(node, nothing, nothing, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Matrix         && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Matrix && return _layout_matrix!(node, ctx, style, x0, y0, scale, boxes)
     k === NodeKind.LimitsOverride && return _layout_node!(_limits_base(node), ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Text           && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.StyleOverride  && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.Sizing         && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.XArrow         && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
-    k === NodeKind.InlineMath     && return _layout_inline_math!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Text && return _layout_text!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.StyleOverride && return _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.Sizing && return _layout_sizing!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.XArrow && return _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.InlineMath && return _layout_inline_math!(node, ctx, style, x0, y0, scale, boxes)
+    k === NodeKind.MathChoice &&
+        return _layout_node!(_math_choice_branch(node, style), ctx, style, x0, y0, scale, boxes)
     # NodeKind.Middle outside \left…\right (malformed input) and unrecognised kinds: emit nothing.
     return 0.0
 end
@@ -852,6 +890,17 @@ function layout(
         style::TexStyle;
         shaper = MetricShaper(),
     )::Vector{LayoutBox}
+    return first(_layout_with_advance(node, family, style; shaper))
+end
+
+# Lay out `node` and also return its total advance in em, which can exceed the
+# boxes' extent: a trailing italic correction is a kern, not a box.
+function _layout_with_advance(
+        node::Node,
+        family::FontFamily,
+        style::TexStyle;
+        shaper = MetricShaper(),
+    )::Tuple{Vector{LayoutBox}, Float64}
     mt = load_math_table(family.math)
     ctx = _LayoutCtx(
         family, mt.constants, Float64(mt.upm), mt.vert_constructions,
@@ -860,8 +909,8 @@ function layout(
         mt.min_connector_overlap, mt.script_alternates, LayoutMode.Math, :default, shaper
     )
     boxes = LayoutBox[]
-    _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
-    return boxes
+    advance = _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
+    return boxes, advance
 end
 
 # ── Makie interface ────────────────────────────────────────────────────────────

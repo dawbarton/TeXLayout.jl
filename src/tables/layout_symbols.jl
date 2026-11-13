@@ -3,7 +3,7 @@
 # NodeKind.Operator names that use limits placement in Display style (\lim, \max, etc.).
 const _LIMITS_OPERATORS = Set{String}(
     [
-        "lim", "limsup", "liminf",
+        "lim", "limsup", "liminf", "injlim", "projlim",
         "det", "gcd", "inf", "sup", "max", "min", "Pr",
     ]
 )
@@ -127,6 +127,13 @@ end
 # Minimum ink overlap between adjacent pieces of a filled arrow, as a fraction of
 # the filler's ink width, so that antialiased edges do not leave visible seams.
 const _XARROW_FILL_OVERLAP = 0.1
+
+# TeX's delim1 and delim2 (Rule 15e) in em: the minimum delimiter size for a
+# generalized fraction such as \binom in Display style and in other styles.
+# The MATH table has no equivalent; these are Computer Modern's values
+# (cmsy10 \fontdimen20 and 21), which KaTeX also uses.  LuaTeX's luaotfload
+# defaults to 2.40 and 1.01; XeTeX substitutes DelimitedSubFormulaMinHeight.
+const _GENFRAC_DELIM_EM = (2.39, 1.01)
 
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
 # (notably FiraMath) name using the "uni{HHHH}" convention instead of the

@@ -88,11 +88,14 @@ end
 # `src/render_support.jl`); only the derived MathTeXEngine font family is
 # specific to this adapter, so it gets its own small cache on the same key.
 const _MTE_FAMILY_CACHE = Dict{TeXLayout.FontFamilyKey, MathTeXEngine.FontFamily}()
+# Base.Dict is not safe for concurrent use (see the thread-safety note in
+# TeXLayout's fonts.jl).  Reentrant because building an entry loads fonts.
+const _MTE_FAMILY_CACHE_LOCK = ReentrantLock()
 
 # Named to stay clear of `generate_tex_elements`'s `_mte_family` argument, which
 # would otherwise shadow it at the one call site that matters.
 function _cached_mte_font_family(tl_family::TeXLayout.FontFamily)::MathTeXEngine.FontFamily
-    return get!(_MTE_FAMILY_CACHE, TeXLayout._font_family_key(tl_family)) do
+    return @lock _MTE_FAMILY_CACHE_LOCK get!(_MTE_FAMILY_CACHE, TeXLayout._font_family_key(tl_family)) do
         _mte_font_family(tl_family)
     end
 end

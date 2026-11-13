@@ -75,6 +75,69 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test any(contains("braceright"), names)
     end
 
+    @testset "\\vert-family delimiters render after \\left/\\right" begin
+        for source in (raw"\left\vert x \right\vert", raw"\left\lVert x \right\rVert")
+            # x plus one glyph per delimiter (previously null delimiters: x only).
+            @test length(find_glyphs(layout(parse_latex(source), family, Text))) >= 3
+        end
+    end
+
+    @testset "\\sinh, \\cosh, \\tanh, \\coth, \\lg render their operator names" begin
+        for name in ("sinh", "cosh", "tanh", "coth", "lg")
+            boxes = layout(parse_latex("\\" * name * " x"), family, Text)
+            @test length(find_glyphs(boxes)) == length(name) + 1
+        end
+    end
+
+    @testset "Italic correction after math characters (TeX, XeTeX, LuaTeX)" begin
+        # tex.web make_ord: a math character with no subscript is followed by a
+        # kern of its italic correction; with a subscript the kern is omitted, the
+        # subscript sits at the advance, and a superscript sits the italic
+        # correction further right.  XeTeX and LuaTeX keep this for OpenType math
+        # fonts, using the MATH table's italic corrections.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        ic(g) = get(mt.italic_corrections, g.element.glyph_name, 0) / FONT_UPM * g.scale
+        glyphs_of(source) = sort(find_glyphs(layout(parse_latex(source), family, Text)); by = g -> g.x)
+        f = first(glyphs_of("f"))
+        @test ic(f) > 0.0   # the test relies on a slanted f with an italic correction
+
+        g = glyphs_of("f(x)")   # f, (, x, )
+        @test g[2].x ≈ advance(f) + ic(f)
+        g = glyphs_of("f^2")
+        @test g[2].x ≈ advance(f) + ic(f)
+        g = glyphs_of("f_i")
+        @test g[2].x ≈ advance(f)
+        g = glyphs_of("f_i^2")
+        sub = only(filter(b -> b.y < 0.0, g)); sup = only(filter(b -> b.y > 0.0, g))
+        @test sub.x ≈ advance(f)
+        @test sup.x ≈ advance(f) + ic(f)
+        # A one-character group behaves as the character (TeX simplifies {f}).
+        @test glyphs_of("{f}_i")[2].x ≈ advance(f)
+        # A longer group ends with its last character's correction.
+        g = glyphs_of("{ff}_i")
+        @test g[3].x ≈ 2 * (advance(f) + ic(f))
+        # Upright text and operator names get no correction.
+        @test glyphs_of(raw"\text{f}(")[2].x ≈ advance(glyphs_of(raw"\text{f}")[1])
+        # Large operators keep TeX's operator rule: subscript at the advance
+        # less the correction, superscript at the advance.
+        int = first(glyphs_of(raw"\int"))
+        g = glyphs_of(raw"\int_0^1")
+        sub = only(filter(b -> b.y < int.y, g[2:end])); sup = only(filter(b -> b.y > 0.0, g[2:end]))
+        @test sub.x ≈ advance(int) - ic(int)
+        @test sup.x ≈ advance(int)
+        # Inline math in a document measures to its full advance, so a trailing
+        # correction (a kern in TeX, not a box) still separates it from text.
+        width_of(source) = layout_document("\$" * source * "\$"; family).width
+        @test width_of("f") ≈ advance(f) + ic(f)
+        # Scripts end at the further script plus SpaceAfterScript; the
+        # correction taken back for the subscript is not added again.
+        sas = mt.constants.space_after_script / FONT_UPM
+        for source in ("f_i", "f^2", "f_i^2", raw"\int_0", raw"\int^1", raw"\int_0^1")
+            g = glyphs_of(source)
+            @test width_of(source) ≈ maximum(b.x + advance(b) for b in g[2:end]) + sas
+        end
+    end
+
     @testset "Superscript is above baseline" begin
         # In x^2, the '2' must have a positive y offset.
         boxes = layout(parse_latex("x^2"), family, Text)
@@ -110,7 +173,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test minimum(ys) < 0.0   # sub below baseline
         # Both scripts are at the same horizontal origin (x + base_advance).
         script_xs = sort([glyphs[2].x, glyphs[3].x])
-        @test script_xs[1] ≈ script_xs[2]  atol = 1.0e-6
+        @test script_xs[1] ≈ script_xs[2] atol = 1.0e-6
     end
 
     @testset "Fraction rule is at axis height" begin
@@ -121,7 +184,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         axis_em = mt.constants.axis_height / FONT_UPM
         half_thickness = rule.element.thickness / 2
         # Rule centre (bottom edge + half thickness) must sit exactly on the axis height.
-        @test (rule.y + half_thickness) ≈ axis_em  atol = 1.0e-6
+        @test (rule.y + half_thickness) ≈ axis_em atol = 1.0e-6
     end
 
     @testset "Fraction rule thickness" begin
@@ -129,14 +192,14 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         hrules = find_hrules(boxes)
         @test length(hrules) >= 1
         expected_thickness = mt.constants.fraction_rule_thickness / FONT_UPM
-        @test hrules[1].element.thickness ≈ expected_thickness  atol = 1.0e-6
+        @test hrules[1].element.thickness ≈ expected_thickness atol = 1.0e-6
     end
 
     @testset "Fraction: numerator above axis, denominator below" begin
         boxes = layout(parse_latex("\\frac{a}{b}"), family, Text)
         glyphs = find_glyphs(boxes)
         @test length(glyphs) == 2
-        ys = sort([b.y for b in glyphs], rev = true)  # highest first
+        ys = sort([b.y for b in glyphs]; rev = true)  # highest first
         axis_em = mt.constants.axis_height / FONT_UPM
         @test ys[1] > axis_em   # numerator above axis
         @test ys[2] < axis_em   # denominator below axis
@@ -148,7 +211,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         base_scale = glyphs[1].scale
         sup_scale = glyphs[2].scale
         expected = mt.constants.script_percent_scale_down / 100.0
-        @test sup_scale ≈ base_scale * expected  atol = 1.0e-6
+        @test sup_scale ≈ base_scale * expected atol = 1.0e-6
     end
 
     @testset "Display style: numerator shift uses display variant" begin
@@ -204,8 +267,9 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test radical.x < degree.x < body.x
         @test body.x - radical.x ≈ radical.element.advance_width / FONT_UPM * radical.scale atol = 1.0e-6
 
-        # The degree's baseline is RadicalDegreeBottomRaisePercent of the sign's
-        # height above the sign's bottom, not above the formula baseline.
+        # RadicalDegreeBottomRaisePercent is a proportion of the sign's height
+        # (ascender + descender), measured from the bottom of the sign; as in
+        # LuaTeX's make_radical, it sets the degree's baseline.
         radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
         radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
         expected = radical_bottom + mt.constants.radical_degree_bottom_raise_percent / 100 *
@@ -236,6 +300,21 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         sign_x(src) = only(b.x for b in find_glyphs(layout(parse_latex(src), family, Text)) if startswith(b.element.glyph_name, "radical"))
         @test sign_x(raw"\sqrt[.]{x}") ≈ sign_x(raw"\sqrt{x}") atol = 1.0e-9
         @test sign_x(raw"\sqrt[3]{x}") - sign_x(raw"\sqrt{x}") ≈ 0.0625 atol = 1.0e-4
+    end
+
+    @testset "Sqrt degree is measured from the bottom of a deep radical sign" begin
+        percent = mt.constants.radical_degree_bottom_raise_percent / 100
+        for (source, style) in ((raw"\sqrt[3]{\frac{a}{b}}", Display), (raw"\sqrt[n]{y}", Text))
+            glyphs = find_glyphs(layout(parse_latex(source), family, style))
+            degree = argmin(b -> b.scale, glyphs)   # the ScriptScript-size index
+            radical = only(filter(b -> startswith(b.element.glyph_name, "radical"), glyphs))
+            radical_top = radical.y + radical.element.y_max / FONT_UPM * radical.scale
+            radical_bottom = radical.y + radical.element.y_min / FONT_UPM * radical.scale
+            @test radical_bottom < 0.0
+            @test degree.y ≈ radical_bottom + percent * (radical_top - radical_bottom) atol = 1.0e-6
+            # The index sits within the sign's height rather than above it.
+            @test degree.y + degree.element.y_max / FONT_UPM * degree.scale < radical_top
+        end
     end
 
     @testset "Nested sqrt: radicand starts at radical advance width" begin
@@ -320,7 +399,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # Expected: medium space before '+' (ord→bin) and after '+' (bin→ord).
         @test length(spaces) == 2
         medium = (4 / 18) * size_scale(Text, mt.constants)
-        @test all(s -> isapprox(s.element.width, medium, atol = 1.0e-6), spaces)
+        @test all(s -> isapprox(s.element.width, medium; atol = 1.0e-6), spaces)
     end
 
     @testset "Inter-atom: ord+rel+ord (a=b) inserts two thick spaces" begin
@@ -328,7 +407,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         spaces = find_spaces(boxes)
         @test length(spaces) == 2
         thick = (5 / 18) * size_scale(Text, mt.constants)
-        @test all(s -> isapprox(s.element.width, thick, atol = 1.0e-6), spaces)
+        @test all(s -> isapprox(s.element.width, thick; atol = 1.0e-6), spaces)
     end
 
     @testset "Inter-atom: punct→ord (a,b) inserts thin space after comma" begin
@@ -337,7 +416,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # punct→ord yields thin; there is no space before the comma.
         @test length(spaces) == 1
         thin = (3 / 18) * size_scale(Text, mt.constants)
-        @test spaces[1].element.width ≈ thin  atol = 1.0e-6
+        @test spaces[1].element.width ≈ thin atol = 1.0e-6
     end
 
     @testset "Inter-atom: op→ord (\\sin x) inserts thin space" begin
@@ -345,7 +424,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         spaces = find_spaces(boxes)
         @test length(spaces) == 1
         thin = (3 / 18) * size_scale(Text, mt.constants)
-        @test spaces[1].element.width ≈ thin  atol = 1.0e-6
+        @test spaces[1].element.width ≈ thin atol = 1.0e-6
     end
 
     @testset "Inter-atom: Script style suppresses medium/thick spacing" begin
@@ -355,9 +434,8 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(spaces) == 0
     end
 
-    @testset "Inter-atom: explicit space resets context, no double gap" begin
-        # 'a \quad b': the \quad is neutral; spacing context is reset after it,
-        # so 'b' gets no additional auto-space.  Exactly 1 Space element (the \quad).
+    @testset "Inter-atom: explicit space between ordinary atoms adds no auto-space" begin
+        # 'a \quad b': ord-ord spacing is zero, so the \quad is the only Space.
         boxes = layout(parse_latex("a\\quad b"), family, Text)
         spaces = find_spaces(boxes)
         @test length(spaces) == 1
@@ -373,6 +451,32 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test widths(raw"a\;+b") ≈ sort([thick, medium, medium])
         # A leading binary operator stays an ordinary atom after a space.
         @test widths(raw"\,+b") ≈ [thin]
+    end
+
+    @testset "Inter-atom: explicit spaces are transparent to automatic spacing" begin
+        # TeX's mlist_to_hlist skips glue and kern nodes when tracking the
+        # previous atom type (r_type), and KaTeX's traverseNonSpaceNodes ignores
+        # explicit spaces, so automatic spacing still applies across them.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        function gaps(source, style)
+            glyphs = sort(find_glyphs(layout(parse_latex(source), family, style)); by = g -> g.x)
+            return [glyphs[i + 1].x - (glyphs[i].x + advance(glyphs[i])) for i in 1:(length(glyphs) - 1)]
+        end
+        thin, medium, thick = 3 / 18, 4 / 18, 5 / 18
+        # a, thin, medium, +, medium, b: the + stays binary.
+        @test gaps(raw"a\,+b", Text) ≈ [thin + medium, medium]
+        @test gaps(raw"x \quad = y", Text) ≈ [1.0 + thick, thick]
+        @test gaps(raw"a~=b", Text) ≈ [TeXLayout._NORMAL_SPACE_EM + thick, thick]
+        # Ordinary atoms: only the explicit space, after f's italic correction.
+        ic_f = mt.italic_corrections[TeXLayout.glyph_name_by_codepoint(family, UInt32(0x0001D453))] / FONT_UPM   # 𝑓
+        @test gaps(raw"f\,d", Text) ≈ [ic_f + thin]
+        # op-op is a thin space, so \int\!\!\int nets one negative thin space.
+        @test only(gaps(raw"\int\!\!\int", Text)) ≈ -thin
+        # In script styles bin spacing is absent; only the explicit space remains.
+        s = mt.constants.script_percent_scale_down / 100
+        @test gaps(raw"x_{a\,+b}", Text)[2:end] ≈ [thin * s, 0.0]
+        # A leading binary atom is still ordinary (Rule 5), even after a space.
+        @test gaps(raw"\,+b", Text) ≈ [0.0]
     end
 
     @testset "\\quad produces a Space element of width 1 em" begin
@@ -490,7 +594,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             g = box.element
             glyph_center = (g.y_min + g.y_max) / (2.0 * FONT_UPM) * box.scale
             delim_center = box.y + glyph_center
-            @test delim_center ≈ axis_em  atol = 1.0e-6
+            @test delim_center ≈ axis_em atol = 1.0e-6
         end
     end
 
@@ -591,7 +695,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         top_em = maximum(b.y + b.element.y_max / FONT_UPM * b.scale for b in left_glyphs)
         bot_em = minimum(b.y + b.element.y_min / FONT_UPM * b.scale for b in left_glyphs)
         center = (top_em + bot_em) / 2
-        @test center ≈ axis_em  atol = 1.0e-3
+        @test center ≈ axis_em atol = 1.0e-3
     end
 
     # ── Limits placement ──────────────────────────────────────────────────────
@@ -732,6 +836,97 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         end
     end
 
+    @testset "Limits: two-word operator names have a thin space" begin
+        # amsopn defines \liminf as \qopname\relax m{lim\,inf} (likewise \limsup,
+        # \injlim, \projlim): a 3 mu thin space separates the words, and the
+        # operator takes limits in Display style.
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        for (cmd, word1, word2) in (
+                ("\\liminf", "lim", "inf"), ("\\limsup", "lim", "sup"),
+                ("\\injlim", "inj", "lim"), ("\\projlim", "proj", "lim"),
+            )
+            for (source, scale) in ((cmd, 1.0), ("x_{" * cmd * "}", mt.constants.script_percent_scale_down / 100))
+                glyphs = sort(filter(g -> g.scale ≈ scale, find_glyphs(layout(parse_latex(source), family, Text))); by = g -> g.x)
+                @test length(glyphs) == length(word1) + length(word2)
+                last1, first2 = glyphs[length(word1)], glyphs[length(word1) + 1]
+                @test first2.x - (last1.x + advance(last1)) ≈ 3 / 18 * scale
+            end
+            # Limits placement in Display style is unchanged.
+            glyphs = find_glyphs(layout(parse_latex(cmd * "_{n}"), family, Display))
+            sub = only(filter(b -> b.scale < 0.9, glyphs))
+            @test sub.y < 0.0
+            @test sub.x > 0.0
+        end
+    end
+
+    @testset "Limits: \\operatorname* and \\displaylimits take limits in Display only" begin
+        # \displaylimits (TeX's default for \mathop, and amsopn's flag for
+        # \operatorname*) behaves as \limits in Display style and as \nolimits
+        # otherwise.
+        positions(source, style) = [(b.x, b.y, b.scale) for b in layout(parse_latex(source), family, style)]
+        for (base, starred) in (
+                (raw"\operatorname{arg\,max}", raw"\operatorname*{arg\,max}"),
+                (raw"\int", raw"\int\displaylimits"),
+            )
+            limits, nolimits = base * raw"\limits_{x}", base * raw"\nolimits_{x}"
+            @test positions(limits, Display) != positions(nolimits, Display)   # not vacuous
+            @test positions(starred * "_{x}", Display) == positions(limits, Display)
+            @test positions(starred * "_{x}", Text) == positions(nolimits, Text)
+        end
+        # The unstarred form never takes limits.
+        @test positions(raw"\operatorname{arg\,max}_{x}", Display) ==
+            positions(raw"\operatorname{arg\,max}\nolimits_{x}", Display)
+        # The thin space in arg\,max is kept.
+        glyphs = sort(find_glyphs(layout(parse_latex(raw"\operatorname{arg\,max}"), family, Text)); by = g -> g.x)
+        @test length(glyphs) == 6
+        g, m = glyphs[3], glyphs[4]
+        @test m.x - (g.x + g.element.advance_width / FONT_UPM * g.scale) ≈ 3 / 18
+    end
+
+    @testset "\\bmod, \\pmod, \\mod, \\pod spacing follows amsmath" begin
+        advance(g) = g.element.advance_width / FONT_UPM * g.scale
+        # Gap between the end of glyph i and the start of glyph i + 1, sorted by x.
+        function gaps(source, style)
+            glyphs = sort(find_glyphs(layout(parse_latex(source), family, style)); by = g -> g.x)
+            return [glyphs[i + 1].x - (glyphs[i].x + advance(glyphs[i])) for i in 1:(length(glyphs) - 1)]
+        end
+        sscale = mt.constants.script_percent_scale_down / 100
+        # a mod b: 5 mu either side in every style (glyphs a m o d b).
+        for (source, style, s) in ((raw"a \bmod b", Display, 1.0), (raw"a \bmod b", Text, 1.0), (raw"x_{a \bmod b}", Text, sscale))
+            g = gaps(source, style)
+            @test g[end - 3] ≈ 5 / 18 * s
+            @test g[end] ≈ 5 / 18 * s
+        end
+        # b (mod n): 18 mu before "(" in Display style, 8 mu otherwise; 6 mu before n.
+        # The kern follows b's italic correction.
+        ic_b = mt.italic_corrections[TeXLayout.glyph_name_by_codepoint(family, UInt32(0x0001D44F))] / FONT_UPM   # 𝑏
+        for (style, kern) in ((Display, 18), (Text, 8))
+            g = gaps(raw"b \pmod{n}", style)   # b ( m o d n )
+            @test g[1] ≈ ic_b + kern / 18
+            @test g[5] ≈ 6 / 18
+            @test gaps(raw"b \pod{n}", style)[1] ≈ ic_b + kern / 18
+        end
+        # b mod n: 18 mu (Display) or 12 mu before "mod", then two thin spaces.
+        for (style, kern) in ((Display, 18), (Text, 12))
+            g = gaps(raw"b \mod{n}", style)   # b m o d n
+            @test g[1] ≈ ic_b + kern / 18
+            @test g[4] ≈ 6 / 18
+        end
+    end
+
+    @testset "\\mathchoice selects its argument by style" begin
+        chosen(source, style) = [g.element.glyph_name for g in find_glyphs(layout(parse_latex(source), family, style))]
+        choice = raw"\mathchoice{a}{b}{c}{d}"
+        @test chosen(choice, Display) == chosen("a", Display)
+        @test chosen(choice, Text) == chosen("b", Text)
+        @test chosen("x_{" * choice * "}", Text) == chosen("x_{c}", Text)
+        @test chosen("x_{y_{" * choice * "}}", Text) == chosen("x_{y_{d}}", Text)
+        # The chosen list is spliced into the surrounding list for spacing:
+        # a + \mathchoice{+}{+}{+}{+} b has the same layout as a + + b.
+        positions(source) = [(b.x, b.y) for b in layout(parse_latex(source), family, Text)]
+        @test positions(raw"a \mathchoice{+}{+}{+}{+} b") == positions(raw"a + b")
+    end
+
     # ── Font switching ──────────────────────────────────────────────────────────
 
     @testset "FontSwitch: \\mathbf{x} renders one glyph" begin
@@ -833,6 +1028,20 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         boxes = layout(parse_latex("\\mathrm{x}"), family, Text)
         @test !isempty(find_glyphs(boxes))
         @test all(b.element.font_slot === TeXLayout.FontSlot.Math for b in find_glyphs(boxes))
+    end
+
+    @testset "Math alphabets do not restyle \\text (LaTeX semantics)" begin
+        # \mathbf, \boldsymbol, \mathit, … select math fonts; \text sets its body
+        # in the surrounding text font, so it is unaffected (XeLaTeX with amsmath
+        # and unicode-math renders \mathbf{\text{a b}} as regular "a b").
+        layout_of(source) = [(b.element, b.x, b.y, b.scale) for b in layout(parse_latex(source), family, Text)]
+        plain = layout_of(raw"\text{a b}")
+        for cmd in (raw"\mathbf", raw"\boldsymbol", raw"\mathit", raw"\mathsf", raw"\mathbb", raw"\mathcal")
+            @test layout_of(cmd * raw"{\text{a b}}") == plain
+        end
+        # Math outside the \text keeps the alphabet: bold x and y, plain " if ".
+        names(source) = [b.element.glyph_name for b in sort(find_glyphs(layout(parse_latex(source), family, Text)); by = b -> b.x)]
+        @test names(raw"\mathbf{x\text{ if }y}") == [names(raw"\mathbf{x}"); names(raw"\text{if}"); names(raw"\mathbf{y}")]
     end
 
     @testset "\\text{if } preserves trailing space" begin
@@ -1332,6 +1541,16 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test bot_brace < bot_plain
     end
 
+    @testset "HorizBrace: note scales with surrounding \\large sizing" begin
+        # The note is the smallest glyph; it must inherit the 1.2× sizing factor
+        # like the body and brace rather than resetting to the bare script scale.
+        note_scale(source) = minimum(b.scale for b in find_glyphs(layout(parse_latex(source), family, Text)))
+        # The last case also has a secondary (opposite-side) script.
+        for brace in (raw"\underbrace{x}_{n}", raw"\overbrace{x}^{n}", raw"\underbrace{x}_{n}^{m}")
+            @test note_scale(raw"\large" * brace) ≈ 1.2 * note_scale(brace)
+        end
+    end
+
     @testset "HorizBrace: \\overbrace{xyz} renders multi-char body with brace above" begin
         boxes = layout(parse_latex("\\overbrace{xyz}"), family, Text)
         glyphs = find_glyphs(boxes)
@@ -1418,7 +1637,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         )
         glyphs = find_glyphs(boxes)
         letter_glyphs = sort(
-            filter(b -> !contains(b.element.glyph_name, "paren"), glyphs),
+            filter(b -> !contains(b.element.glyph_name, "paren"), glyphs);
             by = b -> (-round(b.y; digits = 2), b.x)
         )
         @test length(letter_glyphs) == 4
@@ -1440,6 +1659,37 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         @test length(glyphs) == 4
         paren_boxes = filter(b -> contains(b.element.glyph_name, "paren"), glyphs)
         @test isempty(paren_boxes)
+    end
+
+    @testset "array: colspec column count differs from the cells used" begin
+        glyph_name_of(ch) = TeXLayout.glyph_name_by_codepoint(family, UInt32(ch))
+        digit_glyph(glyphs, ch) = only(filter(b -> b.element.glyph_name == glyph_name_of(ch), glyphs))
+        centre(g) = g.x + g.element.advance_width / mt.upm * g.scale / 2
+        for source in (
+                # Valid LaTeX: the colspec declares more columns than are used.
+                raw"\begin{array}{ccc} 1 & 2 \\ 3 & 4 \end{array}",
+                # Malformed: more cells than declared columns; keep them all.
+                raw"\begin{array}{|c|} 1 & 2 \\ 3 & 4 \end{array}",
+            )
+            boxes = layout(parse_latex(source), family, Display)
+            glyphs = find_glyphs(boxes)
+            @test length(glyphs) == 4
+            g1, g2, g3, g4 = (digit_glyph(glyphs, ch) for ch in ('1', '2', '3', '4'))
+            # Cells stay in their source rows and (centred) columns.
+            @test g1.y ≈ g2.y
+            @test g3.y ≈ g4.y
+            @test g3.y < g1.y
+            @test centre(g1) < centre(g2)
+            @test centre(g1) ≈ centre(g3)
+            @test centre(g2) ≈ centre(g4)
+        end
+        # The declared rules stay outermost; the extra column carries none.
+        boxes = layout(parse_latex(raw"\begin{array}{|c|} 1 & 2 \end{array}"), family, Display)
+        rules = find_elements(boxes, e -> e isa VRule)
+        digits = find_glyphs(boxes)
+        @test length(rules) == 2
+        @test minimum(r.x for r in rules) < minimum(g.x for g in digits)
+        @test maximum(r.x for r in rules) > maximum(g.x for g in digits)
     end
 
     @testset "cases: left brace present, no right brace" begin
@@ -1527,7 +1777,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             parse_latex(raw"\begin{array}{lcr} a & b & c \end{array}"),
             family, Display
         )
-        glyphs = sort(find_glyphs(boxes), by = b -> b.x)
+        glyphs = sort(find_glyphs(boxes); by = b -> b.x)
         # Three content glyphs: a (left-aligned), b (centred), c (right-aligned).
         @test length(glyphs) == 3
         # Glyphs must be left-to-right.
@@ -1583,8 +1833,8 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             family, Display
         )
         # Both should have 3 glyphs.
-        g_ccc = sort(find_glyphs(boxes_ccc), by = b -> b.x)
-        g_lcr = sort(find_glyphs(boxes_lcr), by = b -> b.x)
+        g_ccc = sort(find_glyphs(boxes_ccc); by = b -> b.x)
+        g_lcr = sort(find_glyphs(boxes_lcr); by = b -> b.x)
         @test length(g_ccc) == 3
         @test length(g_lcr) == 3
         # In lcr, col 1 (left-aligned) starts at the column left edge;
@@ -1776,6 +2026,40 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
     end
 
     # ── Extensible arrows ──────────────────────────────────────────────────────
+
+    @testset "Extensible arrows without a MATH construction are built from pieces" begin
+        # Fira Math has no horizontal constructions for arrows (Luciole and STIX
+        # Two lack some).  Like amsmath's \arrowfill@, TeXLayout then builds the
+        # arrow from a left piece, repeated extenders, and a right piece.
+        fira = font_family(:fira_math)
+        name(cp) = TeXLayout.glyph_name_by_codepoint(fira, UInt32(cp))
+        ink_left(g) = g.x + g.element.x_min / 1000 * g.scale
+        ink_right(g) = g.x + g.element.x_max / 1000 * g.scale
+        upm = TeXLayout.load_math_table(fira.math).upm
+        @test upm == 1000
+        for (source, pieces) in (
+                (raw"\xrightarrow{abcdef}", (0x2212, 0x2192)),
+                (raw"\xleftarrow{abcdef}", (0x2190, 0x2212)),
+                (raw"\xleftrightarrow{abcdef}", (0x2190, 0x2192)),
+                (raw"\xRightarrow{abcdef}", (0x003D, 0x21D2)),
+            )
+            glyphs = find_glyphs(layout(parse_latex(source), fira, Text))
+            labels = filter(g -> g.scale < 0.9, glyphs)
+            arrow = sort(filter(g -> g.scale ≈ 1.0, glyphs); by = g -> g.x)
+            @test length(arrow) >= 3
+            @test arrow[1].element.glyph_name == name(pieces[1])
+            @test arrow[end].element.glyph_name == name(pieces[2])
+            # The arrow spans the labels and sits below them, on the baseline.
+            @test ink_left(arrow[1]) < minimum(ink_left, labels)
+            @test ink_right(arrow[end]) > maximum(ink_right, labels)
+            @test all(g -> g.y == 0.0, arrow)
+            # Consecutive pieces overlap, so the shaft is continuous.
+            @test all(i -> ink_left(arrow[i + 1]) < ink_right(arrow[i]), 1:(length(arrow) - 1))
+        end
+        # An arrow with no piece decomposition keeps its glyph at natural width.
+        glyphs = find_glyphs(layout(parse_latex(raw"\xmapsto{abc}"), fira, Text))
+        @test count(g -> g.element.glyph_name == name(0x21A6), glyphs) == 1
+    end
 
     @testset "\\xrightarrow{f} lays out without error" begin
         boxes = layout(parse_latex(raw"\xrightarrow{f}"), family, Text)
@@ -1971,6 +2255,72 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         ys = sort(unique(round(g.y; digits = 6) for g in glyphs))
         @test length(ys) >= 2   # at least two distinct y-levels
         @test maximum(g.y for g in glyphs) > minimum(g.y for g in glyphs)
+    end
+
+    @testset "\\binom: TeX Rule 15c with the MATH Stack* constants" begin
+        # A rule-less fraction uses num1/denom1 (Display) or num3/denom2 and one
+        # mutual clearance, 7θ or 3θ, between numerator and denominator, adding
+        # half of any shortfall to each shift (tex.web, make_fraction).  The
+        # OpenType equivalents are the Stack* constants (LuaTeX make_fraction).
+        c = mt.constants
+        ink_top(g) = g.y + g.element.y_max / FONT_UPM * g.scale
+        ink_bottom(g) = g.y + g.element.y_min / FONT_UPM * g.scale
+        for (style, up, down, gap) in (
+                (Display, c.stack_top_display_style_shift_up, c.stack_bottom_display_style_shift_down, c.stack_display_style_gap_min),
+                (Text, c.stack_top_shift_up, c.stack_bottom_shift_down, c.stack_gap_min),
+            )
+            up, down, gap = up / FONT_UPM, down / FONT_UPM, gap / FONT_UPM
+            # Vertical shift of an operand inside the binomial: match its glyphs
+            # against the same operand laid out alone in its own style.
+            function operand_shift(boxes, source, operand_style)
+                alone = find_glyphs(layout(parse_latex(source), family, operand_style))
+                return only(
+                        unique(
+                            round(b.y - a.y; digits = 9) for a in alone for b in boxes
+                            if b.element == a.element && b.scale ≈ a.scale
+                        )
+                    ), alone
+            end
+
+            # Shallow operands: the standard shifts apply (no shortfall in New CM).
+            boxes = find_glyphs(layout(parse_latex(raw"\binom{n}{k}"), family, style))
+            num_shift, _ = operand_shift(boxes, "n", frac_num_style(style))
+            den_shift, _ = operand_shift(boxes, "k", frac_den_style(style))
+            @test num_shift ≈ up atol = 1.0e-9
+            @test -den_shift ≈ down atol = 1.0e-9
+
+            # Deep operands force the mutual clamp: both shifts grow by the same
+            # amount, and the clearance becomes exactly the gap minimum.
+            num_src, den_src = raw"\frac{a}{\frac{b}{c}}", raw"\frac{\frac{d}{e}}{f}"
+            boxes = find_glyphs(layout(parse_latex("\\binom{" * num_src * "}{" * den_src * "}"), family, style))
+            num_shift, num_alone = operand_shift(boxes, num_src, frac_num_style(style))
+            den_shift, den_alone = operand_shift(boxes, den_src, frac_den_style(style))
+            Δnum, Δden = num_shift - up, -den_shift - down
+            @test Δnum > 0.0
+            @test Δnum ≈ Δden atol = 1.0e-9
+            num_depth = -minimum(ink_bottom, num_alone)
+            den_height = maximum(ink_top, den_alone)
+            @test (num_shift - num_depth) - (den_height + den_shift) ≈ gap atol = 1.0e-9
+        end
+    end
+
+    @testset "\\binom delimiters have TeX's fixed delim1/delim2 sizes" begin
+        # Rule 15e: the delimiters of a generalized fraction are sized from
+        # delim1 (Display style, 2.39 em in Computer Modern) or delim2 (1.01 em),
+        # not from the content.  The smallest variant at least that tall is used.
+        variants = mt.vert_constructions["parenleft"].variants
+        expected(size_em) = first(v.glyph_name for v in variants if v.advance >= size_em * FONT_UPM)
+        paren(source, style) = only(
+            filter(g -> startswith(g.element.glyph_name, "parenleft"), find_glyphs(layout(parse_latex(source), family, style)))
+        )
+        for source in (raw"\binom{n}{k}", raw"\binom{\frac{a}{b}}{\frac{c}{d}}", raw"\binom{1}{2}")
+            @test paren(source, Display).element.glyph_name == expected(2.39)
+            @test paren(source, Text).element.glyph_name == expected(1.01)
+        end
+        # In a superscript, delim2 at script size: the same variant, scaled.
+        p = paren(raw"x^{\binom{n}{k}}", Text)
+        @test p.element.glyph_name == expected(1.01)
+        @test p.scale ≈ mt.constants.script_percent_scale_down / 100
     end
 
     @testset "\\binom{a}{b} contains no HRule (no fraction bar)" begin

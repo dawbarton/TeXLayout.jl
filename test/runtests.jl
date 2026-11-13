@@ -88,4 +88,5 @@ include("fixtures/newcm_math.jl")
     include("test_text.jl")
     include("test_makie_extension.jl")
     include("test_snapshots.jl")
+    include("test_threads.jl")
 end

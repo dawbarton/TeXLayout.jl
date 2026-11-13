@@ -89,7 +89,13 @@ const _DELIM_GLYPH_NAMES = Dict{String, String}(
     "\\lbrace" => "braceleft",
     "\\rbrace" => "braceright",
     "|" => "bar",
+    "\\vert" => "bar",
+    "\\lvert" => "bar",
+    "\\rvert" => "bar",
     "\\|" => "dblverticalbar",
+    "\\Vert" => "dblverticalbar",
+    "\\lVert" => "dblverticalbar",
+    "\\rVert" => "dblverticalbar",
     "/" => "slash",
     "\\backslash" => "backslash",
     "\\langle" => "angleleft",
@@ -275,8 +281,19 @@ const _OPERATOR_NAMES = Set{String}(
     [
         "sin", "cos", "tan", "cot", "sec", "csc",
         "arcsin", "arccos", "arctan",
-        "ln", "log", "exp",
-        "lim", "limsup", "liminf", "sup", "inf", "max", "min",
+        "sinh", "cosh", "tanh", "coth",
+        "ln", "lg", "log", "exp",
+        "lim", "limsup", "liminf", "injlim", "projlim", "sup", "inf", "max", "min",
         "det", "dim", "ker", "deg", "gcd", "hom", "Pr", "arg",
     ]
+)
+
+# Operator names spelled as two words joined by a thin space (amsopn:
+# `\liminf` is `\qopname\relax m{lim\,inf}`).  Names not listed here are
+# spelled exactly as their command name.
+const _SPACED_OPERATOR_NAMES = Dict{String, Tuple{String, String}}(
+    "liminf" => ("lim", "inf"),
+    "limsup" => ("lim", "sup"),
+    "injlim" => ("inj", "lim"),
+    "projlim" => ("proj", "lim"),
 )

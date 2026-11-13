@@ -71,6 +71,11 @@ struct GlyphRuntime
 end
 
 const _GLYPH_RUNTIME_CACHE = Dict{FontFamilyKey, GlyphRuntime}()
+# Guards _GLYPH_RUNTIME_CACHE and every runtime's `fonts` and `glyph_indices`
+# (Base.Dict is not safe for concurrent use; see the thread-safety note in
+# fonts.jl).  Reentrant because building an entry loads fonts through
+# `_load_font`, which takes its own lock.
+const _GLYPH_RUNTIME_LOCK = ReentrantLock()
 
 const _RUNTIME_SLOTS = (
     FontSlot.Math, FontSlot.Regular, FontSlot.Bold,
@@ -83,7 +88,7 @@ const _RUNTIME_SLOTS = (
 Return the cached [`GlyphRuntime`](@ref) for `family`, building it on first use.
 """
 function _glyph_runtime(family::FontFamily)::GlyphRuntime
-    return get!(_GLYPH_RUNTIME_CACHE, _font_family_key(family)) do
+    return @lock _GLYPH_RUNTIME_LOCK get!(_GLYPH_RUNTIME_CACHE, _font_family_key(family)) do
         slot_paths = Dict{FontSlot.T, Vector{String}}(
             slot => _slot_fallback(family, slot) for slot in _RUNTIME_SLOTS
         )
@@ -102,7 +107,7 @@ Loaded face for `path`, adding it to `runtime` if it is outside the family's
 slot fallback chains (a shaped `GlyphID` may name any font file).
 """
 function _runtime_font(runtime::GlyphRuntime, path::String)::FreeTypeAbstraction.FTFont
-    return get!(runtime.fonts, path) do
+    return @lock _GLYPH_RUNTIME_LOCK get!(runtime.fonts, path) do
         font, _ = _load_font(path)
         font
     end
@@ -121,7 +126,7 @@ const _UNI_GLYPH_NAME = r"^uni([0-9A-Fa-f]{4,6})$"
 # The codepoint a `uniXXXX`-style glyph name encodes, or `nothing`.
 function _uni_glyph_codepoint(name::String)::Union{Char, Nothing}
     m = match(_UNI_GLYPH_NAME, name)
-    return m === nothing ? nothing : Char(parse(UInt32, only(m.captures), base = 16))
+    return m === nothing ? nothing : Char(parse(UInt32, only(m.captures); base = 16))
 end
 
 # Resolve a PostScript glyph name to a FreeType glyph index, or 0 on failure.
@@ -157,7 +162,7 @@ Memoized glyph index for `name` in the face at `path`; 0 when the face has no
 such glyph.
 """
 function _glyph_index(runtime::GlyphRuntime, path::String, name::String)::UInt64
-    return get!(runtime.glyph_indices, (path, name)) do
+    return @lock _GLYPH_RUNTIME_LOCK get!(runtime.glyph_indices, (path, name)) do
         _glyph_index_uncached(_runtime_font(runtime, path), name)
     end
 end
@@ -174,7 +179,7 @@ function _resolve_glyph(
     )::Union{Tuple{UInt64, FreeTypeAbstraction.FTFont, String}, Nothing}
     for path in runtime.slot_paths[slot]
         gid = _glyph_index(runtime, path, name)
-        gid > 0 && return (gid, runtime.fonts[path], path)
+        gid > 0 && return (gid, _runtime_font(runtime, path), path)
     end
     return nothing
 end

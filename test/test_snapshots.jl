@@ -14,8 +14,8 @@ const SNAPSHOT_MATH_CASES = [
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "dea9869d84cc1bfe2727f98de172cb5687d39f0c285dc347185c660fad57a95f"),
-    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "55f263f8cebe23c9a5108fc759481dd2d0ba1ea89dbe3fca6f168f061f998de6"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "9e2225a12622b6fb899a598e18d3aada3423e312fe3d852f819c184ecc2b7a68"),
+    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "0c5c7f52083014d15d82916f3bd476d6b039361f1a559d854f15a50eb8774101"),
 ]
 
 _snapshot_float(x) = string(round(Float64(x); digits = 10))

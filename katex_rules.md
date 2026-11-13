@@ -38,6 +38,12 @@ A `mbin` atom is demoted to `mord` if:
 - Two-pass reclassification in `_layout_children!`: left-to-right (Rule 5) then
   right-to-left (Rule 6). ✓
 - Neutral atoms (`:neutral` — spaces, `NodeKind.Space`) are transparent to both passes. ✓
+- Neutral atoms are also transparent when inter-atom spacing is emitted: the
+  previous atom class survives an explicit space or kern, so `a\,+b` gets a
+  thin space, a medium space, `+`, and a medium space.  This matches TeX
+  (`mlist_to_hlist` skips glue and kern nodes without updating `r_type`) and
+  KaTeX (`traverseNonSpaceNodes`).  Until 2026-10 explicit spaces reset the
+  spacing context. ✓
 - `_BIN_LEFT_CANCEL = (:bin, :open, :rel, :op, :punct)` and
   `_BIN_RIGHT_CANCEL = (:rel, :close, :punct)` defined as module-level constants. ✓
 
@@ -171,6 +177,33 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
   agrees to 0.001 pt at 10 pt in Text and Display style, and with the `ssty`
   degree glyph (see 18) `\sqrt[3]{x}` is 14.675 pt wide in both.
 
+### Radical degree (`\sqrt[n]{…}`)
+
+The degree is set in ScriptScript style after `RadicalKernBeforeDegree`, and
+the sign follows after `RadicalKernAfterDegree`.  Its vertical position uses
+`RadicalDegreeBottomRaisePercent`, which the OpenType MATH spec describes as the
+"height of the bottom of the radical degree, if such is present, in proportion
+to the height (ascender + descender) of the radical sign".  The spec does not
+say what that height is measured from; the engines differ:
+
+| Implementation | Degree baseline |
+|----------------|-----------------|
+| LuaTeX `make_radical` (`mlist.c`, `\Uroot`) | sign bottom + p × (sign height + depth) |
+| XeTeX with unicode-math (`\r@@t`, fontdimen 65) | p × (ht − dp) of the whole radical box |
+| KaTeX `sqrt.ts`, plain/LaTeX `\root` | 0.6 × (ht − dp) of the radical box |
+
+**Status — follows LuaTeX.**  The degree's baseline is placed at
+`sign_bottom + RadicalDegreeBottomRaisePercent × sign_height`, with the sign
+measured from its own glyph boxes, so variants and assemblies are treated alike.
+This is the direct reading of the spec's "(ascender + descender)" (unicode-math's
+`ht − dp` is not the sign's height), and an overlay against LuaLaTeX with the
+same font files matches on all bundled fonts.  XeTeX sets the degree lower by
+0.2 × (sign depth) for the 60% default.  Until 2026-10 the raise was measured
+from the formula baseline, which left the degree above deep radical signs.
+
+Not matched: LuaTeX clamps `RadicalKernAfterDegree` so that the sign never
+starts left of the degree's origin (`-ar > wr + br`); TeXLayout does not.
+
 ---
 
 ## Rule 15 — Fractions (pg. 444–445)
@@ -184,9 +217,22 @@ OpenType equivalent: `xHeight` → `AccentBaseHeight`; attachment records in
 | Display | `num1`, `denom1`, clearance=3×rule | `num1`, `denom1`, clearance=7×rule |
 | Non-display | `num2`, `denom2`, clearance=1×rule | `num3`, `denom2`, clearance=3×rule |
 
-OpenType equivalents: `num1`/`num2` → `FractionNumeratorDisplayStyleShiftUp` /
+OpenType equivalents with a rule: `num1`/`num2` → `FractionNumeratorDisplayStyleShiftUp` /
 `FractionNumeratorShiftUp`; `denom1`/`denom2` → `FractionDenominatorDisplayStyleShiftDown` /
 `FractionDenominatorShiftDown`.
+
+Without a rule, the MATH table has a separate family, the Stack* constants:
+`num1` → `StackTopDisplayStyleShiftUp`, `num3` → `StackTopShiftUp`,
+`denom1` → `StackBottomDisplayStyleShiftDown`, `denom2` → `StackBottomShiftDown`,
+7θ → `StackDisplayStyleGapMin`, 3θ → `StackGapMin`.  Sources: the spec suggests
+3× and 7× the default rule thickness for the two gaps and the same values as the
+display-style Fraction* shifts for the display-style Stack* shifts; LuaTeX's
+`make_fraction` (`mlist.c`) uses exactly these for rule-less fractions, and fills
+them from `num3`/`num1`/`denom2`/`denom1` for TFM fonts.  XeTeX
+(`XeTeXOTMath.cpp`, `TeX_sym_to_OT_map`) maps only `num3` and the gaps to Stack*,
+and keeps the Fraction* shifts for `num1`, `denom1`, and `denom2`.  The two
+engines agree for fonts whose Stack* and Fraction* shifts are equal (New CM,
+Pagella, Schola, Termes, Bonum, Fira Math), and differ for STIX Two and Luciole.
 
 ### 15c — Fraction without rule: minimum gap clamp
 
@@ -224,10 +270,24 @@ Rules 15b and 15d are implemented using the OpenType MATH table constants
 variants, which encode the clearance directly.
 
 Rule 15c is implemented for `NodeKind.Genfrac` (`\binom`/`\dbinom`/`\tbinom`) via
-`_layout_genfrac!`.  KaTeX uses `num3` (no-rule non-display shift) which has no
-OpenType equivalent; TeXLayout uses `FractionNumeratorShiftUp` (`num2`) instead.
-The visual difference is negligible because the gap clamping still guarantees a
-reasonable minimum gap via `FractionNumeratorGapMin`.
+`_layout_genfrac!` with the Stack* constants and TeX's single mutual clearance,
+as in LuaTeX.  (Until 2026-10 it used the Fraction* constants with separate
+clearances against the math axis, i.e. Rule 15d with zero rule thickness, on the
+mistaken premise that `num3` had no OpenType equivalent.)
+
+Rule 15e is implemented for `\binom`: the delimiters have the fixed minimum
+size `delim1` in Display style and `delim2` otherwise, whatever the content
+(`_GENFRAC_DELIM_EM`).  The MATH table has no equivalent, so TeXLayout uses
+Computer Modern's values, 2.39 em and 1.01 em (cmsy10 `\fontdimen20`/`21`), as
+KaTeX does.  LuaTeX's luaotfload defaults to 2.40 and 1.01, which in New CM
+selects the next parenthesis variant (2.99 em rather than 2.39 em); XeTeX maps
+`delim1` to `DelimitedSubFormulaMinHeight` and `delim2` to
+`min(1.5 em, delim1)`.  Until 2026-10 the delimiters were sized to the content.
+
+TeX, amsmath, and KaTeX treat `\frac` and `\binom` as ordinary atoms (amsmath
+wraps them in a brace group; KaTeX builds an `mord`), but TeXLayout's
+`_atom_class` returns `:inner` for `NodeKind.Frac` and `NodeKind.Genfrac`, which
+adds thin spaces around them.  Not yet changed.
 
 Rule 15e (`\genfrac` arbitrary delimiters) and `\atop` (no-rule, no delimiters)
 are not implemented.
@@ -261,8 +321,54 @@ subShift = base.depth  + subDrop × script_size_multiplier
 **Status — matches KaTeX.**  The `_is_char_box` helper mirrors KaTeX's
 `isCharacterBox`: true for `NodeKind.Char`, for `NodeKind.Command` nodes that are not large
 operators (Greek letters, etc.), and recursively for `NodeKind.FontSwitch` wrapping a
-single character.  Large operators (`\int`, `\sum`, …), named operators (`\sin`,
-…), fractions, and groups all return false, triggering the supDrop/subDrop clamp.
+single character.  A group holding exactly one such node (`{x}`) also returns
+true, because TeX replaces a one-atom group by the atom (tex.web §1186).  Large
+operators (`\int`, `\sum`, …), named operators (`\sin`, …), fractions, and
+longer groups return false, triggering the supDrop/subDrop clamp.
+
+### Italic correction after math characters
+
+**Source:** tex.web §752–§756 (`make_ord`, `make_scripts`), §749 (`make_op`);
+xetex.web keeps both rules for OpenType math fonts.
+
+TeX appends a kern of the character's italic correction after every math
+character that has no subscript.  With a subscript, the kern is omitted and the
+correction δ is passed to `make_scripts`: the subscript sits at the uncorrected
+advance and the superscript δ to its right.  The script box's width is
+`max(sub, δ + sup)` plus the space after the script.
+
+**Status — matches LuaTeX and XeTeX.**  `_layout_char!` and the ordinary-symbol
+path of `_layout_command!` return the advance plus the MATH-table italic
+correction, for `FontSlot.Math` glyphs in math mode only; upright text,
+`\text{…}`, and operator names get none.  `_subscript_italic_correction_em`
+takes the correction back for a subscript on a character base (as decided by
+`_is_char_box`) or a large operator.  Large operators keep XeTeX's OpenType
+`make_op` rule: the operator's width excludes δ, the subscript sits at
+advance − δ, and the superscript at the advance.  Measured with LuaLaTeX and
+XeLaTeX (New CM Math, 10 pt), `$f$`, `$fg$`, `$VW$`, `$\sqrt{f}$`,
+`$\overline{fy}$`, and `$b \pmod{n}$` now have exactly TeX's widths.  Both
+engines keep the kern inside fraction parts, radicands, accents, overlines,
+and scripts: `\overline{f}` and `\overline{f\kern0pt}` measure the same, and
+likewise for the other constructs.  Classic TeX's `clean_box` drops the kern
+from a box holding one character and its kern.  XeTeX's OpenType glyphs are
+not character nodes, so that simplification never applies; LuaTeX's
+`clean_box` (mlist.c) still contains it, but LuaLaTeX measures the same as
+XeLaTeX.  Why it does not fire there was not traced.
+
+Upright, sans-serif, and monospace math-alphabet letters (`\mathrm`,
+`\mathsf`, `\mathtt`) also take the MATH table's correction where the font
+gives one (New CM Math: up to 0.079 em for upright, 0.04 em for monospace), as
+LuaTeX does for unicode-math's `\symup` and `\symtt`.  unicode-math's default
+`\mathrm` and `\mathtt` use the text fonts instead, which carry no correction.
+
+KaTeX differs: it adds the italic correction as a right margin only to the
+characters it marks as needing it and shifts subscripts left by it
+(`supsub.ts`).  TeXLayout follows TeX here.
+
+**Not implemented:** OpenType math kerning (`MathKernInfo`) between a base and
+its scripts, and the `ssty` script-size glyph variants.  TeX's script glyphs
+are wider (New CM Math `i.st` has an advance of 404 units against 345 for
+`i`), so TeXLayout's scripts are narrower than LuaTeX's.
 
 **Deviation — drops are taken at the base size.**  TeX reads σ₁₈/σ₁₉ from the
 script font, and KaTeX and XeTeX scale the drops by the script size multiplier
@@ -424,10 +530,12 @@ constants are noted for quick lookup.
 | `\left`/`\right` auto-sized delimiters | `NodeKind.Delimited` | Smallest variant from `vert_constructions` reaching max(0.901 × 2δ, 2δ − 0.5 em), δ being the content's greatest extent from the math axis (TeXbook rule 19, `\delimiterfactor` 901, `\delimitershortfall` 5 pt); centred on math axis.  Matches LuaLaTeX's variant choice for NewCMMath in every case tried; XeLaTeX differs for `\left(\frac{\frac{a}{b}}{c}\right)` and `\left(\int_0^1 f\right)`, where its fraction and script placement differ (see 18a).  Matrix environments size their delimiters by the same rule against the array's strutted box, and `\left…\right` around a lone array-like environment hands its delimiters to the matrix layout so that they do too (as in LuaLaTeX, a parenthesis can then fall short of a tall entry's ink); a matrix among other content gets full ink coverage, because its struts are not visible to the measurement |
 | `\middle` delimiter | `NodeKind.Middle` | Auto-sized to match the enclosing `\left`/`\right` pair; multiple per group supported |
 | `\bigl`/`\bigr`/`\big` families | `NodeKind.BigDelim` | 4 fixed tiers (1.2/1.8/2.4/3.0 em × upm); size is scale-independent |
-| Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 27 operators; Display-style limits for operators in `_LIMITS_OPERATORS` |
+| Named operators (`\sin`, `\lim`, …) | `NodeKind.Operator` | Upright glyphs via `glyph_metrics_upright`; 34 operators; Display-style limits for operators in `_LIMITS_OPERATORS`; two-word names (`\liminf`, `\injlim`, …) carry spelling children with amsopn's 3 mu thin space (`_SPACED_OPERATOR_NAMES`) |
+| `\bmod`, `\pmod`, `\mod`, `\pod` | `NodeKind.Group` (expanded in the parser) | amsmath definitions: `\bmod` is 5 mu, upright "mod", 5 mu (net effect of its `\nonscript\mskip-\medmuskip` glue in every style); `\pod`/`\pmod`/`\mod` open with 18 mu in Display style and 8/8/12 mu otherwise via `NodeKind.MathChoice`.  amsmath decides by display *mode* (`\if@display`), TeXLayout and KaTeX by display *style* |
+| `\mathchoice{D}{T}{S}{SS}` | `NodeKind.MathChoice` | Branch chosen by style and spliced into the surrounding list before inter-atom spacing, as in TeX's `mlist_to_hlist` |
 | Large operators (`\sum`, `\int`, …) | `NodeKind.Command` | Display-size variant: the first in `vert_constructions` at least `display_operator_min_height` tall, else the largest (STIX Two's minimum exceeds all its variants); codepoints in `_DISPLAY_OP_CODEPOINTS` |
 | Limits placement | `NodeKind.Decorated` | Sub/sup centred below/above in Display style; uses `UpperLimitGapMin`, `LowerLimitGapMin`, `UpperLimitBaselineRiseMin`, `LowerLimitBaselineDropMin` |
-| `\limits`/`\nolimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch |
+| `\limits`/`\nolimits`/`\displaylimits` override | `NodeKind.LimitsOverride` | Wraps the preceding base; checked before script dispatch.  `"displaylimits"` (also produced by `\operatorname*`) means limits in Display style only; the last modifier wins |
 | Horizontal extensibles (`\widehat`, `\widetilde`) | `NodeKind.Accent` | Smallest pre-built variant from `horiz_constructions` that covers the base; extensible assembly if no variant fits |
 | Horizontal braces (`\overbrace`, `\underbrace`, …) | `NodeKind.HorizBrace` | Widest-fitting variant or assembly from `horiz_constructions`; limits-style note placement for sub/superscripts; 6 commands |
 | Extensible arrows (`\xrightarrow`, …) | `NodeKind.XArrow` | 18 commands; arrow stretched to cover labels and set on the baseline like a relation (the font puts the shaft on the axis; centring the ink would misplace harpoon shafts); assemblies widen their overlaps to match the width exactly; labels at `_XARROW_KERN` (0.111 em) clearance.  Where the MATH table cannot stretch the arrow (Fira Math, some STIX Two arrows), it is built from pieces as amsmath's `\arrowfill@` does (`_XARROW_FILL_PIECES`); `\xmapsto`, the hook arrows and stacked harpoons then keep their natural width |
@@ -435,10 +543,10 @@ constants are noted for quick lookup.
 | Style switches (`\displaystyle`, …) | `NodeKind.StyleOverride` | Consumes rest of current group; resets both style and scale absolutely (see AGENTS.md encoding note) |
 | Font sizing (`\large`, `\tiny`, …) | `NodeKind.Sizing` | Multiplier stored as decimal string in `value`; multiplies current scale; 10 levels from 0.5× to 2.488× |
 | `\dfrac`, `\tfrac` | `NodeKind.StyleOverride` wrapping `NodeKind.Frac` | Forces Display or Text style with absolute scale reset |
-| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c gap clamping; auto-sized `()` delimiters via `_layout_delim!` |
+| `\binom`, `\dbinom`, `\tbinom` | `NodeKind.Genfrac` | Rule 15c with the Stack* constants and one mutual clearance; Rule 15e delimiters of fixed size `delim1`/`delim2` (2.39/1.01 em) via `_layout_delim!` |
 | Array/matrix environments | `NodeKind.Matrix` | 8 named environments + `\begin{array}{colspec}`; per-column l/c/r alignment; single and double `||` vertical rules; two-pass grid layout.  Spacing follows LaTeX + amsmath (`_MATRIX_SPACING`): `array` has `\arraycolsep` (0.5 em) on both sides of every column, the matrix family drops the outer two, `cases` is `@{}l@{\quad}l@{}` (the `\quad` is part of the first column) with `\arraystretch` 1.2, and every row has an `\@arstrut` of 0.84/0.36 em × `\arraystretch` with no further row gap; a `|` takes no width and `||` adds `\doublerulesep` (0.2 em).  `\\[len]` deepens an array row to at least the strut depth plus len (`\@xargarraycr`) and adds to the gap when negative.  `smallmatrix` sets `\scriptstyle` entries 0.2777 em apart, inside thin spaces, on a 0.6 em `\baselineskip` with 0.15 em `\lineskip`; `\\[len]` adds space.  Widths and heights agree with LuaLaTeX to 0.001 pt in NewCM and Bonum, except that LuaTeX adds a `\left` delimiter variant's italic correction (XeTeX does not).  `_layout_matrix_box!` returns the strutted box for tests |
 | Alignments (`aligned`, `gathered`, `align`, `gather`, `split`) and `equation` | `NodeKind.Matrix` | Display-style cells; right/left column pairs glued at the `&` (the right cell starts with `{}`), pairs `\minalignsep` (1 em) apart, no outer margin; every row carries `\strut@` (0.84/0.36 em) and rows are `\baselineskip` + `\jot` (1.5 em) apart, or `\lineskip` + `\jot` (0.4 em) clear when taller (`\openup\jot` also raises `\lineskiplimit` to 0.3 em); `\\[len]` adds space; Ord atoms (`\vcenter`).  The display forms are set as the inline ones.  `equation` is a plain display (`vcenter = false`, no strut), identical to `\[…\]`.  Widths, heights, and depths agree with LuaLaTeX to 0.001 pt (30 cases, NewCM and Bonum) |
-| `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed |
+| `\text{}`, `\mbox{}` | `NodeKind.Text` | Switches to `_with_text_mode`; upright glyphs from `regular` font slot; spaces preserved; inter-atom spacing suppressed.  An enclosing math alphabet (`\mathbf`, `\boldsymbol`, …) does not restyle the text, as in LaTeX; KaTeX deviates (its `makeOrd` keeps the math font in text mode) |
 | Text styles (`\textbf`, `\textit`, `\textsc`, …) | `NodeKind.Text` inside math; `TextAttrs` in documents | Shared command semantics in `text_styles.jl`; `\textsc` becomes a semantic feature and HarfBuzz applies OpenType `smcp` |
 | Escaped literal characters (`\#`, `\$`, `\%`, …) | `NodeKind.Char` in math; text buffer characters in documents | Shared special-character table plus mode-specific math/text aliases in `parser_tables.jl`; escaped dollars are excluded from Makie's math-shift count |
 | `default_font_family()` / `set_default_font_family!()` | — | Session-wide default; lazy artifact download; Makie extension picks up changes automatically |

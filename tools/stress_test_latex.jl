@@ -1,5 +1,9 @@
 # Generate a LaTeX stress-test sheet for TeXLayout.jl.
 #
+# The sheet uses LaTeX's default math fonts, not the bundled OpenType math
+# fonts, so it is only a rough visual reference.  To compare geometry with TeX
+# using the same font files, use tools/compare_tex.jl.
+#
 # Writes a .tex source file that approximately reproduces the stress-test sheet.
 # Compile with xelatex (handles Unicode section titles without extra packages):
 #

@@ -136,6 +136,7 @@ end
 # Parsed MATH tables are immutable and depend only on the math-font path, so
 # repeated layouts can safely reuse them across calls.
 const _MATH_TABLE_CACHE = Dict{String, MathTable}()
+const _MATH_TABLE_CACHE_LOCK = ReentrantLock()   # see the thread-safety note in fonts.jl
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Parser implementation
@@ -292,32 +293,32 @@ function _cff_top_dict_charset_offset(dict_bytes::Vector{UInt8})::Int
         if b == 28                     # int16
             v = (Int(dict_bytes[i + 1]) << 8) | Int(dict_bytes[i + 2])
             v >= 0x8000 && (v -= 0x00010000)
-            push!(operands, v);  i += 3
+            push!(operands, v); i += 3
         elseif b == 29                 # int32
             v = (Int(dict_bytes[i + 1]) << 24) | (Int(dict_bytes[i + 2]) << 16) |
                 (Int(dict_bytes[i + 3]) << 8) | Int(dict_bytes[i + 4])
             # 0x100000000 is UInt64; subtract as Int to avoid UInt64 promotion.
             v >= 0x80000000 && (v -= Int(0x0000000100000000))
-            push!(operands, v);  i += 5
+            push!(operands, v); i += 5
         elseif b == 30                 # real — skip to 0xF end nibble
             i += 1
             while i <= length(dict_bytes)
-                byte = dict_bytes[i];  i += 1
+                byte = dict_bytes[i]; i += 1
                 ((byte & 0xF0) == 0xF0 || (byte & 0x0F) == 0x0F) && break
             end
         elseif 32 <= b <= 246
-            push!(operands, b - 139);  i += 1
+            push!(operands, b - 139); i += 1
         elseif 247 <= b <= 250
-            push!(operands, (b - 247) * 256 + Int(dict_bytes[i + 1]) + 108);  i += 2
+            push!(operands, (b - 247) * 256 + Int(dict_bytes[i + 1]) + 108); i += 2
         elseif 251 <= b <= 254
-            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i + 1]) - 108);  i += 2
+            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i + 1]) - 108); i += 2
         elseif b == 12                 # two-byte escape operator
-            empty!(operands);  i += 2
+            empty!(operands); i += 2
         else                           # single-byte operator
             if b == 15 && !isempty(operands)
                 return last(operands)
             end
-            empty!(operands);  i += 1
+            empty!(operands); i += 1
         end
     end
     return 0
@@ -369,24 +370,24 @@ function _parse_cff_glyph_names(data::Vector{UInt8}, cff_start::Int)::Vector{Str
             end
         elseif fmt == 1
             # Ranges with uint8 numLeft
-            gid = 1;  p = cs + 1
+            gid = 1; p = cs + 1
             while gid < num_glyphs
                 sid = Int(_u16(data, p))
                 n_left = Int(data[p + 2])
                 for k in 0:n_left
                     gid >= num_glyphs && break
-                    names[gid + 1] = sid_to_name(sid + k);  gid += 1
+                    names[gid + 1] = sid_to_name(sid + k); gid += 1
                 end
                 p += 3
             end
         else  # fmt == 2: ranges with uint16 numLeft
-            gid = 1;  p = cs + 1
+            gid = 1; p = cs + 1
             while gid < num_glyphs
                 sid = Int(_u16(data, p))
                 n_left = Int(_u16(data, p + 2))
                 for k in 0:n_left
                     gid >= num_glyphs && break
-                    names[gid + 1] = sid_to_name(sid + k);  gid += 1
+                    names[gid + 1] = sid_to_name(sid + k); gid += 1
                 end
                 p += 4
             end
@@ -465,7 +466,7 @@ function _parse_glyph_names(data::Vector{UInt8})::Vector{String}
         p = ps + 34 + 2 * n          # first Pascal string
         post_end = ps + tlen - 1
         while length(custom) < n_custom && p <= post_end
-            len = Int(data[p]);  p += 1
+            len = Int(data[p]); p += 1
             push!(custom, len > 0 ? String(data[p:(p + len - 1)]) : "")
             p += len
         end
@@ -517,10 +518,10 @@ end
 
 function _parse_math_constants(data::Vector{UInt8}, p::Int)::MathConstants
     # Fields 1–4: plain int16 / uint16 (NOT MathValueRecord)
-    script_percent = Int(_i16(data, p));     p += 2
-    script_script_percent = Int(_i16(data, p));     p += 2
-    delim_min_h = Int(_u16(data, p));     p += 2
-    display_op_min_h = Int(_u16(data, p));     p += 2
+    script_percent = Int(_i16(data, p)); p += 2
+    script_script_percent = Int(_i16(data, p)); p += 2
+    delim_min_h = Int(_u16(data, p)); p += 2
+    display_op_min_h = Int(_u16(data, p)); p += 2
 
     # Fields 5–55: MathValueRecord = int16 value + Offset16 device table.
     # We read only the signed value and skip the device-table offset (2 bytes).
@@ -848,7 +849,7 @@ Parse the MATH table from an OpenType font file, caching the result by path.
 """
 function load_math_table(font_path::AbstractString)::MathTable
     path = String(font_path)
-    return get!(_MATH_TABLE_CACHE, path) do
+    return @lock _MATH_TABLE_CACHE_LOCK get!(_MATH_TABLE_CACHE, path) do
         data = read(path)
         upm = _parse_upm(data)
         glyph_names = _parse_glyph_names(data)

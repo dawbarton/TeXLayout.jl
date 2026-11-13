@@ -134,19 +134,6 @@ const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
 # Control spaces that produce one significant interword space in text, like `~`.
 const _TEXT_INTERWORD_SPACES = ("\\ ", "\\\n", "\\\t", "\\space", "\\nobreakspace")
 
-# Skippable whitespace after a control word or before an undelimited argument:
-# ordinary spaces and single newlines, but not a blank line, which still ends
-# the paragraph in TeX.
-@inline _is_skippable_text_space(tok::Token) =
-    _is_ignorable_space(tok) && !occursin(_BLANK_LINE_RE, tok.value)
-
-function _skip_text_spaces!(p::_Parser)
-    while _is_skippable_text_space(_current(p))
-        _advance!(p)
-    end
-    return p
-end
-
 # A control word (`\quad`) swallows the spaces after it; a control symbol
 # (`\,`, `\ `) does not.
 @inline _is_control_word(cmd::AbstractString) =
@@ -159,32 +146,62 @@ end
 #   - font-switch command (new_attrs differs from builder.attrs)
 #   - \text / \mbox (new_attrs == builder.attrs, just a grouping scope)
 #   - bare { (new_attrs == builder.attrs, plain grouping)
-# As in TeX, spaces before the argument are skipped and an unbraced argument is
-# a single token: `\textbf x and more` bolds only the x.
 function _parse_text_group!(p::_Parser, builder::_DocBuilder, new_attrs::TextAttrs)
-    _skip_text_spaces!(p)
     _flush_span!(builder)
     old_attrs = builder.attrs
     builder.attrs = new_attrs
-    braced = _current(p).kind === TokenKind.LBrace
-    braced && _advance!(p)   # consume '{'
-    _parse_text_body!(p, builder, true; single = !braced)   # stop at matching '}'
+    if _current(p).kind === TokenKind.LBrace
+        _advance!(p)   # consume '{'
+        _parse_text_body!(p, builder, true)             # stop at matching '}'
+        _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
+    else
+        # Undelimited argument: TeX takes the next token, after the spaces that
+        # follow the control word (`\textbf x rest` is bold "x").  A nested
+        # command is taken with its own argument, where TeX would stop with an
+        # error.  A paragraph break, `}`, or the end of input leaves it empty.
+        _skip_space_before_argument!(p)
+        tok = _current(p)
+        tok.kind === TokenKind.Space || tok.kind === TokenKind.RBrace || tok.kind === TokenKind.EOF ||
+            _parse_text_body!(p, builder, true; single = true)
+    end
     _flush_span!(builder)
     builder.attrs = old_attrs
-    return braced && _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
+    return nothing
+end
+
+# Whitespace between a control word and its argument, which TeX discards.  A
+# blank line is a paragraph break, not ignorable space.
+_is_argument_space(tok::Token) = _is_ignorable_space(tok) && !occursin(_BLANK_LINE_RE, tok.value)
+
+function _skip_space_before_argument!(p::_Parser)
+    while _is_argument_space(_current(p))
+        _advance!(p)
+    end
+    return nothing
+end
+
+# TeX discards the space after a control word, so `\textbf {x}` takes `{x}` as
+# its argument.  Skip the whitespace here only when a group follows; the
+# unbraced form skips it when reading its single-token argument.
+function _skip_space_before_group!(p::_Parser)
+    n = 0
+    while _is_argument_space(_peek(p, n))
+        n += 1
+    end
+    n > 0 && _peek(p, n).kind === TokenKind.LBrace && (p.pos += n)
+    return nothing
 end
 
 # Core text-mode dispatch loop.
 # `in_group`: when true, stop at the next TokenKind.RBrace (matching the group's '{').
-# `single`: process one item only (an unbraced command argument).
+# `single`: when true, parse one item only (an undelimited command argument).
 function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; single::Bool = false)
+    single_start = p.pos
     while true
+        single && p.pos > single_start && break
         tok = _current(p)
         tok.kind === TokenKind.EOF && break
         in_group && tok.kind === TokenKind.RBrace && break
-        # An unbraced argument cannot be a paragraph break (TeX reports a
-        # runaway argument); leave it for the enclosing loop.
-        single && tok.kind === TokenKind.Space && occursin(_BLANK_LINE_RE, tok.value) && break
 
         if tok.kind === TokenKind.Char
             in_group || _commit_space!(builder)
@@ -280,7 +297,7 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; sin
                 builder.pending_space = true
                 builder.pending_nbsp = true
             end
-            _is_control_word(tok.value) && _skip_text_spaces!(p)
+            _is_control_word(tok.value) && _skip_space_before_argument!(p)
 
         elseif tok.kind === TokenKind.Command && haskey(_SPACE_WIDTHS, tok.value)
             # Fixed-width spaces (`\quad`, `\,`, `\enspace`, …) become an inline
@@ -289,16 +306,18 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; sin
             _advance!(p)
             _flush_text_run!(builder)
             push!(builder.cur_runs, MathRun(space_node(_SPACE_WIDTHS[tok.value]), Text))
-            _is_control_word(tok.value) && _skip_text_spaces!(p)
+            _is_control_word(tok.value) && _skip_space_before_argument!(p)
 
         elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_STYLE_COMMANDS
             in_group || _commit_space!(builder)
             cmd = _advance!(p).value
+            _skip_space_before_group!(p)
             _parse_text_group!(p, builder, _apply_text_style(cmd, builder.attrs))
 
         elseif tok.kind === TokenKind.Command && (tok.value == "\\text" || tok.value == "\\mbox")
             in_group || _commit_space!(builder)
             _advance!(p)
+            _skip_space_before_group!(p)
             _parse_text_group!(p, builder, builder.attrs)   # no attr change
 
         elseif tok.kind === TokenKind.Command && haskey(_TEXT_LITERAL_CHARS, tok.value)
@@ -321,7 +340,6 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; sin
         else
             _advance!(p)   # unknown command, stray token — skip
         end
-        single && break
     end
     return
 end

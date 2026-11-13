@@ -69,9 +69,20 @@ function _layout_matrix_box!(
     payload = _decode_matrix_payload(node.value)
     env_name = payload.env_name
     nrow = payload.nrow
+    nrow == 0 && return (width = 0.0, height = 0.0, depth = 0.0)
     col_aligns, vrule = _parse_colspec(payload.colspec)
+    # Cells are stored row-major with the observed column count as stride.  An
+    # explicit `array` colspec may declare more columns than are used (valid
+    # LaTeX) or fewer (extra cells are centred and carry no rules).
+    stride = length(node.children) ÷ nrow
+    for _ in (length(col_aligns) + 1):stride
+        push!(col_aligns, :c)
+        insert!(vrule, lastindex(vrule), 0)   # keep trailing rules after the last column
+    end
     ncol = length(col_aligns)
-    (nrow == 0 || ncol == 0) && return (width = 0.0, height = 0.0, depth = 0.0)
+    ncol == 0 && return (width = 0.0, height = 0.0, depth = 0.0)
+    # Index of the cell at (r, c), or 0 when that column was not used in the source.
+    cell_index(r, c) = c <= stride ? (r - 1) * stride + c : 0
 
     info = get(_MATRIX_ENVS, env_name, _MATRIX_ENVS["matrix"])
     spacing = get(_MATRIX_SPACING, env_name, _MATRIX_SPACING["matrix"])
@@ -104,8 +115,8 @@ function _layout_matrix_box!(
 
     for r in 1:nrow, c in 1:ncol
         cell_starts[r, c] = lastindex(boxes) + 1
-        ci = (r - 1) * ncol + c
-        if ci > length(node.children)
+        ci = cell_index(r, c)
+        if ci == 0
             cell_stops[r, c] = lastindex(boxes)
             continue
         end
@@ -209,8 +220,7 @@ function _layout_matrix_box!(
 
     # ── Second pass: move all cells to their row/column positions ──
     for r in 1:nrow, c in 1:ncol
-        ci = (r - 1) * ncol + c
-        ci > length(node.children) && continue
+        cell_index(r, c) == 0 && continue
         cell_starts[r, c] <= cell_stops[r, c] || continue
 
         # Per-column alignment: :l = flush left, :r = flush right, :c = centred.

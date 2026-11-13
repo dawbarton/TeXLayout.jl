@@ -44,7 +44,7 @@ EnumX.@enumx NodeKind begin
     Space         # explicit space token (\, \; \quad etc.)
     Text          # \text{…} / \mbox{…}: text-mode fragment; children[1] = body
     Operator      # named math operator rendered upright: \sin, \cos, \operatorname{…}
-    LimitsOverride # \limits / \nolimits / \displaylimits: wraps a base; value is "limits", "nolimits" or "displaylimits"
+    LimitsOverride # \limits / \nolimits / \displaylimits: wraps a base; value is "limits", "nolimits", or "displaylimits"
     FontSwitch    # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     HorizBrace    # \overbrace / \underbrace / …; value = command name; children[1] = body
     Matrix        # \begin{env}…\end{env}: value encoded by _MatrixPayload; children = flat row-major cells
@@ -53,6 +53,7 @@ EnumX.@enumx NodeKind begin
     Sizing        # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body
     XArrow        # \xrightarrow etc.; value = command name; children = [above] or [above, below]
     InlineMath    # $…$ inside \text{…}: children[1] = math body, laid out in math mode
+    MathChoice    # \mathchoice{D}{T}{S}{SS}: children = the four branches; layout picks one by style
 end
 
 """Categories of token produced by the lexer."""

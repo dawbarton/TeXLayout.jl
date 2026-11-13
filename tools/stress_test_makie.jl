@@ -157,7 +157,7 @@ function run_stress_test_makie(
     H += 4  # bottom bar
 
     # ── Figure setup ──────────────────────────────────────────────────────────
-    fig = CairoMakie.Figure(size = (W, H), backgroundcolor = :white)
+    fig = CairoMakie.Figure(; size = (W, H), backgroundcolor = :white)
     ax = CairoMakie.Axis(
         fig[1, 1]; aspect = CairoMakie.DataAspect(), backgroundcolor = :white,
     )

@@ -170,7 +170,7 @@ function main()
         end
     end
 
-    fig = Figure(size = (200, 200), backgroundcolor = :white)
+    fig = Figure(; size = (200, 200), backgroundcolor = :white)
     ax = Axis(fig[1, 1]; aspect = DataAspect(), backgroundcolor = :white)
     CairoMakie.hidespines!(ax)
     CairoMakie.hidedecorations!(ax)

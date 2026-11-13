@@ -248,7 +248,7 @@
         node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"
         # \right is consumed — only x remains as an inner child
@@ -260,7 +260,7 @@
         node = parse_latex("\\left. x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == ""          # null delimiter maps to empty string
         @test parts[2] == "parenright"
     end
@@ -269,7 +269,7 @@
         node = parse_latex("\\left\\{ x \\right\\}")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == "braceleft"
         @test parts[2] == "braceright"
     end
@@ -832,6 +832,87 @@
             arrow = parse_latex(raw"\xrightarrow [a]{b}").children[1]
             @test arrow.kind === NodeKind.XArrow && length(arrow.children) == 2
         end
+        @testset "Space before ^/_ is ignored: x ^2, x^2 _1" begin
+            sup = only(parse_latex("x ^2").children)
+            @test sup.kind === NodeKind.Superscript
+            @test sup.children[2].value == "2"
+
+            dec = only(parse_latex("x^2 _1").children)
+            @test dec.kind === NodeKind.Decorated
+            @test dec.children[2].value == "1"   # [base, sub, sup]
+            @test dec.children[3].value == "2"
+
+            dec = only(parse_latex(raw"\left( x \right) ^2").children)
+            @test dec.kind === NodeKind.Superscript
+            @test dec.children[1].kind === NodeKind.Delimited
+        end
+
+        @testset "Space before \\limits is ignored: \\sum \\limits _{i}" begin
+            node = only(parse_latex(raw"\sum \limits _{i}").children)
+            @test node.kind === NodeKind.Subscript
+            @test node.children[1].kind === NodeKind.LimitsOverride
+            @test node.children[1].value == "limits"
+        end
+
+        @testset "Space not followed by a script is kept inside \\text{}" begin
+            body = only(parse_latex(raw"\text{a b}").children).children[1]
+            @test [c.value for c in body.children] == ["a", " ", "b"]
+        end
+
+        @testset "Space after a control word: \\left (, \\middle |, \\bigl (" begin
+            delim = only(parse_latex(raw"\left ( x \middle | y \right )").children)
+            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            @test (payload.left, payload.right) == ("parenleft", "parenright")
+            @test any(c -> c.kind === NodeKind.Middle && c.value == "bar", delim.children)
+
+            big = only(parse_latex(raw"\bigl (").children)
+            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == "parenleft"
+        end
+
+        @testset "Space after a control word: \\kern 1em, \\mkern 18mu" begin
+            for (source, width) in (("a\\kern 1emb", 1.0), ("a\\mkern 18mub", 1.0), ("a\\hskip {2em}b", 2.0))
+                children = parse_latex(source).children
+                @test [c.kind for c in children] == [NodeKind.Char, NodeKind.Space, NodeKind.Char]
+                @test children[2].width ≈ width
+            end
+        end
+
+        @testset "Space after a control word inside \\text{} is dropped" begin
+            # TeX skips spaces after a control word in every mode, but not after a
+            # control symbol such as \, or after an argument's closing brace.
+            show(n) = n.kind === NodeKind.Space ? "space($(round(n.width; digits = 3)))" : n.kind === NodeKind.Char ? n.value : string(n.kind)
+            body = only(parse_latex(raw"\text{a\quad b\, c\textdollar 5\textbf{d} e}").children).children[1]
+            @test show.(body.children) == ["a", "space(1.0)", "b", "space(0.167)", " ", "c", "\$", "5", "Text", " ", "e"]
+        end
+
+        @testset "Space after a control word: \\text {a b}" begin
+            node = only(parse_latex(raw"\text {a b}").children)
+            @test node.kind === NodeKind.Text
+            @test [c.value for c in node.children[1].children] == ["a", " ", "b"]
+        end
+
+        @testset "Spaces around optional [...] arguments: \\sqrt, \\xrightarrow" begin
+            for source in (raw"\sqrt[3]{x}", raw"\sqrt [3]{x}", raw"\sqrt[ 3 ]{x}")
+                node = only(parse_latex(source).children)
+                @test node.kind === NodeKind.Sqrt
+                @test length(node.children) == 2
+                @test [c.value for c in node.children[1].children] == ["3"]
+                @test node.children[2].value == "x"
+            end
+
+            node = only(parse_latex(raw"\xrightarrow [ f ]{g}").children)
+            @test node.kind === NodeKind.XArrow
+            @test node.children[1].value == "g"   # [above, below]
+            @test [c.value for c in node.children[2].children] == ["f"]
+        end
+
+        @testset "~ is kept inside matrix cells" begin
+            matrix = only(parse_latex(raw"\begin{matrix} a~b \end{matrix}").children)
+            cell = only(matrix.children)
+            @test [c.kind for c in cell.children] ==
+                [NodeKind.Char, NodeKind.Space, NodeKind.Char]
+            @test cell.children[2].width ≈ TeXLayout._NORMAL_SPACE_EM
+        end
     end
 
     @testset "Matrix row spacing \\[len]" begin
@@ -912,6 +993,117 @@
         nested = only(parse_latex(raw"\begin{pmatrix}\begin{matrix}a&b\end{matrix}&c\end{pmatrix}").children)
         @test length(nested.children) == 2
         @test length(nested.children[1].children[1].children) == 2
+    end
+
+    @testset "Standard LaTeX operator names: \\sinh, \\cosh, \\tanh, \\coth, \\lg" begin
+        for name in ("sinh", "cosh", "tanh", "coth", "lg")
+            op = only(parse_latex("\\" * name).children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == name
+        end
+    end
+
+    @testset "Two-word operator names carry a thin space: \\liminf, \\injlim" begin
+        for (name, spelling) in (
+                ("liminf", "lim inf"), ("limsup", "lim sup"),
+                ("injlim", "inj lim"), ("projlim", "proj lim"),
+            )
+            op = only(parse_latex("\\" * name).children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == name
+            @test join(c.kind === NodeKind.Space ? " " : c.value for c in op.children) == spelling
+            @test only(filter(c -> c.kind === NodeKind.Space, op.children)).width ≈ 3 / 18
+        end
+    end
+
+    @testset "\\operatorname* takes \\displaylimits; spaces in the name are kept" begin
+        for source in (raw"\operatorname*{arg\,max}", raw"\operatorname *{arg\,max}")
+            node = only(parse_latex(source).children)
+            @test node.kind === NodeKind.LimitsOverride
+            @test node.value == "displaylimits"
+            op = only(node.children)
+            @test op.kind === NodeKind.Operator
+            @test op.value == "argmax"
+            @test [c.kind for c in op.children] == [
+                NodeKind.Char, NodeKind.Char, NodeKind.Char, NodeKind.Space,
+                NodeKind.Char, NodeKind.Char, NodeKind.Char,
+            ]
+            @test op.children[4].width ≈ 3 / 18
+        end
+        # Unstarred: a plain operator, and no stray `*`.
+        op = only(parse_latex(raw"\operatorname{arg\,max}").children)
+        @test op.kind === NodeKind.Operator
+        @test op.value == "argmax"
+        @test length(op.children) == 7
+        @test isempty(only(parse_latex(raw"\operatorname{ker}").children).children)
+    end
+
+    @testset "\\limits, \\nolimits, \\displaylimits: the last modifier wins" begin
+        node = only(parse_latex(raw"\operatorname*{f}\nolimits_x").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Operator
+
+        node = only(parse_latex(raw"\sum\limits \nolimits_i").children)
+        @test node.kind === NodeKind.Subscript
+        @test node.children[1].value == "nolimits"
+        @test node.children[1].children[1].kind === NodeKind.Command
+
+        node = only(parse_latex(raw"\int\displaylimits_0^1").children)
+        @test node.kind === NodeKind.Decorated
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "displaylimits"
+    end
+
+    @testset "\\bmod, \\pmod, \\mod, \\pod expand to their amsmath spelling" begin
+        kinds(node) = [c.kind for c in node.children]
+        # \bmod: 5 mu, upright "mod", 5 mu, as one ordinary group.
+        a, bmod, b = parse_latex(raw"a \bmod b").children
+        @test bmod.kind === NodeKind.Group
+        @test kinds(bmod) == [NodeKind.Space, NodeKind.Operator, NodeKind.Space]
+        @test bmod.children[2].value == "mod"
+        @test all(c -> c.width ≈ 5 / 18, bmod.children[[1, 3]])
+        # \pod{n}: choice of 18 mu (display) or 8 mu, then (n).
+        pod = only(parse_latex(raw"\pod{n}").children)
+        @test kinds(pod) == [NodeKind.MathChoice, NodeKind.Char, NodeKind.Char, NodeKind.Char]
+        @test [c.value for c in pod.children[2:4]] == ["(", "n", ")"]
+        @test [only(c.children).width for c in pod.children[1].children] ≈ [18, 8, 8, 8] ./ 18
+        # \pmod{n} is \pod{{mod}\mkern6mu n}.
+        pmod = only(parse_latex(raw"\pmod{n}").children)
+        @test kinds(pmod) == [
+            NodeKind.MathChoice, NodeKind.Char, NodeKind.Group, NodeKind.Space, NodeKind.Char, NodeKind.Char,
+        ]
+        @test only(pmod.children[3].children).value == "mod"
+        @test pmod.children[4].width ≈ 6 / 18
+        # \mod{n}: 18 mu (display) or 12 mu, {mod}, \,\, n.
+        mod = only(parse_latex(raw"\mod {n+1}").children)
+        @test kinds(mod) == [
+            NodeKind.MathChoice, NodeKind.Group, NodeKind.Space, NodeKind.Space,
+            NodeKind.Char, NodeKind.Char, NodeKind.Char,
+        ]
+        @test [only(c.children).width for c in mod.children[1].children] ≈ [18, 12, 12, 12] ./ 18
+    end
+
+    @testset "\\mathchoice takes four arguments" begin
+        node = only(parse_latex(raw"\mathchoice{a}{b} {c}d").children)
+        @test node.kind === NodeKind.MathChoice
+        @test length(node.children) == 4
+    end
+
+    @testset "\\vert-family delimiters are recognised after \\left and \\big" begin
+        for (left, right, glyph) in (
+                (raw"\vert", raw"\vert", "bar"),
+                (raw"\lvert", raw"\rvert", "bar"),
+                (raw"\Vert", raw"\Vert", "dblverticalbar"),
+                (raw"\lVert", raw"\rVert", "dblverticalbar"),
+            )
+            delim = only(parse_latex("\\left" * left * " x \\right" * right).children)
+            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            @test (payload.left, payload.right) == (glyph, glyph)
+            big = only(parse_latex("\\bigl" * left).children)
+            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == glyph
+        end
     end
 
 end

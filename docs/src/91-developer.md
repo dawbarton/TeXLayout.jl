@@ -167,8 +167,8 @@ space_node(w)                     # NodeKind.Space with given width in em
 | `NodeKind.Command` | — | full token including `\` | unrecognised command or atom-producing symbol |
 | `NodeKind.Space` | — | `""` | explicit horizontal space; width carried in `.width` field (em) |
 | `NodeKind.Text` | `[body]` | empty for `\text`/`\mbox`; text-style command otherwise | text-mode fragment, including nested `\textsc`/`\textbf` styles |
-| `NodeKind.Operator` | — | bare operator name e.g. `"sin"` | `\sin`, `\operatorname{…}` |
-| `NodeKind.LimitsOverride` | `[base]` | `"limits"` or `"nolimits"` | `\limits` / `\nolimits` override |
+| `NodeKind.Operator` | spelling (`[]` unless the body has spaces) | bare operator name e.g. `"sin"`, `"liminf"` | `\sin`, `\liminf` (children `l i m`, thin space, `i n f`), `\operatorname{…}` |
+| `NodeKind.LimitsOverride` | `[base]` | `"limits"`, `"nolimits"`, or `"displaylimits"` | `\limits` / `\nolimits` / `\displaylimits` override; `\operatorname*` |
 | `NodeKind.FontSwitch` | `[body]` | variant name e.g. `"mathbf"` | `\mathbf{…}`, `\mathbb{…}`, … |
 | `NodeKind.HorizBrace` | `[body]` | bare command name e.g. `"overbrace"` | `\overbrace`, `\underbrace`, … |
 | `NodeKind.Matrix` | flat row-major list of `NodeKind.Group` cells | `"env\x00nrow\x00colspec"` | `\begin{env}…\end{env}` |
@@ -176,6 +176,7 @@ space_node(w)                     # NodeKind.Space with given width in em
 | `NodeKind.StyleOverride` | `[body]` | style name e.g. `"Display"` | `\dfrac`, `\tfrac`, `\displaystyle`, … |
 | `NodeKind.Sizing` | `[body NodeKind.Sequence]` | Float64 multiplier as string | `\large`, `\tiny`, … |
 | `NodeKind.XArrow` | `[above]` or `[above, below]` | command string | `\xrightarrow`, `\xleftarrow`, … |
+| `NodeKind.MathChoice` | `[display, text, script, scriptscript]` | `""` | `\mathchoice{…}{…}{…}{…}`; also the style-dependent kerns of `\pmod`, `\mod`, `\pod` |
 
 A few notes on specific kinds:
 
@@ -228,7 +229,8 @@ The key internal functions and their roles are:
   atoms until it sees `}` or `TokenKind.EOF`, returning a `Vector{Node}`.
 - **`_parse_atom!`** — parses one primary expression, then optionally attaches `_` and
   `^` tokens to produce `NodeKind.Subscript`, `NodeKind.Superscript`, or `NodeKind.Decorated`.  Also handles
-  `\limits`/`\nolimits` by wrapping the preceding base in a `NodeKind.LimitsOverride` node.
+  `\limits`/`\nolimits`/`\displaylimits` by wrapping the preceding base in a
+  `NodeKind.LimitsOverride` node; a later modifier replaces the flag rather than nesting.
 - **`_parse_primary!`** — dispatches on the current token kind:
   - `TokenKind.Char` → `NodeKind.Char`
   - `TokenKind.Command` → `_parse_command!`
@@ -506,12 +508,21 @@ All three use the following MATH table constants (all in design units):
 | `sub_superscript_gap_min` | Minimum gap between superscript bottom and subscript top |
 | `superscript_bottom_max_with_subscript` | When both are present: superscript bottom clipped to this value |
 
-**Italic correction** — for slanted single-glyph bases (e.g. `\int`), the subscript
-is shifted left by the glyph's italic correction value from the MATH table.  The helper
-`_base_italic_correction_em(boxes, ctx, scale)` returns the italic correction of the
-first `Glyph` in a box list, converted to em units.  This matches KaTeX's `supsub.ts`
-behaviour exactly: the full IC shift is applied to the subscript, and no IC shift is
-applied to the superscript (which is already displaced by the base's advance).
+**Italic correction** — as in TeX's `make_ord`, a math character is followed by
+its MATH-table italic correction (`_math_italic_correction_em`; text-font glyphs
+get none).  `_push_math_char!`, used by `_layout_char!` and the ordinary-symbol
+path of `_layout_command!`, emits the glyph and then the correction as a `Space`
+kern, so `measure` counts it at the end of a run.  Between letters of a text
+alphabet (`\mathit`, `\mathrm`, …) `_drop_italic_kern!` removes it again, since
+TeX adds none inside a text font.  Script placement takes the correction back
+for a subscript: `_subscript_italic_correction_em` returns it for a character
+base (`_is_char_box`) or a large operator, whose own advance excludes it
+(XeTeX's `make_op`), and 0 otherwise.  The subscript then sits at
+`base_adv - ic`, the superscript at `base_adv`, and the scripted atom is
+`base_adv - ic + max(sub, ic + sup)` plus `SpaceAfterScript` wide.
+`hlayout_math` takes the larger of the advance returned by `_layout_node!` and
+the measured width as the width of inline math, so the space after a final
+script, which has no box of its own, still counts.
 
 ### Fraction layout
 
@@ -598,10 +609,11 @@ The three cases are:
 1. The base is a large operator (`NodeKind.Command` with a key in `_DISPLAY_OP_CODEPOINTS`
    from `src/tables/layout_symbols.jl` or in `_LIMITS_OP_COMMANDS`) and the current style is Display.
 2. The base is a named operator (`NodeKind.Operator`) whose name is in `_LIMITS_OPERATORS`
-   (`lim`, `limsup`, `liminf`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
+   (`lim`, `limsup`, `liminf`, `injlim`, `projlim`, `sup`, `inf`, `max`, `min`, `det`, `gcd`, `Pr`) and the
    current style is Display.
 3. A `NodeKind.LimitsOverride("limits")` node wraps the base (explicit `\limits`), regardless
-   of style.
+   of style, or a `NodeKind.LimitsOverride("displaylimits")` node wraps it (explicit
+   `\displaylimits`, or `\operatorname*`) and the current style is Display.
 
 A `NodeKind.LimitsOverride("nolimits")` node forces beside-base placement regardless of style
 and operator type.

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tools/compare_tex.jl` (and `just compare-tex`), which overlays TeXLayout's
+  layout on LuaLaTeX or XeLaTeX output typeset with unicode-math and the same
+  font files, for checking geometry against TeX.
+- Stress section "38. PARSER WHITESPACE & DELIMITER ALIASES", which sets spaced
+  or aliased spellings (`x ^2`, `\sqrt [3]{x}`, `\left\lvert`, `\bigl\vert`,
+  `\kern 1em`) beside their canonical forms, plus hyperbolic operator names, an
+  `array` colspec declaring more columns than are used, and brace notes under
+  `\large`.
+- A `makie_cairo` stress case for a non-ASCII character before the closing `$`
+  (`L"$2π$"`).
+- `\injlim` and `\projlim` (amsmath), which take limits in Display style.
+- `\operatorname*{…}` (amsmath), which takes limits in Display style only, and
+  the TeX primitive `\displaylimits`.
+- `\bmod`, `\pmod`, `\mod`, and `\pod` with amsmath's spacing (previously
+  `\bmod` rendered nothing and `\pmod{n}` dropped its argument), and the TeX
+  primitive `\mathchoice`.
 - `'` in math is a prime, as in TeX and KaTeX: `f'` is `f^{\prime}`, and
   `f'_1` stacks the prime over the subscript. As in unicode-math, a run of two
   to four primes is one multiple-prime character (`f''^2` is `f^{\dprime 2}`),
@@ -26,8 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`\text{if $x>0$}`). It previously printed literal dollar signs and upright
   text. A `$` nested in braces no longer forces a `LaTeXString` onto the
   document route in the Makie adapters.
-- `\operatorname*{…}` and `\displaylimits` place limits above and below in
-  display style. `\operatorname*` previously rendered a literal asterisk.
 - `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
   including glyph IDs, exact font faces, horizontal and vertical rule specs,
   block bounds, and per-plot or theme-level selection.
@@ -71,6 +85,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   benchmark suite (FreeType's name lookup dominated them).
 
 ### Fixed
+- Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
+  or `\limits` (`x ^2`, `\left(x\right) ^2`), after a control word that takes a
+  delimiter or dimension (`\left (`, `\bigl (`, `\kern 1em`), before the
+  argument of `\text`-style commands (`\text {a}`), and around the optional
+  argument of `\sqrt` and the extensible arrows (`\sqrt [3]{x}`,
+  `\sqrt[3 ]{x}`) no longer change how the expression is parsed.
+- `~` inside matrix and array cells is no longer silently dropped.
+- `\textbf {x}` and `\text {x}` in document text take the braced group as
+  their argument instead of applying the style to the rest of the input.
+- `\sinh`, `\cosh`, `\tanh`, `\coth`, and `\lg` render as upright operator
+  names instead of producing nothing.
+- `\vert`, `\Vert`, `\lvert`, `\rvert`, `\lVert`, and `\rVert` are accepted as
+  delimiters after `\left`, `\middle`, `\right`, and the `\big` family instead
+  of producing null delimiters.
+- `\begin{array}` cells stay in their source rows when the column spec
+  declares more columns than a row uses, and cells beyond the declared columns
+  are laid out instead of being dropped.
+- Notes on `\overbrace`/`\underbrace` now inherit sizing commands such as
+  `\large` and the `smallmatrix` scale.
+- `\liminf` and `\limsup` are set as "lim inf" and "lim sup" with amsmath's
+  3 mu thin space between the words, instead of as one word.
+- `\operatorname*{…}` no longer renders a literal `*` followed by the name in
+  math italic, and explicit spaces in an operator name (`\operatorname{arg\,max}`)
+  are kept instead of dropped.
+- When several of `\limits`, `\nolimits`, and `\displaylimits` follow one base,
+  the last one wins, as in TeX; previously the second was parsed as an empty atom
+  that captured the scripts.
+- The command reference's delimiter table shows `\left\|` for the double bar;
+  Markdown table escaping had rendered it as `\left|`, the same as the single bar.
+- Unbraced text commands in document text take one token as their argument, as
+  in TeX: `\textbf x rest` makes only "x" bold, where the style used to run to
+  the end of the input.  A paragraph break between a text command and its
+  `{…}` argument is no longer swallowed.
+- Math alphabets (`\mathbf`, `\boldsymbol`, `\mathit`, …) no longer restyle a
+  nested `\text{…}`, matching LaTeX: `\mathbf{\text{a b}}` is regular "a b".
+  Previously the text was drawn with Unicode math-alphabet letters and its
+  spaces with the math font's `space` glyph.  KaTeX keeps the math font here.
+- Inside a math `\text{…}`, spaces after a control word that takes no argument
+  are dropped, as in TeX (`\text{a\quad b}` no longer adds an interword space
+  after the quad); spaces after a control symbol such as `\,` are kept.
+- Explicit spaces (`\quad`, `\,`, `\kern`, …) inside a math `\text{…}` keep
+  their width when the text is styled (`\text{\textbf{a}\quad b}`) or shaped
+  with `HarfBuzzShaper`; they were shaped as a single interword space.
+- Laying out from several threads at once no longer crashes inside FreeType or
+  returns wrong glyph metrics. The module-level caches (fonts, units per em,
+  glyph metrics by name, MATH tables, the renderer adapters' shared glyph
+  runtime, and the HarfBuzz and MathTeXEngine extensions' caches) are locked,
+  and FreeType calls on a cached face hold that face's lock. Single-threaded
+  layout is about 3–6% slower.
+- Explicit spaces and kerns (`\,`, `\quad`, `~`, `\kern`, …) no longer reset
+  automatic inter-atom spacing.  As in TeX and KaTeX, the atoms on either side
+  are spaced as if the explicit space were absent, and the explicit space is
+  added: `a\,+b` keeps the medium spaces around a binary `+`, `x,\quad y`
+  keeps the thin space after the comma, and `\int\!\!\int` nets one negative
+  thin space.  Spacing between ordinary atoms (`f(x)\,dx`) is unchanged.
+- The parentheses of `\binom`, `\dbinom`, and `\tbinom` have TeX's fixed
+  sizes (Rule 15e): at least 2.39 em in Display style and 1.01 em otherwise,
+  whatever the content, as in TeX and KaTeX.  They were sized to the content.
+- `\binom`, `\dbinom`, and `\tbinom` follow TeX's Rule 15c for rule-less
+  fractions with the OpenType MATH Stack* constants (`StackTopShiftUp`,
+  `StackBottomShiftDown`, `StackGapMin`, and their display-style forms), as
+  LuaTeX does: one minimum clearance between numerator and denominator, with
+  half of any shortfall added to each shift.  They previously used the fraction
+  constants with separate clearances against the math axis.
+- Radical degrees (`\sqrt[n]{…}`) are raised from the bottom of the radical
+  sign, as LuaTeX does, rather than from the baseline.
+  `RadicalDegreeBottomRaisePercent` is a proportion of the sign's total height,
+  so measuring it from the baseline placed the degree too high, and above the
+  sign altogether for deep radicands such as `\sqrt[3]{\frac{a}{b}}`. The
+  degree's baseline, not its ink bottom, is now placed at that height, as in
+  LuaTeX, XeTeX, and KaTeX. The negative kern after the degree no longer pulls a
+  narrow degree's sign left into the preceding material.
+- A `%` comment followed by a blank line keeps the paragraph break with Windows
+  (CRLF) line endings, and when the blank line contains a form feed or vertical
+  tab, matching the document parser's own blank-line rule.
+- Math characters are followed by their italic correction, as in TeX, so
+  `f(x)`, `f^2`, `fg`, and `y=` no longer crowd the overhang of a slanted
+  letter. A subscript still sits at the uncorrected advance, under the slant
+  (`f_i`), and a one-character group (`{f}_i`) is treated as the character, as
+  TeX does. Upright text and operator names get no correction. The width of a
+  scripted atom no longer counts the correction taken back for its subscript,
+  which made `\int_0` and `V_i` too wide. Inline math in documents now measures
+  to its full advance, so a trailing correction or the space after a final
+  script (`$x_i$ word`) separates it from the following text, as in TeX. Widths
+  of `$f$`, `$VW$`, `$\sqrt{f}$`, `$\overline{fy}$`, and `$b \pmod{n}$` now
+  equal LuaLaTeX's and XeLaTeX's.
 - `\begin{equation}` is laid out exactly like `\[…\]`. It was centred on the
   math axis like an array, which moved its baseline.
 - Fractions (`\frac`, `\dfrac`, `\binom`, …) and the undelimited arrays
@@ -83,32 +183,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
   string indices, so formulas ending in a multibyte character such as `$α$` do
   not raise a `StringIndexError`.
-- Whitespace before a script, a `\limits` modifier, a delimiter, or a command
-  argument is ignored in math, as in TeX. `x ^2` and `x _i` previously rendered
-  a literal `^2` or `_i` on the baseline; `\left (` and `\bigl (` were not
-  sized; `\sqrt [3]{x}` took the root of `[`; `\text {abc}` came out in math
-  italic; `\hskip 1em` and `\mkern 3mu` gave no space and typeset the dimension.
-- Italic correction follows TeX rules 13 and 17. A math character is followed by
-  its italic correction as a kern, a subscript sits at the character's advance,
-  and a superscript sits a further italic correction to the right. Subscripts
-  on slanted letters were previously pulled left by the correction (`V_i` sat
-  0.21 em under the V), superscripts got none (`f^2` touched the hook of the f),
-  and a compound base such as `{fa}` used its first glyph's correction. Large
-  operators are unchanged. Layouts containing italic letters widen slightly.
 - Document text keeps explicit spaces: `\ `, `\space`, and `\nobreakspace`
   give an interword space, and `\quad`, `\qquad`, `\enspace`, `\,`, `\:` and
   `\;` give spaces of their exact width. They were previously dropped, so
   `Mr.\ Smith` printed as "Mr.Smith". As in TeX, a control word such as
   `\quad` swallows the spaces after it.
-- In document text an unbraced argument is one token (`\textbf x and more`
-  bolds only the x) and a space before a braced argument is skipped
-  (`\textbf {x} y`). Both previously applied the style to the rest of the
-  document, and the first could swallow a paragraph break.
 - The body of an environment with no layout of its own (`center`, `quote`, …)
   is kept as ordinary text in documents instead of being discarded.
-- Explicit spaces (`\,`, `\;`, `\quad`, `\kern`, …) are transparent to
-  inter-atom spacing, as in TeX and KaTeX. `a\,=b` previously lost the thick
-  space before `=`, and `a\;+b` set the `+` lopsidedly.
 - An environment nested in an unbraced alignment cell keeps its own `&`, `\\`
   and `\end`. `\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y \end{cases}
   \end{aligned}` previously produced a one-cell `cases` and spilled the rest
@@ -139,15 +220,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all. Such arrows are now built from a head and repeated shaft pieces, as
   amsmath's `\arrowfill@` builds them, and `\xmapsto`, the hook arrows, and the
   stacked harpoons fall back to the arrow glyph at its natural width.
-- The degree of `\sqrt[n]{…}` is placed as LuaTeX's `\Uroot` places it: its
-  baseline sits `RadicalDegreeBottomRaisePercent` of the radical sign's height
-  above the sign's bottom. It was measured from the formula baseline instead,
-  so the degree floated 0.25–0.4 em too high and, on tall radicands, above the
-  sign altogether. The negative kern after the degree no longer pulls a narrow
-  degree's sign left into the preceding material.
-- Notes on `\overbrace`, `\underbrace`, and the other horizontal braces keep
-  the enclosing size factor: under `\large` the note of
-  `\overbrace{x}^{n}` was set at normal script size (0.7) instead of 0.84.
 - Fractions are flanked by TeX's null delimiter space (`\nulldelimiterspace`,
   0.12 em, unscaled in scripts), and `\left.`, `\right.`, and the open side of
   `cases` give the same space. The fraction rule previously ran into the
@@ -176,8 +248,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variants, so `\sum` and `\bigoplus` stayed text-size in display style; so did
   Schola's `\bigoplus`.
 - `\neg`, `\lnot`, and the harpoon relations (`\leftharpoonup`,
-  `\rightleftharpoons`, `\upharpoonright`, …) render instead of drawing nothing,
-  and `\limsup` / `\liminf` have amsmath's thin space (`lim sup`).
+  `\rightleftharpoons`, `\upharpoonright`, …) render instead of drawing nothing.
 - The stress suite's `makie_cairo` captures are usable: CairoMakie's RGBA
   output was reinterpreted as bytes (a striped, 4×-tall image), and the label
   was clipped at the top because Makie aligns its padded block box rather

@@ -25,13 +25,22 @@ function _dimension_text_em(s::AbstractString)::Float64
     m === nothing && return 0.0
     return something(_dimension_em(parse(Float64, m[1]), m[2]), 0.0)
 end
+# Characters that may start or continue the number of a TeX dimension.
+const _DIMEN_NUMBER_CHARS = "0123456789.+-"
 
 # Parse a TeX dimension after \kern / \mkern / \hskip / \mskip and return its
 # value in em units.  Supports a braced form (\kern{1em}) and an unbraced form
 # (\kern1em).  Units are those of `_TEX_UNIT_EM`; an unknown unit yields 0.
 # \mkern and \mskip take math units (mu, 1/18 em) whatever the unit says.
 function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
-    _skip_ignorable_spaces!(p)
+    # `\kern 1em`: TeX drops the space after a control word.  Look past it only
+    # when a dimension follows, so letters in malformed `\kern x` stay content.
+    n = _ignorable_space_run(p)
+    next_tok = _peek(p, n)
+    if next_tok.kind === TokenKind.LBrace ||
+            (next_tok.kind === TokenKind.Char && only(next_tok.value) ∈ _DIMEN_NUMBER_CHARS)
+        p.pos += n
+    end
     braced = _current(p).kind === TokenKind.LBrace
     braced && (_advance!(p); _skip_ignorable_spaces!(p))   # consume '{'
 
@@ -39,7 +48,7 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
     num = Char[]
     while _current(p).kind === TokenKind.Char
         c = only(_current(p).value)
-        c ∈ "0123456789.+-" || break
+        c ∈ _DIMEN_NUMBER_CHARS || break
         push!(num, c); _advance!(p)
     end
 
@@ -95,6 +104,17 @@ function _peek_past_spaces(p::_Parser)::Token
     return p.tokens[i]
 end
 
+# Number of ignorable Space tokens starting at the current position.  Used to
+# look past whitespace without consuming it when the following token decides
+# whether the whitespace is significant.
+function _ignorable_space_run(p::_Parser)::Int
+    n = 0
+    while _is_ignorable_space(_peek(p, n))
+        n += 1
+    end
+    return n
+end
+
 # unicode-math's single characters for a run of two, three, or four primes.
 const _MULTI_PRIME_COMMANDS = Dict(2 => "\\dprime", 3 => "\\trprime", 4 => "\\qprime")
 
@@ -112,11 +132,22 @@ function _kerned_primes(n::Int)::Vector{Node}
     return out
 end
 
+# The NodeKind.LimitsOverride flag for \limits, \nolimits, or \displaylimits
+# (limits in Display style only, TeX's default for \mathop), else `nothing`.
+# Plain comparisons: this runs after every atom.
+@inline function _limits_flag(tok::Token)::Union{String, Nothing}
+    tok.kind === TokenKind.Command || return nothing
+    v = tok.value
+    v == "\\limits" && return "limits"
+    v == "\\nolimits" && return "nolimits"
+    v == "\\displaylimits" && return "displaylimits"
+    return nothing
+end
+
 # Tokens that continue the atom before them: scripts, primes, and the
 # \limits / \nolimits / \displaylimits modifiers.
 @inline _is_prime(tok::Token) = tok.kind === TokenKind.Char && tok.value == "'"
-@inline _is_limits_modifier(tok::Token) = tok.kind === TokenKind.Command &&
-    tok.value ∈ ("\\limits", "\\nolimits", "\\displaylimits")
+@inline _is_limits_modifier(tok::Token) = _limits_flag(tok) !== nothing
 @inline _continues_atom(tok::Token) = tok.kind === TokenKind.Sup ||
     tok.kind === TokenKind.Sub || _is_prime(tok) || _is_limits_modifier(tok)
 
@@ -127,6 +158,7 @@ end
 
 # Consume the delimiter token following \left or \right and return its PS glyph
 # name (e.g. "parenleft").  Returns "" for unknown or null delimiters.
+# Whitespace before the delimiter is skipped, so `\left (` matches `\left(`.
 function _parse_delim_name!(p::_Parser)::String
     _skip_ignorable_spaces!(p)
     _current(p).kind === TokenKind.EOF && return ""
@@ -213,10 +245,16 @@ function _parse_text_literal_command!(p::_Parser)::Union{Node, Nothing}
     return Node(NodeKind.Char, string(ch))
 end
 
+# A control word is a backslash followed by letters (\quad, \textdollar);
+# a control symbol is a backslash and one non-letter (\,, \%).
+@inline _is_control_word(tok::Token) =
+    tok.kind === TokenKind.Command && length(tok.value) > 1 && all(isletter, SubString(tok.value, 2))
+
 function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
     children = Node[]
     while true
-        k = _current(p).kind
+        tok = _current(p)
+        k = tok.kind
         (k === TokenKind.EOF || k === TokenKind.RBrace) && break
         if k === TokenKind.Space
             push!(children, Node(NodeKind.Char, " "))
@@ -232,14 +270,20 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
             _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
             push!(children, Node(NodeKind.InlineMath, [body]))
         else
+            start = p.pos
             literal = _parse_text_literal_command!(p)
             push!(children, literal === nothing ? _parse_atom!(p; math = false) : literal)
+            # TeX drops the spaces after a control word that took no argument
+            # (`\quad b`), but keeps them after a control symbol (`\, b`) and
+            # after an argument's closing brace (`\textbf{a} b`).
+            _is_control_word(tok) && p.pos == start + 1 && _skip_ignorable_spaces!(p)
         end
     end
     return children
 end
 
-# Parse the braced argument of \text{} or \mbox{}, preserving spaces.
+# Parse the braced argument of \text{} or \mbox{}, preserving spaces.  Spaces
+# before the argument are math-mode whitespace, so `\text {a}` matches `\text{a}`.
 function _parse_text_argument!(p::_Parser)::Node
     _skip_ignorable_spaces!(p)   # `\text {abc}`: the space before the brace is not content
     if _current(p).kind === TokenKind.LBrace
@@ -283,17 +327,19 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end; math::Bool = true)::No
     next_token() = math ? _peek_past_spaces(p) : _current(p)
     take_spaces!() = math && _skip_ignorable_spaces!(p)
 
-    # Consume an explicit \limits, \nolimits, or \displaylimits modifier after the
-    # primary, wrapping the base so the script branches can dispatch on it.
-    if _is_limits_modifier(next_token())
+    # Consume explicit \limits / \nolimits / \displaylimits modifiers after the
+    # primary, wrapping the base so the script branches can dispatch on it.  As
+    # in TeX the last modifier wins; it replaces an existing override (including
+    # the \displaylimits of \operatorname*) instead of nesting another wrapper.
+    while (flag = _limits_flag(next_token())) !== nothing
         take_spaces!()
-        cmd = _advance!(p).value
-        flag = cmd == "\\limits" ? "limits" : cmd == "\\nolimits" ? "nolimits" : "displaylimits"
-        base = Node(NodeKind.LimitsOverride, flag, [base])
+        _advance!(p)
+        inner = base.kind === NodeKind.LimitsOverride ? base.children[1] : base
+        base = Node(NodeKind.LimitsOverride, flag, [inner])
     end
 
     has_sup = false; has_sub = false; has_primes = false
-    sup_node = base;  sub_node = base  # placeholders
+    sup_node = base; sub_node = base  # placeholders
     primes = Node[]
 
     # Collect at most one ^, one _, and one run of primes, in any order.  A prime
@@ -343,6 +389,80 @@ function _parse_atom!(p::_Parser, isstop = _is_group_end; math::Bool = true)::No
     else
         return base
     end
+end
+
+@inline _is_close_bracket(tok::Token) = tok.kind === TokenKind.Char && tok.value == "]"
+
+# Parse an optional `[…]` argument (\sqrt[n]{…}, \xrightarrow[below]{…}) and
+# return it as a NodeKind.Group, or `nothing` when no `[` follows.  Like LaTeX's
+# \@ifnextchar, whitespace before the `[` is skipped; whitespace inside it is
+# ordinary math whitespace and must not hide the closing `]`.
+function _parse_optional_bracket!(p::_Parser, isstop)::Union{Node, Nothing}
+    n = _ignorable_space_run(p)
+    tok = _peek(p, n)
+    (tok.kind === TokenKind.Char && tok.value == "[") || return nothing
+    p.pos += n + 1   # skip the whitespace and consume '['
+    children = Node[]
+    while true
+        _skip_ignorable_spaces!(p)
+        tok = _current(p)
+        (tok.kind === TokenKind.EOF || isstop(tok) || _is_close_bracket(tok)) && break
+        push!(children, _parse_atom!(p, isstop))
+    end
+    _is_close_bracket(_current(p)) && _advance!(p)   # consume ']'
+    return Node(NodeKind.Group, children)
+end
+
+# A named operator such as \sin.  `value` is the name used for lookups (limits,
+# tests); children spell the rendered body when it is more than the name's
+# letters, e.g. `lim`, thin space, `inf` for \liminf.
+function _operator_node(name::String)::Node
+    words = get(_SPACED_OPERATOR_NAMES, name, nothing)
+    words === nothing && return Node(NodeKind.Operator, name)
+    children = Node[Node(NodeKind.Char, string(c)) for c in words[1]]
+    push!(children, space_node(_SPACE_WIDTHS["\\,"]))
+    append!(children, Node(NodeKind.Char, string(c)) for c in words[2])
+    return Node(NodeKind.Operator, name, children)
+end
+
+# A kern of `display_mu` in Display style and `other_mu` otherwise.  amsmath
+# tests display *mode* (\if@display); like KaTeX, this approximates it with
+# display *style*, which differs only inside sub-formulae of a display.
+function _display_kern(display_mu::Real, other_mu::Real)::Node
+    branch(mu) = Node(NodeKind.Group, [space_node(mu / 18)])
+    return Node(NodeKind.MathChoice, [branch(display_mu), branch(other_mu), branch(other_mu), branch(other_mu)])
+end
+
+# amsmath's \pod, \pmod, and \mod, expanded around the parsed argument:
+#   \pod{#1}  = \if@display\mkern18mu\else\mkern8mu\fi(#1)
+#   \pmod{#1} = \pod{{\operator@font mod}\mkern6mu#1}
+#   \mod{#1}  = \if@display\mkern18mu\else\mkern12mu\fi{\operator@font mod}\,\,#1
+function _mod_node(cmd::String, arg::Node)::Node
+    body = arg.kind === NodeKind.Group || arg.kind === NodeKind.Sequence ? arg.children : [arg]
+    mod = Node(NodeKind.Group, [Node(NodeKind.Operator, "mod")])
+    thin = _SPACE_WIDTHS["\\,"]
+    children = if cmd == "\\mod"
+        Node[_display_kern(18, 12), mod, space_node(thin), space_node(thin), body...]
+    else
+        inner = cmd == "\\pmod" ? Node[mod, space_node(6 / 18), body...] : body
+        Node[_display_kern(18, 8), Node(NodeKind.Char, "("), inner..., Node(NodeKind.Char, ")")]
+    end
+    return Node(NodeKind.Group, children)
+end
+
+# Flatten the argument of \operatorname into its rendered spelling: upright
+# characters and explicit spaces (`arg\,max`).  Commands contribute their bare
+# names, as in `_node_text`.
+function _operator_body!(out::Vector{Node}, node::Node)::Vector{Node}
+    k = node.kind
+    if k === NodeKind.Char || k === NodeKind.Space
+        push!(out, node)
+    elseif k === NodeKind.Command
+        append!(out, Node(NodeKind.Char, string(c)) for c in _node_text(node))
+    elseif k === NodeKind.Sequence || k === NodeKind.Group
+        foreach(c -> _operator_body!(out, c), node.children)
+    end
+    return out
 end
 
 # Parse a single primary (no script decoration).
@@ -466,8 +586,8 @@ function _parse_matrix_body!(
             finish_row!()
             push!(row_gaps, gap)
 
-        elseif tok.kind === TokenKind.Space
-            _advance!(p)   # skip whitespace in matrix bodies (math mode)
+        elseif _is_ignorable_space(tok)
+            _advance!(p)   # skip whitespace in matrix bodies (math mode); `~` is kept
 
         elseif outer_stop(tok)
             break   # malformed environment: preserve the surrounding boundary
@@ -593,41 +713,16 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
 
     elseif cmd ∈ _XARROW_COMMANDS
         # \xrightarrow[below]{above}: optional below label, mandatory above label.
-        below_node = nothing
-        _skip_ignorable_spaces!(p)
-        if _current(p).kind === TokenKind.Char && _current(p).value == "["
-            _advance!(p)   # consume '['
-            below_children = Node[]
-            while _current(p).kind !== TokenKind.EOF &&
-                    _current(p).value != "]" && !isstop(_current(p))
-                push!(below_children, _parse_atom!(p, isstop))
-            end
-            _current(p).value == "]" && _advance!(p)   # consume ']'
-            below_node = Node(NodeKind.Group, below_children)
-        end
+        below_node = _parse_optional_bracket!(p, isstop)
         above_node = _parse_argument!(p, isstop)
         children = below_node === nothing ? [above_node] : [above_node, below_node]
         return Node(NodeKind.XArrow, cmd, children)
 
     elseif cmd == "\\sqrt"
-        # Optional degree: \sqrt[3]{x} (also `\sqrt [3]{x}`, as LaTeX accepts).
-        _skip_ignorable_spaces!(p)
-        if _current(p).kind === TokenKind.Char && _current(p).value == "["
-            # Consume the degree argument up to the matching ']'.
-            _advance!(p)   # consume '['
-            deg_children = Node[]
-            while _current(p).kind !== TokenKind.EOF &&
-                    _current(p).value != "]" && !isstop(_current(p))
-                push!(deg_children, _parse_atom!(p, isstop))
-            end
-            _current(p).value == "]" && _advance!(p)  # consume ']'
-            degree = Node(NodeKind.Group, deg_children)
-            body = _parse_argument!(p, isstop)
-            return Node(NodeKind.Sqrt, [degree, body])
-        else
-            body = _parse_argument!(p, isstop)
-            return Node(NodeKind.Sqrt, [body])
-        end
+        # Optional degree: \sqrt[3]{x}
+        degree = _parse_optional_bracket!(p, isstop)
+        body = _parse_argument!(p, isstop)
+        return degree === nothing ? Node(NodeKind.Sqrt, [body]) : Node(NodeKind.Sqrt, [degree, body])
 
     elseif cmd == "\\left"
         # \left<delim> … \right<delim>
@@ -642,13 +737,29 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
         end
         return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
 
+    elseif cmd == "\\mathchoice"
+        # \mathchoice{D}{T}{S}{SS}: four math lists, one per style family.
+        return Node(NodeKind.MathChoice, [_parse_argument!(p, isstop) for _ in 1:4])
+
+    elseif cmd == "\\bmod"
+        # amsmath: \nonscript\mskip-\medmuskip\mkern5mu\mathbin{mod}\mkern5mu
+        # \nonscript\mskip-\medmuskip.  The negative glue cancels the automatic
+        # binary spacing, so the net effect is 5 mu either side in every style.
+        return Node(NodeKind.Group, [space_node(5 / 18), Node(NodeKind.Operator, "mod"), space_node(5 / 18)])
+
+    elseif cmd == "\\pod" || cmd == "\\pmod" || cmd == "\\mod"
+        return _mod_node(cmd, _parse_argument!(p, isstop))
+
     elseif cmd == "\\operatorname"
-        # amsmath's starred form sets limits above and below in display style
-        # (`\displaylimits`); the lexer leaves the `*` as a separate Char token.
-        starred = _current(p).kind === TokenKind.Char && _current(p).value == "*"
-        starred && _advance!(p)
+        # amsopn: \operatorname* is \qopname\newmcodes@ m, i.e. limits in
+        # Display style only (\displaylimits); \@ifstar skips spaces before `*`.
+        n = _ignorable_space_run(p)
+        starred = _peek(p, n).kind === TokenKind.Char && _peek(p, n).value == "*"
+        starred && (p.pos += n + 1)
         arg = _parse_argument!(p, isstop)
-        op = Node(NodeKind.Operator, _node_text(arg))
+        body = _operator_body!(Node[], arg)
+        children = any(c -> c.kind === NodeKind.Space, body) ? body : Node[]
+        op = Node(NodeKind.Operator, _node_text(arg), children)
         return starred ? Node(NodeKind.LimitsOverride, "displaylimits", [op]) : op
 
     elseif haskey(_ACCENT_CODEPOINTS, cmd)
@@ -694,7 +805,7 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
 
     else
         bare = cmd[2:end]   # strip leading '\'
-        return bare ∈ _OPERATOR_NAMES ? Node(NodeKind.Operator, bare) : Node(NodeKind.Command, cmd)
+        return bare ∈ _OPERATOR_NAMES ? _operator_node(bare) : Node(NodeKind.Command, cmd)
     end
 end
 

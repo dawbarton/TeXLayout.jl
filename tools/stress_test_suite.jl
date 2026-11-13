@@ -82,6 +82,12 @@ const MAKIE_CASES = [
         name = "math special characters",
         source = raw"\#\;\$\;\%\;\&\;\_\;\{\;\}\;\|",
     ),
+    (
+        # A multi-byte character before the closing `$` (L"$2π$").
+        section = "9. NON-ASCII SOURCE",
+        name = "non-ASCII before closing dollar",
+        source = "2π",
+    ),
 ]
 
 # ── Small utilities ──────────────────────────────────────────────────────────
@@ -231,7 +237,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         margin = 32 + ceil(Int, 1.5 * px)
         w = max(240, 2margin + ceil(Int, (bx2 - bx1) * px))
         h = max(160, 2margin + ceil(Int, (by2 - by1) * px))
-        fig = CairoMakie.Figure(size = (w, h), backgroundcolor = :white)
+        fig = CairoMakie.Figure(; size = (w, h), backgroundcolor = :white)
         ax = CairoMakie.Axis(fig[1, 1]; backgroundcolor = :white)
         CairoMakie.hidespines!(ax)
         CairoMakie.hidedecorations!(ax)
@@ -520,7 +526,7 @@ function main(args = ARGS)
     rest = isempty(args) ? String[] : args[2:end]
 
     if cmd == "generate"
-        generate_outputs(
+        generate_outputs(;
             out = _option(rest, "--out", "stress_outputs/current"),
             fonts = _fonts(rest),
             include_makie = _flag(rest, "--include-makie"),
@@ -532,7 +538,7 @@ function main(args = ARGS)
             _option(rest, "--out", REFERENCE_ASSET),
         )
     elseif cmd == "compare"
-        compare_outputs(
+        compare_outputs(;
             current = _option(rest, "--current", "stress_outputs/current"),
             reference = _option(rest, "--reference", REFERENCE_ASSET),
             diff_dir = _option(rest, "--diff", "stress_outputs/diff"),
@@ -540,7 +546,7 @@ function main(args = ARGS)
         )
     elseif cmd == "all"
         out = _option(rest, "--out", "stress_outputs/current")
-        generate_outputs(
+        generate_outputs(;
             out = out,
             fonts = _fonts(rest),
             include_makie = _flag(rest, "--include-makie"),
@@ -551,7 +557,7 @@ function main(args = ARGS)
             "--reference",
             "$(REFERENCE_ASSET)",
         )
-        compare_outputs(
+        compare_outputs(;
             current = out,
             reference = reference,
             diff_dir = _option(rest, "--diff", "stress_outputs/diff"),

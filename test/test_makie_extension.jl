@@ -23,6 +23,8 @@ const _MAKIE_EXTENSION_PACKAGES = (
 
     # Delimiter stripping must use valid UTF-8 indices at both ends.
     @test TeXLayout._strip_math_delimiters(raw"$α$") == "α"
+    @test TeXLayout._strip_math_delimiters("\$2π\$") == "2π"
+    @test TeXLayout._is_inline_math("\$2π\$")
     @test TeXLayout._strip_math_delimiters("αβ") == "αβ"
     @test TeXLayout._strip_math_delimiters(raw"$$") == ""
 end
@@ -75,6 +77,11 @@ if all(package -> Base.find_package(package) !== nothing, _MAKIE_EXTENSION_PACKA
                     @test length(chars) == 1
                     @test only(chars).glyph_id > 0
                 end
+
+                # A multi-byte character before the closing `$` (L"$2π$").
+                chars = texchars(MathTeXEngine.generate_tex_elements(LaTeXString("\$2π\$")))
+                @test length(chars) == 2
+                @test all(char -> char.glyph_id > 0, chars)
             finally
                 TeXLayout.set_default_font_family!(previous_family)
             end
@@ -93,7 +100,7 @@ if Base.find_package("Makie") !== nothing &&
     if makie_ext !== nothing && makie_ext._HAS_LAYOUT_TEXT_INTERFACE
         @testset "Makie text-handler extension" begin
             handler = TeXLayout.TeXLayoutHandler()
-            scene = Makie.Scene(camera = Makie.campixel!)
+            scene = Makie.Scene(; camera = Makie.campixel!)
 
             fraction = Makie.text!(
                 scene,
@@ -140,10 +147,10 @@ if Base.find_package("Makie") !== nothing &&
             @test line_pitch(Makie.layout_text(handler, two_lines, attributes())) ≈
                 default_line_height atol = 1.0e-4
             @test line_pitch(
-                Makie.layout_text(handler, two_lines, attributes(lineheight = 2)),
+                Makie.layout_text(handler, two_lines, attributes(; lineheight = 2)),
             ) ≈ 2 * default_line_height atol = 1.0e-4
-            pinned = TeXLayout.TeXLayoutHandler(
-                options = TeXLayout.LayoutOptions(line_height = 2.0),
+            pinned = TeXLayout.TeXLayoutHandler(;
+                options = TeXLayout.LayoutOptions(; line_height = 2.0),
             )
             @test line_pitch(Makie.layout_text(pinned, two_lines, attributes())) ≈
                 2.0 atol = 1.0e-4

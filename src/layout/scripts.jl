@@ -5,7 +5,7 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, nothing, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sup_s = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
+    sup_s = sup_style(style); sup_scale = _scale_for_child(scale, style, sup_s, mc)
     if _use_limits(base, style)
         # Limits placement: sup centred above base.
         base_start = lastindex(boxes) + 1
@@ -21,7 +21,7 @@ function _layout_superscript!(node, ctx, style, x0, y0, scale, boxes)
             y0 + base_top + mc.upper_limit_gap_min * s - _boxes_bottom(boxes, sup_start, sup_stop, upm)
         )
         total_w = max(base_w, sup_w)
-        Δbase = (total_w - base_w) / 2;  Δsup = (total_w - sup_w) / 2
+        Δbase = (total_w - base_w) / 2; Δsup = (total_w - sup_w) / 2
         # ±½ italic correction shifts superscript right over the slanted stroke.
         Δsup += _base_italic_correction_em(boxes, base_start, base_stop, ctx, scale) / 2
         _translate_range!(boxes, base_start, base_stop, x0 + Δbase, y0)
@@ -54,7 +54,7 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, sub, nothing, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
+    sub_s = sub_style(style); sub_scale = _scale_for_child(scale, style, sub_s, mc)
     if _use_limits(base, style)
         # Limits placement: sub centred below base.
         base_start = lastindex(boxes) + 1
@@ -70,7 +70,7 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
             y0 + base_bot - _boxes_top(boxes, sub_start, sub_stop, upm) - mc.lower_limit_gap_min * s
         )
         total_w = max(base_w, sub_w)
-        Δbase = (total_w - base_w) / 2;  Δsub = (total_w - sub_w) / 2
+        Δbase = (total_w - base_w) / 2; Δsub = (total_w - sub_w) / 2
         # ±½ italic correction shifts subscript left under the slanted stroke.
         Δsub -= _base_italic_correction_em(boxes, base_start, base_stop, ctx, scale) / 2
         _translate_range!(boxes, base_start, base_stop, x0 + Δbase, y0)
@@ -92,11 +92,9 @@ function _layout_subscript!(node, ctx, style, x0, y0, scale, boxes)
         min(y0 - min_sub, _boxes_bottom(boxes, base_start, base_stop, upm) - mc.subscript_baseline_drop_min * s)
     # Rule 18b: subscript top must not exceed SubscriptTopMax above baseline.
     y_sub = min(y_sub, y0 - _boxes_top(boxes, sub_start, sub_stop, upm) + mc.subscript_top_max * s)
-    # Italic correction (TeX rules 13 and 17; KaTeX supsub.ts marginLeft):
-    # the subscript starts IC left of the base advance.  For a character the
-    # advance includes its italic kern, so the subscript sits at the glyph
-    # advance; for a large operator it tucks under the slanted stroke.
-    ic_em = _script_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
+    # The subscript sits at the base's uncorrected advance (see
+    # _subscript_italic_correction_em).
+    ic_em = _subscript_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
     _translate_range!(boxes, sub_start, sub_stop, x0 + base_adv - ic_em, y_sub)
     return base_adv - ic_em + sub_adv + mc.space_after_script * s
 end
@@ -106,8 +104,8 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     base.kind === NodeKind.HorizBrace &&
         return _layout_horiz_brace!(base, sub, sup, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
-    sub_s = sub_style(style);  sub_scale = _scale_for_child(scale, style, sub_s, mc)
-    sup_s = sup_style(style);  sup_scale = _scale_for_child(scale, style, sup_s, mc)
+    sub_s = sub_style(style); sub_scale = _scale_for_child(scale, style, sub_s, mc)
+    sup_s = sup_style(style); sup_scale = _scale_for_child(scale, style, sup_s, mc)
     if _use_limits(base, style)
         # Limits placement: sub centred below, sup centred above.
         base_start = lastindex(boxes) + 1
@@ -154,9 +152,9 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     sup_adv = _layout_node!(sup, ctx, sup_s, 0.0, 0.0, sup_scale, boxes)
     sup_stop = lastindex(boxes)
     script_x = x0 + base_adv
-    # Italic correction (TeX rules 13 and 17; KaTeX supsub.ts): the subscript
-    # starts IC left of the superscript, which sits at the base advance.
-    ic_em = _script_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
+    # The subscript sits at the base's uncorrected advance and the superscript
+    # at the full advance (see _subscript_italic_correction_em).
+    ic_em = _subscript_italic_correction_em(base, boxes, base_start, base_stop, ctx, scale)
     s = scale / upm
     min_sup = is_cramped(style) ?
         mc.superscript_shift_up_cramped * s :
@@ -180,7 +178,7 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
         # Psi redistribution: if the superscript bottom falls below
         # SuperscriptBottomMaxWithSubscript, shift both scripts upward together
         # so that it reaches exactly that threshold (gap remains min_gap).
-        psi = mc.superscript_bottom_max_with_subscript * s - sup_bot
+        psi = y0 + mc.superscript_bottom_max_with_subscript * s - sup_bot
         if psi > 0.0
             y_sup += psi
             y_sub += psi
@@ -188,5 +186,5 @@ function _layout_decorated!(node, ctx, style, x0, y0, scale, boxes)
     end
     _translate_range!(boxes, sub_start, sub_stop, script_x - ic_em, y_sub)
     _translate_range!(boxes, sup_start, sup_stop, script_x, y_sup)
-    return base_adv + max(sub_adv - ic_em, sup_adv) + mc.space_after_script * s
+    return base_adv - ic_em + max(sub_adv, ic_em + sup_adv) + mc.space_after_script * s
 end

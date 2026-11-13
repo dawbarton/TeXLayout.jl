@@ -380,6 +380,23 @@
         end
     end
 
+    @testset "Explicit spaces keep their width in styled and shaped math \\text" begin
+        # Styled text (\textbf inside \text) and any non-metric shaper take the
+        # shaping path, which used to turn \quad, \, and \kern into a single
+        # interword space.  `{}` ends each control word without a space.
+        last_x(source; kwargs...) = maximum(
+            b.x for b in layout(parse_latex(source), family, Text; kwargs...)
+                if b.element isa Union{Glyph, GlyphID}
+        )
+        for (space, width) in ((raw"\quad", 1.0), (raw"\,", 3 / 18), (raw"\kern2em", 2.0))
+            @test last_x("\\text{\\textbf{a}" * space * "{}b}") - last_x(raw"\text{\textbf{a}b}") ≈ width
+        end
+        if Base.get_extension(TeXLayout, :HarfBuzzExt) !== nothing
+            shaper = TeXLayout.HarfBuzzShaper()
+            @test last_x(raw"\text{a\quad{}b}"; shaper) - last_x(raw"\text{a\,{}b}"; shaper) ≈ 1.0 - 3 / 18
+        end
+    end
+
     # ── Parser additions ──────────────────────────────────────────────────────
 
     @testset "Parser additions" begin
@@ -496,6 +513,43 @@
             spans = doc[1].lines[1].runs[1].spans
             @test spans[1].text == "hello"
             @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
+        end
+
+        @testset "Space between a text command and its group is skipped" begin
+            # TeX drops the space after a control word: `\textbf {bold}` takes
+            # `{bold}` as its argument instead of emboldening the rest of the input.
+            for command in ("\\textbf", "\\text")
+                doc = TeXLayout.parse_document(command * " {bold} rest")
+                spans = doc[1].lines[1].runs[1].spans
+                @test join(getfield.(spans, :text)) == "bold rest"
+                @test spans[end].text == " rest"
+                @test spans[end].attrs.slot === TeXLayout.FontSlot.Regular
+            end
+            spans = TeXLayout.parse_document("\\textbf {bold} rest")[1].lines[1].runs[1].spans
+            @test spans[1].text == "bold"
+            @test spans[1].attrs.slot === TeXLayout.FontSlot.Bold
+        end
+
+        @testset "Unbraced text commands take one token as their argument" begin
+            # TeX reads an undelimited argument as the next token, after the
+            # spaces that follow the control word: `\textbf x rest` is bold "x".
+            spans_of(source) = [
+                (sp.text, sp.attrs.slot) for b in TeXLayout.parse_document(source)
+                    if b isa TeXLayout.ParagraphBlock for l in b.lines
+                    for r in l.runs if r isa TeXLayout.TextRun for sp in r.spans
+            ]
+            Bold, Regular, BoldItalic = TeXLayout.FontSlot.Bold, TeXLayout.FontSlot.Regular, TeXLayout.FontSlot.BoldItalic
+            @test spans_of("\\textbf x rest") == [("x", Bold), (" rest", Regular)]
+            @test spans_of("\\textbf xy rest") == [("x", Bold), ("y rest", Regular)]
+            @test spans_of("\\textbf\\%x y") == [("%", Bold), ("x y", Regular)]
+            # Degraded but contained: a nested command is taken with its group.
+            @test spans_of("\\textit\\textbf{x} y") == [("x", BoldItalic), (" y", Regular)]
+            @test all(sp -> sp[2] === Regular, spans_of("rest \\textbf"))
+            # A paragraph break is not skipped to reach an argument (TeX would
+            # stop with "Paragraph ended before ... was complete").
+            doc = TeXLayout.parse_document("a \\textbf\n\n{x} y")
+            @test count(b -> b isa TeXLayout.ParagraphBlock, doc) == 2
+            @test all(sp -> sp[2] === Regular, spans_of("a \\textbf\n\n{x} y"))
         end
 
         @testset "\\textit produces Italic span" begin
@@ -1019,7 +1073,7 @@
                 @test TeXLayout.default_layout_options() isa TeXLayout.LayoutOptions
 
                 # Keyword form overrides only the named fields (merge).
-                TeXLayout.set_default_layout_options!(width = 30.0, display_align = :right)
+                TeXLayout.set_default_layout_options!(; width = 30.0, display_align = :right)
                 cur = TeXLayout.default_layout_options()
                 @test cur.width == 30.0
                 @test cur.display_align === TeXLayout.Alignment.Right
@@ -1040,7 +1094,7 @@
                 @test TeXLayout.default_layout_options().width === nothing
 
                 # Unknown option name is rejected.
-                @test_throws ArgumentError TeXLayout.set_default_layout_options!(widht = 1.0)
+                @test_throws ArgumentError TeXLayout.set_default_layout_options!(; widht = 1.0)
             finally
                 TeXLayout.set_default_layout_options!(saved)
             end
@@ -1066,7 +1120,7 @@
             )
             @test length(glyphs) == 2
             @test glyphs[1].y ≈ 0.0
-            @test glyphs[2].y ≈ -1.2   atol = 0.1
+            @test glyphs[2].y ≈ -1.2 atol = 0.1
         end
 
         @testset "Blank line applies paragraph skip" begin
@@ -1356,6 +1410,13 @@
             doc = TeXLayout.parse_document("a%\n\nb")
             paras = filter(b -> b isa TeXLayout.ParagraphBlock, doc)
             @test length(paras) == 2
+            # Windows line endings: the blank line is "\r\n", not "\n".
+            for source in ("a%\r\n\r\nb", "a%\n\t\r\nb")
+                doc = TeXLayout.parse_document(source)
+                paras = filter(b -> b isa TeXLayout.ParagraphBlock, doc)
+                @test length(paras) == 2
+            end
+            @test para_text("foo%comment\r\n  bar") == "foobar"
         end
 
         @testset "Escaped specials and text literal aliases render literally" begin

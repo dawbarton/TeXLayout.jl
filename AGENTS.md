@@ -71,6 +71,7 @@ TeXLayout.jl/
 │   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
 │   ├── stress_test_text.jl        # Render mixed text/math document stress-test sheet
 │   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
+│   ├── compare_tex.jl             # Overlay TeXLayout on LuaLaTeX/XeLaTeX output with the same fonts
 │   ├── stress_test_suite.jl       # Unified per-case stress PNG generator/packer/comparator
 │   ├── stress_test_all.jl         # Compatibility wrapper for stress_test_suite.jl
 │   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
@@ -105,6 +106,7 @@ All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activa
 | `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
 | `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
 | `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
+| `compare_tex.jl` | Overlay TeXLayout's boxes on LuaLaTeX (default) or XeLaTeX output typeset with unicode-math and the same font files: cyan TeX, magenta TeXLayout, dark where they agree.  The check for any "matches TeX" claim; see "Comparing against TeX" below. | `julia tools/compare_tex.jl [--engine=xelatex] [--fonts=new_cm,stix_two] "expr" "T:expr" "B:{n}{k}"` |
 | `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [:font_symbol] [out.png]` |
 | `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [:font_symbol] [png\|pdf\|svg] [out]` |
 | `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. Most cases use `MetricShaper`; a small final section opts into `HarfBuzzShaper`. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
@@ -122,6 +124,48 @@ just stress-pack
 just stress-compare
 just stress-all
 ```
+
+### Comparing against TeX
+
+`tools/compare_tex.jl` checks geometry against a real TeX engine.  It typesets
+each expression with unicode-math and the bundled font files themselves, then
+draws TeXLayout's boxes into the same PDF glyph by glyph, so differences show as
+cyan (TeX) or magenta (TeXLayout) fringes.  `tools/stress_test_latex.jl` loads no
+OpenType math font and cannot be used for this.  Prefixes select Text (`T:`) or
+Script (`S:`) style, and `B:{num}{den}` compares a binomial without its
+delimiters with `{num \atop den}`, isolating the vertical shifts.
+
+- **LuaLaTeX is the reference.**  It implements OpenType MATH directly:
+  `SpaceAfterScript` after scripts, the Stack* constants for rule-less
+  fractions, radical degrees measured from the bottom of the sign.  Where LuaTeX
+  and XeTeX disagree, follow LuaTeX and record the difference in
+  `katex_rules.md`.  One recorded exception: LuaTeX adds a `\left` delimiter
+  variant's italic correction to the delimiter's width, XeTeX does not, and
+  TeXLayout follows XeTeX (see `future.md`).
+- **Compare at 10 pt when scripts are involved.**  TeXLayout always uses the
+  font's `ssty` script alternates, as unicode-math does at normal sizes, but
+  unicode-math did not apply them at `\Huge` (24.88 pt) or 60 pt in our
+  measurements.  The tool's default is 24 pt, so pass `--size=10` for anything
+  with scripts, primes, radical degrees, or `smallmatrix`.
+- **XeLaTeX differs in known ways.**  It puts `\scriptspace` (LaTeX: 0.5pt)
+  after scripts, which the tool replaces by the font's `SpaceAfterScript`; it
+  keeps the Fraction* shifts for rule-less fractions except `num3`; and
+  unicode-math raises radical degrees by p × (ht − dp) of the radical box.
+- **Display mode is not display style.**  `$\displaystyle …$` is still inline
+  mode, so amsmath's `\if@display` (used by `\pmod` and friends) is false; the
+  tool sets `\@displaytrue` for Display-style cases.
+- **Known residual differences**, not caused by the change under test:
+  TeXLayout has no OpenType math kerning (`MathKernInfo`) between a base and
+  its scripts; unicode-math's `\mathbf` uses the bold text font, while
+  TeXLayout uses Unicode math-alphabet letters; LaTeX adds an italic
+  correction after `\textit{…}`.
+- **Hand-written measurements.**  For a number the overlay cannot give (a box
+  height or depth, an array's struts), typeset `\setbox0\hbox{$…$}` and
+  `\typeout{\the\wd0\space\the\ht0\space\the\dp0}` at 10 pt (10 pt = 1 em)
+  with `amsmath` and unicode-math, loading the bundled font by path as the
+  tool does: `\setmathfont{<file>.otf}[Path=<artifact dir>/]`.  With a bare
+  file name TinyTeX may not find the font and silently falls back to Latin
+  Modern Math, so check the log for "not loadable" before trusting a number.
 
 ### Stress references
 
@@ -165,6 +209,18 @@ parsed `MathTable` values by math-font path, and `render_support.jl` caches one
 per `FontFamilyKey` for both renderer adapters to share.
 `ext/MathTeXEngineExt.jl` adds only its own derived `MathTeXEngine.FontFamily`
 cache on the same key.
+
+**Thread safety.** The caches and the cached FreeType faces are shared between
+threads.  `Base.Dict` is not safe for concurrent use, so each module-level cache
+(`_FONT_CACHE`, `_UPM_CACHE`, `_NAMED_METRICS_CACHE`, `_MATH_TABLE_CACHE`, the
+renderer adapters' `_GLYPH_RUNTIME_CACHE`, and the extensions' caches) is
+guarded by its own `ReentrantLock`, and its values are built under that lock.
+An `FT_Face` may be used by only one thread at a time, and `FT_Load_Glyph` writes the face's shared glyph slot, so every FreeType call on a
+cached face must hold that face's `FTFont.lock` (FreeTypeAbstraction's
+convention, which its own `glyph_index` follows).  Use `_load_glyph_metrics` and
+`_char_index` rather than calling FreeType directly.  Without these locks,
+concurrent layout crashed inside FreeType even with warm caches.
+`test/test_threads.jl` checks concurrent layout in a four-thread child process.
 
 ## Key types
 
@@ -414,7 +470,16 @@ at the end of that file.
   blank (the paragraph break is preserved).  Escaped `\%` is a literal.
   Math mode (`parse_latex`) ignores leading, trailing, and repeated ordinary
   whitespace, including a space after `^`/`_` or before a command argument
-  (`x^ 2`, `\frac 1 2`).  The explicit interword spaces `~`, `\ `, `\space`, and
+  (`x^ 2`, `\frac 1 2`), before `^`/`_`/`\limits` (`x ^2`), before a
+  delimiter, dimension, or `\text` argument (`\left (`, `\kern 1em`,
+  `\text {a}`), and around `\sqrt`/xarrow optional `[…]` arguments.  The
+  space before a script is consumed only when a script actually follows
+  (`_peek_past_spaces` in `_parse_atom!`), so significant spaces inside
+  `\text{…}` survive.  `\\[dim]` in matrices does not skip a space before
+  `[`, matching amsmath's `matrix` environments, `cases`, and `align`, which use
+  `\new@ifnextchar`.  A plain LaTeX `array` uses the kernel's space-skipping
+  `\@ifnextchar`, so there `\\ [2pt]` is a row-spacing argument, which
+  TeXLayout renders as cell content.  The explicit interword spaces `~`, `\ `, `\space`, and
   `\nobreakspace` are *not* ignorable: they emit a normal interword space
   (`_NORMAL_SPACE_EM = 6/18` em, TeX's `fontdimen2`) in math mode and inside
   `\text{…}`.  The parser distinguishes them from ignorable whitespace via
@@ -491,21 +556,6 @@ refactors do not count as layout changes.  If a snapshot hash changes, either
 the geometry/metrics changed or the normalization changed.  Do not update a
 hash casually; inspect the rendered/serialized difference and document whether
 the change is an intentional bug fix or feature change.
-
-### Measuring against TeX
-
-Check layout constants and spacing fixes numerically against TeX, not by eye.
-Use LuaLaTeX (or XeLaTeX) with `amsmath` and `unicode-math` at 10 pt, loading
-the bundled font file by path,
-`\setmathfont{<file>.otf}[Path=<artifact dir>/]`.  With a bare file name,
-TinyTeX may not find the font and silently falls back to Latin Modern Math:
-check the log for "not loadable" before trusting a number.  Measure boxes with
-`\setbox0\hbox{$…$}` and `\typeout{\the\wd0\space\the\ht0\space\the\dp0}`, converting at
-10 pt = 1 em.  Measure at 10 pt, because unicode-math does not apply `ssty`
-script alternates at large sizes.  LuaTeX and XeTeX occasionally disagree
-(LuaTeX adds a `\left` delimiter variant's italic correction; XeTeX does not);
-TeXLayout follows XeTeX, and such disagreements are recorded in
-`katex_rules.md` or `future.md`.
 
 ## Benchmarks
 
