@@ -1892,12 +1892,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
         # the alignments; aligned and gathered rows carry \strut@ and are
         # \baselineskip + \jot (1.5 em) apart, or \lineskip + \jot (0.4 em)
         # clear of each other when taller.
-        ctx = TeXLayout._LayoutCtx(
-            family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-            mt.horiz_constructions, mt.top_accent_attachments, mt.italic_corrections,
-            mt.min_connector_overlap, mt.script_alternates, TeXLayout.LayoutMode.Math,
-            :default, TeXLayout.MetricShaper(),
-        )
+        ctx = TeXLayout._LayoutCtx(family)
         function box(src)
             m = only(c for c in parse_latex(src).children if c.kind === NodeKind.Matrix)
             return TeXLayout._layout_matrix_box!(m, ctx, Text, 0.0, 0.0, 1.0, TeXLayout.LayoutBox[])

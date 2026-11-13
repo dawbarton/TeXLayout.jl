@@ -89,7 +89,7 @@ function _layout_matrix_box!(
     left_name = something(left, info.left)
     right_name = something(right, info.right)
     upm = ctx.upm
-    mc = ctx.mc
+    mc = ctx.mt.constants
 
     # Display alignment environments (align/gather/split/…) typeset each cell in
     # Display style, so fractions, scripts and big operators keep their full
