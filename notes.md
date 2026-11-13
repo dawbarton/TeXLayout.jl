@@ -2093,3 +2093,8 @@
   (`delete_branch_on_merge` is on); local `main` was fast-forwarded and the
   local branch removed.  The divergence came from a long-lived branch that
   never merged `main`, not from stale branches.
+- `Documentation` is a required check on `main`, but the Docs workflow's
+  `pull_request` trigger was path-filtered, so a PR touching only workflows
+  or notes (#60, and Dependabot's #55, #58, #59) never got the check and
+  stayed blocked.  The PR trigger now has no path filter (about 3 minutes of
+  CI per PR); pushes to `main` keep theirs.
