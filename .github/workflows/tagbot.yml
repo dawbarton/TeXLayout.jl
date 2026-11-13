@@ -21,6 +21,8 @@ jobs:
           # releases require manual creation. For full automation of such commits,
           # use a PAT with `workflow` scope instead of GITHUB_TOKEN.
           # See: https://github.com/JuliaRegistries/TagBot#commits-that-modify-workflow-files
-          # ssh: ${{ secrets.DOCUMENTER_KEY }}
-          # ssh: ${{ secrets.NAME_OF_MY_SSH_PRIVATE_KEY_SECRET }}
+          # Push tags with the Documenter deploy key: tags pushed with
+          # GITHUB_TOKEN do not start other workflows, so the Docs workflow
+          # never ran for a release and no stable docs were deployed.
+          ssh: ${{ secrets.DOCUMENTER_KEY }}
           changelog_format: github  # 'custom' (default), 'github', or 'conventional'

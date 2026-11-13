@@ -2085,9 +2085,10 @@
   and the six folders were deleted from `gh-pages`.
 - Real release tags (v0.1.0 to v0.3.2) have no docs folders either: TagBot
   pushes them with `GITHUB_TOKEN`, and tags pushed that way do not start
-  other workflows, so "stable" docs have never been deployed.  Fixing that
-  needs a `DOCUMENTER_KEY` deploy key and TagBot's `ssh:` input (commented
-  out in `tagbot.yml`).
+  other workflows, so "stable" docs have never been deployed.  The
+  `DOCUMENTER_KEY` secret and its write-enabled deploy key already existed
+  (Documenter deploys `dev` with it), so `tagbot.yml` now passes it as
+  TagBot's `ssh:` input; the next release is the first test.
 - After #34 merged, the merged feature branch had already been deleted
   (`delete_branch_on_merge` is on); local `main` was fast-forwarded and the
   local branch removed.  The divergence came from a long-lived branch that
