@@ -2207,3 +2207,20 @@
   and `ext/` commits are #61's refactors, shown byte-identical.
 - After the release: check the TagBot tag and release, and that `stable` docs
   deploy (first use of the `DOCUMENTER_KEY` SSH input to TagBot).
+
+## 2026-11-13T21:52+00:00 v0.4.0 released
+
+- Registered through General PR 176145 (release notes mentioning
+  "breaking"); TagBot tagged `v0.4.0` (annotated, at merge commit 2b5108c)
+  and published the GitHub release as Latest.
+- The TagBot `ssh:` deploy key works: the tag push started the Docs workflow,
+  and `gh-pages` now has `v0.4.0`, with `stable` and `v0.4` linking to it
+  and `versions.js` listing them.  The site root redirects to `stable`.
+  First stable docs for any release.
+- `changelog_format: github` gives GitHub's generated list of merged PRs and
+  drops the Registrator release notes, so the release page has no
+  breaking-change summary.  TagBot's default (`custom`) template includes the
+  release notes above the PR list; consider it for the next release.
+- The local General mirror (pkg server) still listed 0.3.2 as the latest
+  version minutes after the tag; the mirror lags, the registration did not
+  fail (TagBot tags only registered versions).
