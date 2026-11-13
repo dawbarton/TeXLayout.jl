@@ -2075,3 +2075,20 @@
   with more columns than cells misplaced cells, and `\sinh`, `\cosh`,
   `\tanh`, `\coth`, `\lg` rendered nothing.  The release's files were
   replaced in place with the merged tree's output.
+
+## 2026-11-13T13:47+00:00 Docs deploys for asset-release tags
+
+- The Docs workflow triggered on every tag (`tags: ["*"]`), and Documenter
+  treats `v0.4.0-stress` or `v0.3.0-fonts` as prerelease versions, so each
+  stress or font release left a docs folder on `gh-pages` (six of them, none
+  listed in `versions.js`).  The trigger now matches plain `vX.Y.Z` tags only,
+  and the six folders were deleted from `gh-pages`.
+- Real release tags (v0.1.0 to v0.3.2) have no docs folders either: TagBot
+  pushes them with `GITHUB_TOKEN`, and tags pushed that way do not start
+  other workflows, so "stable" docs have never been deployed.  Fixing that
+  needs a `DOCUMENTER_KEY` deploy key and TagBot's `ssh:` input (commented
+  out in `tagbot.yml`).
+- After #34 merged, the merged feature branch had already been deleted
+  (`delete_branch_on_merge` is on); local `main` was fast-forwarded and the
+  local branch removed.  The divergence came from a long-lived branch that
+  never merged `main`, not from stale branches.
