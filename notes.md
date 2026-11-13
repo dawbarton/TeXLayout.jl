@@ -2075,3 +2075,30 @@
   with more columns than cells misplaced cells, and `\sinh`, `\cosh`,
   `\tanh`, `\coth`, `\lg` rendered nothing.  The release's files were
   replaced in place with the merged tree's output.
+
+## 2026-11-13T13:47+00:00 Docs deploys for asset-release tags
+
+- The Docs workflow triggered on every tag (`tags: ["*"]`), and Documenter
+  treats `v0.4.0-stress` or `v0.3.0-fonts` as prerelease versions, so each
+  stress or font release left a docs folder on `gh-pages` (six of them, none
+  listed in `versions.js`).  The trigger now matches plain `vX.Y.Z` tags only,
+  and the six folders were deleted from `gh-pages`.
+- Real release tags (v0.1.0 to v0.3.2) have no docs folders either: TagBot
+  pushes them with `GITHUB_TOKEN`, and tags pushed that way do not start
+  other workflows, so "stable" docs have never been deployed.  The
+  `DOCUMENTER_KEY` secret and its write-enabled deploy key already existed
+  (Documenter deploys `dev` with it), so `tagbot.yml` now passes it as
+  TagBot's `ssh:` input; the next release is the first test.
+- After #34 merged, the merged feature branch had already been deleted
+  (`delete_branch_on_merge` is on); local `main` was fast-forwarded and the
+  local branch removed.  The divergence came from a long-lived branch that
+  never merged `main`, not from stale branches.
+- `Documentation` is a required check on `main`, but the Docs workflow's
+  `pull_request` trigger was path-filtered, so a PR touching only workflows
+  or notes (#60, and Dependabot's #55, #58, #59) never got the check and
+  stayed blocked.  The PR trigger now has no path filter (about 3 minutes of
+  CI per PR); pushes to `main` keep theirs.
+- The Dependabot bumps (#55 cache 3.5.0, #58 setup-julia 3.0.3, #59 TagBot
+  1.25.15) were folded into #60 with Dependabot's pinned SHAs, applied to
+  every occurrence: #55 had missed the `makie-0-25` job's cache pin, which
+  was added after it opened.

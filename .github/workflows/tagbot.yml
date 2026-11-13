@@ -14,13 +14,15 @@ jobs:
     # ubuntu-slim doesn't support containers, and thus won't work
     runs-on: ubuntu-latest
     steps:
-      - uses: JuliaRegistries/TagBot@d8d3e8f45a4cd9839f1d6d8798ca246431564418 # v1.25.12
+      - uses: JuliaRegistries/TagBot@87cc4cc2b4639f6c743f5772f376a32914060732 # v1.25.15
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           # For commits that modify workflow files: SSH key enables tagging, but
           # releases require manual creation. For full automation of such commits,
           # use a PAT with `workflow` scope instead of GITHUB_TOKEN.
           # See: https://github.com/JuliaRegistries/TagBot#commits-that-modify-workflow-files
-          # ssh: ${{ secrets.DOCUMENTER_KEY }}
-          # ssh: ${{ secrets.NAME_OF_MY_SSH_PRIVATE_KEY_SECRET }}
+          # Push tags with the Documenter deploy key: tags pushed with
+          # GITHUB_TOKEN do not start other workflows, so the Docs workflow
+          # never ran for a release and no stable docs were deployed.
+          ssh: ${{ secrets.DOCUMENTER_KEY }}
           changelog_format: github  # 'custom' (default), 'github', or 'conventional'
