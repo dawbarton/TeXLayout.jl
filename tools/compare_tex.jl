@@ -19,8 +19,8 @@
 # because $\displaystyle ...$ is still inline mode for amsmath's \if@display.
 #
 # Requirements: lualatex or xelatex with unicode-math, fontspec, mathtools,
-# extarrows, TikZ, and the standalone class (TeX Live), and ImageMagick
-# (`magick`) for the PNGs.
+# extarrows, TikZ, and the standalone class (TeX Live), and ImageMagick for the
+# PNGs (ImageMagick 7's `magick`, or ImageMagick 6's `convert` outside Windows).
 #
 # Usage:
 #   julia --project=tools tools/compare_tex.jl [options] EXPR [EXPR ...]
@@ -242,9 +242,22 @@ function write_tex(path::String, font::Symbol, opts::Options)
     return path
 end
 
+# The ImageMagick executable for rasterising: ImageMagick 7's `magick`, or else
+# ImageMagick 6's `convert`, which takes the same arguments.  On Windows
+# `convert` is the system's file-system converter, so only `magick` is used.
+function find_imagemagick()
+    candidates = Sys.iswindows() ? ("magick",) : ("magick", "convert")
+    for exe in candidates
+        path = Sys.which(exe)
+        path === nothing || return path
+    end
+    return nothing
+end
+
 function main(args = ARGS)
     opts = parse_options(args)
     mkpath(opts.out)
+    imagemagick = opts.density > 0 ? find_imagemagick() : nothing
     for font in opts.fonts
         tex = abspath(joinpath(opts.out, "$(opts.name)_$(font).tex"))
         write_tex(tex, font, opts)
@@ -256,9 +269,16 @@ function main(args = ARGS)
         pdf = splitext(tex)[1] * ".pdf"
         println(pdf)
         if opts.density > 0
+            if imagemagick === nothing
+                println(stderr, "no ImageMagick (`magick` or `convert`) found; skipping the PNG for :$font")
+                continue
+            end
             png = splitext(tex)[1] * ".png"
-            run(`magick -density $(opts.density) $pdf -background white -alpha remove -alpha off $png`)
-            println(png)
+            if success(`$imagemagick -density $(opts.density) $pdf -background white -alpha remove -alpha off $png`)
+                println(png)
+            else
+                println(stderr, "ImageMagick could not rasterise $pdf (an ImageMagick 6 security policy may block PDF input); pass --density=0 to skip the PNGs")
+            end
         end
     end
     return nothing

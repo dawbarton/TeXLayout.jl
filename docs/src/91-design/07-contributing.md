@@ -188,11 +188,13 @@ isolating the vertical shifts.
   loadable" before trusting a number.
 
 `compare_tex.jl` needs `lualatex` or `xelatex` with unicode-math, fontspec,
-mathtools, extarrows, TikZ, and the `standalone` class, and ImageMagick 7
-(`magick`) for the PNGs.  On TinyTeX, `tlmgr install standalone varwidth
-luatex85 mathtools extarrows pgf` adds what a minimal installation lacks
-(`standalone` needs `luatex85` under LuaLaTeX but does not pull it in).  With
-only ImageMagick 6, pass `--density=0` and rasterise the PDFs with `pdftoppm`.
+mathtools, extarrows, TikZ, and the `standalone` class, and ImageMagick for the
+PNGs: ImageMagick 7's `magick`, or else ImageMagick 6's `convert` (not on
+Windows, where `convert` is a system utility).  Some Linux distributions'
+ImageMagick 6 policy blocks PDF input; then pass `--density=0` and rasterise the
+PDFs with `pdftoppm`.  On TinyTeX, `tlmgr install standalone varwidth luatex85
+mathtools extarrows pgf` adds what a minimal installation lacks (`standalone`
+needs `luatex85` under LuaLaTeX but does not pull it in).
 Everything before the first `|` of an expression is its label, so an
 expression containing `|` (`\bigm|`, an array column specification) needs an
 explicit label: `'array|\begin{array}{|l|c|}…'`.
