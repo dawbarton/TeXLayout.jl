@@ -1,2 +1,0 @@
-var DOCUMENTER_CURRENT_VERSION = "v0.3.0-fonts";
-var DOCUMENTER_IS_DEV_VERSION = false;
