@@ -2208,7 +2208,7 @@
 - After the release: check the TagBot tag and release, and that `stable` docs
   deploy (first use of the `DOCUMENTER_KEY` SSH input to TagBot).
 
-## 2026-11-13T21:52+00:00 v0.4.0 released
+## 2026-11-13T22:21+00:00 v0.4.0 released
 
 - Registered through General PR 176145 (release notes mentioning
   "breaking"); TagBot tagged `v0.4.0` (annotated, at merge commit 2b5108c)
