@@ -200,14 +200,16 @@ function main()
                 ink_bottom, ink_right, ink_top, advance_col,
                 GREEN, OVERLAY_ALPHA[:right_gap]
             )
-            fill_rect!(
+            # Ink above and below the glyph's own baseline; a glyph wholly on one
+            # side of it (`=`, a subscript comma) gets only that side's fill.
+            top > 0 && fill_rect!(
                 canvas,
-                em_to_px_y(y0), ink_left, ink_top, ink_right,
+                em_to_px_y(y0 + max(bottom, 0.0)), ink_left, ink_top, ink_right,
                 RED, OVERLAY_ALPHA[:above_baseline]
             )
-            fill_rect!(
+            bottom < 0 && fill_rect!(
                 canvas,
-                ink_bottom, ink_left, em_to_px_y(y0), ink_right,
+                ink_bottom, ink_left, em_to_px_y(y0 + min(top, 0.0)), ink_right,
                 BLUE, OVERLAY_ALPHA[:descender]
             )
 

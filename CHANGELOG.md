@@ -270,6 +270,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
   placed labels of differing ink height on different baselines, and `Axis`
   tick-label space depended on whether a label happened to have a descender.
+- `tools/visualise_metrics_makie.jl` draws the baseline and math-axis guides on
+  the formula's baseline under Makie 0.24, which aligns a `LaTeXString` at
+  `:baseline` by the bottom of its bounding box. The guides were drawn at that
+  bottom instead, about an em too low for `\frac{a}{b}`, while the glyph
+  overlays were placed correctly. Both metric visualisers now fill only the
+  side of the baseline a glyph's ink is on, so `=` no longer gets a spurious
+  descender band.
 
 ## [v0.3.2] - 2026-07-26
 

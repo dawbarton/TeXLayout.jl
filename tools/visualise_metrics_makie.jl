@@ -108,6 +108,11 @@ function main()
     isempty(boxes) && @warn "No layout boxes produced for expression: $expr"
     handler_kwargs = makie_handler_kwargs()
 
+    # Where Makie puts TeXLayout's origin is -tex_offset in data coordinates.
+    # Makie 0.25's handler honours `:baseline`, so the offset is zero.  Makie
+    # 0.24 has no `:baseline` case for a LaTeXString and aligns the bottom of
+    # its bounding box (descender line) instead, so every overlay and guide
+    # must be shifted by the offset it reports.
     tex_offset = if isempty(handler_kwargs)
         rotation = Makie.to_rotation(0.0f0)
         _, _, offset = Makie.texelems_and_glyph_collection(
@@ -185,10 +190,11 @@ function main()
         markerspace = :data,
     )
 
-    hline!(ax, 0.0, xlo, xhi; color = BASELINE)
+    baseline_y = -tex_offset[2]
+    hline!(ax, baseline_y, xlo, xhi; color = BASELINE)
     hline!(
         ax,
-        mt.constants.axis_height / Float64(mt.upm) * BASE_PX,
+        baseline_y + mt.constants.axis_height / Float64(mt.upm) * BASE_PX,
         xlo,
         xhi;
         color = AXIS,
@@ -207,8 +213,10 @@ function main()
             adv = elem.advance_width * s
             fill_rect!(ax, x0, y0 + bottom, x0 + left, y0 + top, YELLOW)
             fill_rect!(ax, x0 + right, y0 + bottom, x0 + adv, y0 + top, GREEN)
-            fill_rect!(ax, x0 + left, y0, x0 + right, y0 + top, RED)
-            fill_rect!(ax, x0 + left, y0 + bottom, x0 + right, y0, BLUE)
+            # Ink above and below the glyph's own baseline; a glyph wholly on
+            # one side of it (`=`, a subscript comma) gets only that side's fill.
+            top > 0 && fill_rect!(ax, x0 + left, y0 + max(bottom, 0.0), x0 + right, y0 + top, RED)
+            bottom < 0 && fill_rect!(ax, x0 + left, y0 + bottom, x0 + right, y0 + min(top, 0.0), BLUE)
 
             rect_outline!(ax, x0 + left, y0 + bottom, x0 + right, y0 + top)
             vline!(ax, x0, y0 + bottom, y0 + top; color = OUTLINE)
