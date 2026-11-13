@@ -1766,7 +1766,7 @@ find_hrules(boxes) = find_elements(boxes, e -> e isa HRule)
             mu = find_matrix(parse_latex("\\begin{$env} a \\end{$env}"))
             ms = find_matrix(parse_latex("\\begin{$env*} a \\end{$env*}"))
             @test mu !== nothing && ms !== nothing
-            @test mu.value == ms.value   # identical encoded matrix payload
+            @test mu.payload == ms.payload   # identical matrix payload
         end
     end
 

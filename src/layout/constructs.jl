@@ -122,8 +122,7 @@ end
 # the same glyph variant is selected at every style level; the glyph renders at the
 # current scale so it appears smaller in subscripts, matching KaTeX behaviour.
 function _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
-    isempty(node.value) && return 0.0
-    payload = _decode_big_delimiter_payload(node.value)
+    payload = _big_delimiter(node)
     ps_name = payload.glyph_name
     size = payload.size
     (isempty(ps_name) || size < 1 || size > length(_BIG_DELIM_HEIGHTS)) && return 0.0
@@ -192,7 +191,7 @@ end
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mt.constants, ctx.upm
 
-    payload = _decode_delimiter_pair_payload(node.value)
+    payload = _delimiter_pair(node)
     left_name = payload.left
     right_name = payload.right
 
@@ -346,7 +345,7 @@ end
 function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mt.constants, ctx.upm
     # \left…\right: size delimiters to the inner content, centred on the math axis.
-    payload = _decode_delimiter_pair_payload(node.value)
+    payload = _delimiter_pair(node)
     left_name = payload.left
     right_name = payload.right
 

@@ -620,7 +620,7 @@ function _parse_matrix_body!(
         for r in 1:nrow, c in 2:2:ncol
             idx = (r - 1) * ncol + c
             cell = cells[idx]
-            cells[idx] = Node(cell.kind, cell.value, [Node(NodeKind.Group, Node[]); cell.children])
+            cells[idx] = Node(cell.kind, cell.value, [Node(NodeKind.Group, Node[]); cell.children], cell.width, cell.payload)
         end
     end
 
@@ -638,7 +638,7 @@ function _parse_matrix_body!(
         end
     end
 
-    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec, row_gaps)), cells)
+    return Node(NodeKind.Matrix, _MatrixPayload(env_name, nrow, colspec, row_gaps), cells)
 end
 
 # Parse a command token and return the appropriate node.
@@ -679,25 +679,25 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
     elseif cmd == "\\binom"
         num = _parse_argument!(p, isstop)
         den = _parse_argument!(p, isstop)
-        return Node(NodeKind.Genfrac, _encode_payload(_DelimiterPairPayload("parenleft", "parenright")), [num, den])
+        return Node(NodeKind.Genfrac, _DelimiterPairPayload("parenleft", "parenright"), [num, den])
 
     elseif cmd == "\\dbinom"
         num = _parse_argument!(p, isstop)
         den = _parse_argument!(p, isstop)
-        payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
+        payload = _DelimiterPairPayload("parenleft", "parenright")
         return Node(NodeKind.StyleOverride, "Display", [Node(NodeKind.Genfrac, payload, [num, den])])
 
     elseif cmd == "\\tbinom"
         num = _parse_argument!(p, isstop)
         den = _parse_argument!(p, isstop)
-        payload = _encode_payload(_DelimiterPairPayload("parenleft", "parenright"))
+        payload = _DelimiterPairPayload("parenleft", "parenright")
         return Node(NodeKind.StyleOverride, "Text", [Node(NodeKind.Genfrac, payload, [num, den])])
 
     elseif haskey(_BIG_DELIM_COMMANDS, cmd)
         # \bigl( \bigr) \Bigl[ \bigm| etc.: consume the following delimiter token.
         size_ch, cls_ch = _BIG_DELIM_COMMANDS[cmd]
         ps = _parse_delim_name!(p)
-        payload = _encode_payload(_BigDelimiterPayload(ps, parse(Int, string(size_ch)), cls_ch))
+        payload = _BigDelimiterPayload(ps, parse(Int, string(size_ch)), cls_ch)
         return Node(NodeKind.BigDelim, payload, Node[])
 
     elseif haskey(_STYLE_COMMANDS, cmd)
@@ -735,7 +735,7 @@ function _parse_command!(p::_Parser, isstop = _is_group_end)::Node
             _advance!(p)
             right_name = _parse_delim_name!(p)
         end
-        return Node(NodeKind.Delimited, _encode_payload(_DelimiterPairPayload(left_name, right_name)), inner)
+        return Node(NodeKind.Delimited, _DelimiterPairPayload(left_name, right_name), inner)
 
     elseif cmd == "\\mathchoice"
         # \mathchoice{D}{T}{S}{SS}: four math lists, one per style family.

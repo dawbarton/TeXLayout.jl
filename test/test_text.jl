@@ -418,7 +418,7 @@
             tree = parse_latex("\\begin{align}x&=y\\\\a&=b\\end{align}")
             mat = tree.children[1]
             @test mat.kind === NodeKind.Matrix
-            @test split(mat.value, "\x00")[3] == "rl"
+            @test mat.payload.colspec == "rl"
         end
 
         @testset "Align inserts empty group before post-& cells" begin
@@ -438,14 +438,14 @@
             tree = parse_latex("\\begin{align}a&b&c&d\\end{align}")
             mat = tree.children[1]
             @test mat.kind === NodeKind.Matrix
-            @test split(mat.value, "\x00")[3] == "rlrl"
+            @test mat.payload.colspec == "rlrl"
         end
 
         @testset "Gather colspec: 1 column → c" begin
             tree = parse_latex("\\begin{gather}x\\\\y\\end{gather}")
             mat = tree.children[1]
             @test mat.kind === NodeKind.Matrix
-            @test split(mat.value, "\x00")[3] == "c"
+            @test mat.payload.colspec == "c"
         end
 
         @testset "parse_environment! returns NodeKind.Matrix for align" begin
@@ -855,9 +855,7 @@
             @test doc[2].kind === :align
             mat = doc[2].node
             @test mat.kind === NodeKind.Matrix
-            parts = split(mat.value, "\x00")
-            @test parse(Int, parts[2]) == 2
-            @test parts[3] == "rl"
+            @test (mat.payload.nrow, mat.payload.colspec) == (2, "rl")
         end
 
         @testset "Lenience: unclosed dollar does not throw" begin

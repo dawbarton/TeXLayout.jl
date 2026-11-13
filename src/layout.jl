@@ -172,9 +172,7 @@ function _atom_class(node::Node)::Symbol
     elseif k === NodeKind.Operator
         return :op
     elseif k === NodeKind.BigDelim
-        # Class char is the last byte of value: 'o'=open, 'c'=close, 'r'=rel, 'd'=ord.
-        isempty(node.value) && return :ord
-        c = node.value[end]
+        c = _big_delimiter(node).atom_class   # 'o' open, 'c' close, 'r' rel, 'd' ord
         c == 'o' && return :open
         c == 'c' && return :close
         c == 'r' && return :rel
@@ -188,7 +186,7 @@ function _atom_class(node::Node)::Symbol
     elseif k === NodeKind.Matrix
         # amsmath's delimited environments (pmatrix, cases, …) are
         # \left…\right, an Inner atom; the others are a \vcenter box, an Ord.
-        info = get(_MATRIX_ENVS, _decode_matrix_payload(node.value).env_name, nothing)
+        info = get(_MATRIX_ENVS, _matrix_payload(node).env_name, nothing)
         return info !== nothing && !(isempty(info.left) && isempty(info.right)) ? :inner : :ord
     elseif k === NodeKind.Delimited || k === NodeKind.HorizBrace
         return :inner

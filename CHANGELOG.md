@@ -90,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the slot. A glyph that no font in its chain has is reported once instead of
   being skipped silently. Their font, canvas, and box-drawing helpers live in
   the new `tools/common.jl`. Stress images are unchanged.
+- The AST `Node` returned by `TeXLayout.parse_latex` has a `payload` field
+  with structured data for `\left…\right`, binomial, `\big`-family delimiter,
+  and matrix nodes, which previously packed it into `value` as
+  `\0`-separated text. Those nodes now have an empty `value`.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,

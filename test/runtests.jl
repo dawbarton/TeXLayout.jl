@@ -65,8 +65,8 @@ using TeXLayout: is_cramped, is_display, is_script, is_script_script,
 # Lexer
 using TeXLayout: tokenize, TokenKind
 
-# Parser / AST node kinds
-using TeXLayout: NodeKind
+# Parser / AST node kinds and their structured payloads
+using TeXLayout: NodeKind, _DelimiterPairPayload, _BigDelimiterPayload, _MatrixPayload
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
 # Included once here so that test_math_table.jl, test_metrics.jl, and

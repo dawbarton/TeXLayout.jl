@@ -120,8 +120,8 @@ end
 
 # A binomial node with its delimiters removed (for `B:` cases).
 function _strip_binomial_delimiters(node)
-    node.kind === TeXLayout.NodeKind.Genfrac && return TeXLayout.Node(node.kind, "\0", node.children)
-    return TeXLayout.Node(node.kind, node.value, [_strip_binomial_delimiters(c) for c in node.children], node.width)
+    node.kind === TeXLayout.NodeKind.Genfrac && return TeXLayout.Node(node.kind, TeXLayout._DelimiterPairPayload("", ""), node.children)
+    return TeXLayout.Node(node.kind, node.value, [_strip_binomial_delimiters(c) for c in node.children], node.width, node.payload)
 end
 
 function texlayout_tikz(io, tree, family, style, opts::Options)

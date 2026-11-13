@@ -248,9 +248,7 @@
         node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00"; limit = 2)
-        @test parts[1] == "parenleft"
-        @test parts[2] == "parenright"
+        @test delim.payload == _DelimiterPairPayload("parenleft", "parenright")
         # \right is consumed — only x remains as an inner child
         @test all(c.kind !== NodeKind.Command || c.value != "\\right" for c in delim.children)
         @test any(c -> c.kind === NodeKind.Char && c.value == "x", delim.children)
@@ -260,18 +258,14 @@
         node = parse_latex("\\left. x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00"; limit = 2)
-        @test parts[1] == ""          # null delimiter maps to empty string
-        @test parts[2] == "parenright"
+        @test delim.payload == _DelimiterPairPayload("", "parenright")   # null delimiter: empty name
     end
 
     @testset "\\left\\{…\\right\\} brace delimiters" begin
         node = parse_latex("\\left\\{ x \\right\\}")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00"; limit = 2)
-        @test parts[1] == "braceleft"
-        @test parts[2] == "braceright"
+        @test delim.payload == _DelimiterPairPayload("braceleft", "braceright")
     end
 
     # ── Font switching ──────────────────────────────────────────────────────────
@@ -454,7 +448,7 @@
         @test length(tree.children) == 1
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        @test mat.value == "pmatrix\x002\x00cc"
+        @test mat.payload == _MatrixPayload("pmatrix", 2, "cc")
         @test length(mat.children) == 4
         # Each child is a group; check cell content
         @test mat.children[1].kind === NodeKind.Group
@@ -468,7 +462,7 @@
         tree = parse_latex(raw"\begin{matrix} x \end{matrix}")
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        @test mat.value == "matrix\x001\x00c"
+        @test mat.payload == _MatrixPayload("matrix", 1, "c")
         @test length(mat.children) == 1
         @test mat.children[1].children[1].value == "x"
     end
@@ -477,7 +471,7 @@
         tree = parse_latex(raw"\begin{cases} f & x > 0 \\ 0 & \text{otherwise}\end{cases}")
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        @test mat.value == "cases\x002\x00ll"
+        @test mat.payload == _MatrixPayload("cases", 2, "ll")
         @test length(mat.children) == 4
     end
 
@@ -485,7 +479,7 @@
         tree = parse_latex(raw"\begin{pmatrix} a & b")
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        @test mat.value == "pmatrix\x001\x00cc"
+        @test mat.payload == _MatrixPayload("pmatrix", 1, "cc")
         @test length(mat.children) == 2
     end
 
@@ -499,7 +493,7 @@
         # Row 1 has 3 cells, row 2 has 1: should produce a 2x3 matrix with 6 cells.
         tree = parse_latex(raw"\begin{matrix} a & b & c \\ x \end{matrix}")
         mat = tree.children[1]
-        @test mat.value == "matrix\x002\x00ccc"
+        @test mat.payload == _MatrixPayload("matrix", 2, "ccc")
         @test length(mat.children) == 6
         # Last two cells of row 2 should be empty groups
         @test isempty(mat.children[5].children)
@@ -511,11 +505,8 @@
         @test length(tree.children) == 1
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        # value encodes env, nrow, and the raw colspec
-        parts = split(mat.value, "\x00"; limit = 3)
-        @test parts[1] == "array"
-        @test parts[2] == "2"
-        @test parts[3] == "lcr"
+        # The payload records env, nrow, and the raw colspec
+        @test mat.payload == _MatrixPayload("array", 2, "lcr")
         @test length(mat.children) == 6
         @test mat.children[1].children[1].value == "a"
         @test mat.children[2].children[1].value == "b"
@@ -526,9 +517,7 @@
         tree = parse_latex(raw"\begin{array}{|l|c|r|} x & y & z \end{array}")
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        parts = split(mat.value, "\x00"; limit = 3)
-        @test parts[1] == "array"
-        @test parts[3] == "|l|c|r|"
+        @test (mat.payload.env_name, mat.payload.colspec) == ("array", "|l|c|r|")
         @test length(mat.children) == 3
     end
 
@@ -536,8 +525,7 @@
         tree = parse_latex(raw"\begin{array}{ll} f(x) & x > 0 \\ 0 & \text{else}\end{array}")
         mat = tree.children[1]
         @test mat.kind === NodeKind.Matrix
-        parts = split(mat.value, "\x00"; limit = 3)
-        @test parts[3] == "ll"
+        @test mat.payload.colspec == "ll"
         @test length(mat.children) == 4
     end
 
@@ -564,11 +552,7 @@
         tree = parse_latex(raw"\binom{n}{k}")
         node = tree.children[1]
         @test node.kind === NodeKind.Genfrac
-        # value encodes PS glyph names "parenleft\x00parenright"
-        @test contains(node.value, "\x00")
-        parts = split(node.value, "\x00")
-        @test parts[1] == "parenleft"
-        @test parts[2] == "parenright"
+        @test node.payload == _DelimiterPairPayload("parenleft", "parenright")
         @test length(node.children) == 2
     end
 
@@ -596,51 +580,39 @@
         rdelim = tree.children[end]
         @test ldelim.kind === NodeKind.BigDelim
         @test rdelim.kind === NodeKind.BigDelim
-        # value format: "ps_name\x00size\x00class"
-        lparts = split(ldelim.value, "\x00")
-        @test lparts[1] == "parenleft"
-        @test lparts[2] == "1"
-        @test lparts[3] == "o"   # open
-        rparts = split(rdelim.value, "\x00")
-        @test rparts[1] == "parenright"
-        @test rparts[3] == "c"   # close
+        @test ldelim.payload == _BigDelimiterPayload("parenleft", 1, 'o')    # open
+        @test rdelim.payload == _BigDelimiterPayload("parenright", 1, 'c')   # close
         @test isempty(ldelim.children)
     end
 
     @testset "\\Bigr] has size 2 and close class" begin
         node = parse_latex(raw"\Bigr]").children[1]
         @test node.kind === NodeKind.BigDelim
-        parts = split(node.value, "\x00")
-        @test parts[1] == "bracketright"
-        @test parts[2] == "2"
-        @test parts[3] == "c"
+        @test node.payload == _BigDelimiterPayload("bracketright", 2, 'c')
     end
 
     @testset "\\bigm| has rel class" begin
         node = parse_latex(raw"\bigm|").children[1]
         @test node.kind === NodeKind.BigDelim
-        @test split(node.value, "\x00")[3] == "r"
+        @test node.payload.atom_class == 'r'
     end
 
     @testset "\\Bigg. has null delimiter (empty ps_name)" begin
         node = parse_latex(raw"\Bigg.").children[1]
         @test node.kind === NodeKind.BigDelim
-        parts = split(node.value, "\x00")
-        @test parts[1] == ""   # null delimiter
-        @test parts[2] == "4"
-        @test parts[3] == "d"  # ord
+        @test node.payload == _BigDelimiterPayload("", 4, 'd')   # null delimiter, ord
     end
 
     @testset "\\bigl\\langle produces angleleft" begin
         node = parse_latex(raw"\bigl\langle").children[1]
         @test node.kind === NodeKind.BigDelim
-        @test split(node.value, "\x00")[1] == "angleleft"
+        @test node.payload.glyph_name == "angleleft"
     end
 
     @testset "\\bigl\\uparrow uses arrow delimiter" begin
         node = parse_latex(raw"\bigl\uparrow").children[1]
         @test node.kind === NodeKind.BigDelim
-        @test split(node.value, "\x00")[1] == "uparrow"
+        @test node.payload.glyph_name == "uparrow"
     end
 
     @testset "\\displaystyle consumes rest of group" begin
@@ -666,7 +638,7 @@
         tree = parse_latex(raw"\left(\displaystyle x\right)+y")
         delimited = tree.children[1]
         @test delimited.kind === NodeKind.Delimited
-        @test split(delimited.value, '\0') == ["parenleft", "parenright"]
+        @test delimited.payload == _DelimiterPairPayload("parenleft", "parenright")
         style = only(delimited.children)
         @test style.kind === NodeKind.StyleOverride
         @test only(style.children).children[1].value == "x"
@@ -677,7 +649,7 @@
         tree = parse_latex(raw"\begin{matrix}\displaystyle a&b\\c&d\end{matrix}")
         matrix = only(tree.children)
         @test matrix.kind === NodeKind.Matrix
-        @test split(matrix.value, '\0')[2:3] == ["2", "cc"]
+        @test (matrix.payload.nrow, matrix.payload.colspec) == (2, "cc")
         @test length(matrix.children) == 4
 
         style = only(matrix.children[1].children)
@@ -861,12 +833,12 @@
 
         @testset "Space after a control word: \\left (, \\middle |, \\bigl (" begin
             delim = only(parse_latex(raw"\left ( x \middle | y \right )").children)
-            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            payload = delim.payload
             @test (payload.left, payload.right) == ("parenleft", "parenright")
             @test any(c -> c.kind === NodeKind.Middle && c.value == "bar", delim.children)
 
             big = only(parse_latex(raw"\bigl (").children)
-            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == "parenleft"
+            @test big.payload.glyph_name == "parenleft"
         end
 
         @testset "Space after a control word: \\kern 1em, \\mkern 18mu" begin
@@ -916,7 +888,7 @@
     end
 
     @testset "Matrix row spacing \\[len]" begin
-        gaps(src) = TeXLayout._decode_matrix_payload(only(parse_latex(src).children).value).row_gaps
+        gaps(src) = only(parse_latex(src).children).payload.row_gaps
         @test gaps(raw"\begin{matrix} a \\[10pt] b \\ c \\[-0.5em] d \end{matrix}") ≈ [1.0, 0.0, -0.5, 0.0]
         @test gaps(raw"\begin{matrix} a \\ b \\[3mm] \end{matrix}") ≈ [0.0, 7.227 / 25.4 * 3]
         # As with amsmath's \new@ifnextchar, a bracket after a space starts the
@@ -924,8 +896,8 @@
         @test gaps(raw"\begin{aligned} a &= b \\ [5pt] c &= d \end{aligned}") == [0.0, 0.0]
         # A register or an unknown unit gives no space.
         @test gaps(raw"\begin{matrix} a \\[\jot] b \end{matrix}") == [0.0, 0.0]
-        # Without gaps the payload keeps its three-field form.
-        @test only(parse_latex(raw"\begin{matrix} a \\ b \end{matrix}").children).value == "matrix\0" * "2\0c"
+        # Without any \\[len] every gap is zero.
+        @test gaps(raw"\begin{matrix} a \\ b \end{matrix}") == [0.0, 0.0]
     end
 
     @testset "Primes" begin
@@ -985,10 +957,10 @@
     @testset "Environments nest inside unbraced alignment cells" begin
         tree = parse_latex(raw"\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y\end{cases}\end{aligned}")
         aligned = only(tree.children)
-        @test TeXLayout._decode_matrix_payload(aligned.value).nrow == 1
+        @test aligned.payload.nrow == 1
         cases = aligned.children[2].children[3]
         @test cases.kind === NodeKind.Matrix
-        @test TeXLayout._decode_matrix_payload(cases.value).nrow == 2
+        @test cases.payload.nrow == 2
         @test length(cases.children) == 4
         nested = only(parse_latex(raw"\begin{pmatrix}\begin{matrix}a&b\end{matrix}&c\end{pmatrix}").children)
         @test length(nested.children) == 2
@@ -1099,10 +1071,10 @@
                 (raw"\lVert", raw"\rVert", "dblverticalbar"),
             )
             delim = only(parse_latex("\\left" * left * " x \\right" * right).children)
-            payload = TeXLayout._decode_delimiter_pair_payload(delim.value)
+            payload = delim.payload
             @test (payload.left, payload.right) == (glyph, glyph)
             big = only(parse_latex("\\bigl" * left).children)
-            @test TeXLayout._decode_big_delimiter_payload(big.value).glyph_name == glyph
+            @test big.payload.glyph_name == glyph
         end
     end
 
