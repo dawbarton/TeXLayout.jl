@@ -2207,3 +2207,34 @@
   and `ext/` commits are #61's refactors, shown byte-identical.
 - After the release: check the TagBot tag and release, and that `stable` docs
   deploy (first use of the `DOCUMENTER_KEY` SSH input to TagBot).
+
+## 2026-11-13T22:21+00:00 v0.4.0 released
+
+- Registered through General PR 176145 (release notes mentioning
+  "breaking"); TagBot tagged `v0.4.0` (annotated, at merge commit 2b5108c)
+  and published the GitHub release as Latest.
+- The TagBot `ssh:` deploy key works: the tag push started the Docs workflow,
+  and `gh-pages` now has `v0.4.0`, with `stable` and `v0.4` linking to it
+  and `versions.js` listing them.  The site root redirects to `stable`.
+  First stable docs for any release.
+- `changelog_format: github` gives GitHub's generated list of merged PRs and
+  drops the Registrator release notes, so the release page has no
+  breaking-change summary.  TagBot's default (`custom`) template includes the
+  release notes above the PR list; consider it for the next release.
+- The local General mirror (pkg server) still listed 0.3.2 as the latest
+  version minutes after the tag; the mirror lags, the registration did not
+  fail (TagBot tags only registered versions).
+
+## 2026-11-13T22:29+00:00 Release notes after v0.4.0
+
+- Edited the v0.4.0 GitHub release to open with the breaking-change summary
+  from the registration comment, linking the changelog and `v0.4.0-stress`.
+- The `v0.4.0-stress` description now says its files are the references for
+  v0.4.0 (2b5108c): generated at 931901c, and the only later `src/`, `ext/`,
+  and stress-tool changes are #61's byte-identical refactors.
+- `tagbot.yml` uses `changelog_format: custom`.  TagBot's `action.yml`
+  default template renders `{{ custom }}` (the registration release notes)
+  after the diff link and before the merged-PR and closed-issue lists; the
+  `github` format dropped them for v0.4.0.
+- `future.md` records the Makie 0.25 fallback (0.4.1 plus a General compat
+  cap) beside the main-CI item.

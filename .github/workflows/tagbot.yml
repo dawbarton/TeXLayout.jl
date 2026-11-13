@@ -25,4 +25,7 @@ jobs:
           # GITHUB_TOKEN do not start other workflows, so the Docs workflow
           # never ran for a release and no stable docs were deployed.
           ssh: ${{ secrets.DOCUMENTER_KEY }}
-          changelog_format: github  # 'custom' (default), 'github', or 'conventional'
+          # The default template puts the release notes from the registration
+          # comment above the merged pull requests; GitHub's generated notes
+          # (`github`) drop them.
+          changelog_format: custom

@@ -124,7 +124,11 @@ implemented; this file records what is not, and the intended direction.
 - Once Makie 0.25 is released, run the `TeXLayoutHandler` tests in the main CI
   matrix; until then they run in the experimental, `continue-on-error`
   `makie-0-25` job against Makie's `ff/breaking-0.25` branch.  That job uploads
-  no coverage, so codecov does not see `ext/MakieExt.jl`.
+  no coverage, so codecov does not see `ext/MakieExt.jl`.  v0.4.0 already
+  declares `Makie = "0.24, 0.25"`: if the released 0.25 breaks the handler,
+  release a fix as 0.4.1 and ask General to cap 0.4.0's Makie compat at 0.24.
+  The README and `docs/src/03-makie.md` then drop "in development" and can
+  lead with the handler.
 - Makie's `word_wrap_width` sets the document width without wrapping (there is
   no soft line breaking yet), and fractional justification snaps to left,
   centre, or right, the three `LayoutOptions.align` values.
