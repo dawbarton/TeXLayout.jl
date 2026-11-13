@@ -2225,7 +2225,7 @@
   version minutes after the tag; the mirror lags, the registration did not
   fail (TagBot tags only registered versions).
 
-## 2026-11-13T22:41+00:00 Release notes after v0.4.0
+## 2026-11-13T22:29+00:00 Release notes after v0.4.0
 
 - Edited the v0.4.0 GitHub release to open with the breaking-change summary
   from the registration comment, linking the changelog and `v0.4.0-stress`.
