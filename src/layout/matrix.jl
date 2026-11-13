@@ -38,7 +38,7 @@ end
 # the environment's own: one with no delimiters of its own (`matrix`, `array`,
 # `aligned`, …).
 function _takes_outer_delimiters(m::Node)::Bool
-    info = get(_MATRIX_ENVS, _decode_matrix_payload(m.value).env_name, _MATRIX_ENVS["matrix"])
+    info = get(_MATRIX_ENVS, _matrix_payload(m).env_name, _MATRIX_ENVS["matrix"])
     return isempty(info.left) && isempty(info.right)
 end
 
@@ -66,7 +66,7 @@ function _layout_matrix_box!(
         left::Union{Nothing, String} = nothing,
         right::Union{Nothing, String} = nothing,
     )
-    payload = _decode_matrix_payload(node.value)
+    payload = _matrix_payload(node)
     env_name = payload.env_name
     nrow = payload.nrow
     nrow == 0 && return (width = 0.0, height = 0.0, depth = 0.0)
@@ -89,7 +89,7 @@ function _layout_matrix_box!(
     left_name = something(left, info.left)
     right_name = something(right, info.right)
     upm = ctx.upm
-    mc = ctx.mc
+    mc = ctx.mt.constants
 
     # Display alignment environments (align/gather/split/…) typeset each cell in
     # Display style, so fractions, scripts and big operators keep their full

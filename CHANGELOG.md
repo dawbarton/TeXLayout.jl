@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `tools/compare_tex.jl` (and `just compare-tex`), which overlays TeXLayout's
   layout on LuaLaTeX or XeLaTeX output typeset with unicode-math and the same
-  font files, for checking geometry against TeX.
+  font files, for checking geometry against TeX.  It rasterises with
+  ImageMagick 7's `magick`, or ImageMagick 6's `convert` where that is all
+  there is (not on Windows).
 - Stress section "38. PARSER WHITESPACE & DELIMITER ALIASES", which sets spaced
   or aliased spellings (`x ^2`, `\sqrt [3]{x}`, `\left\lvert`, `\bigl\vert`,
   `\kern 1em`) beside their canonical forms, plus hyperbolic operator names, an
@@ -83,6 +85,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `glyph_metrics(family, name)` is memoised per font and glyph name. Layouts
   with delimiters, large operators, or scripts are 1.5–6× faster in the
   benchmark suite (FreeType's name lookup dominated them).
+- The FreeType tools (`visualise_bitmap.jl`, `visualise_text.jl`,
+  `visualise_metrics.jl`, and the math and text stress renderers) and
+  `compare_tex.jl` find each glyph's face as the renderer adapters do, through
+  `GlyphRuntime`'s slot fallback chains, instead of taking the first font in
+  the slot. A glyph that no font in its chain has is reported once instead of
+  being skipped silently. Their font, canvas, and box-drawing helpers live in
+  the new `tools/common.jl`. Stress images are unchanged.
+- The AST `Node` returned by `TeXLayout.parse_latex` has a `payload` field
+  with structured data for `\left…\right`, binomial, `\big`-family delimiter,
+  and matrix nodes, which previously packed it into `value` as
+  `\0`-separated text. Those nodes now have an empty `value`.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
@@ -259,6 +272,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
   placed labels of differing ink height on different baselines, and `Axis`
   tick-label space depended on whether a label happened to have a descender.
+- `tools/visualise_metrics_makie.jl` draws the baseline and math-axis guides on
+  the formula's baseline under Makie 0.24, which aligns a `LaTeXString` at
+  `:baseline` by the bottom of its bounding box. The guides were drawn at that
+  bottom instead, about an em too low for `\frac{a}{b}`, while the glyph
+  overlays were placed correctly. Both metric visualisers now fill only the
+  side of the baseline a glyph's ink is on, so `=` no longer gets a spurious
+  descender band.
 
 ## [v0.3.2] - 2026-07-26
 

@@ -53,7 +53,7 @@ applies alignment, rotation, and offset downstream. Moving or rotating a label
 therefore does not rerun TeXLayout.
 
 The adapter caches FreeType handles and glyph-name lookups per effective
-[`FontFamily`](@ref). TeXLayout's core caches continue to reuse font metrics and
+[`FontFamily`](@ref TeXLayout.FontFamily). TeXLayout's core caches continue to reuse font metrics and
 parsed OpenType MATH tables.
 
 ## Inline math vs. mixed text and math

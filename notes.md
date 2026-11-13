@@ -2102,3 +2102,79 @@
   1.25.15) were folded into #60 with Dependabot's pinned SHAs, applied to
   every occurrence: #55 had missed the `makie-0-25` job's cache pin, which
   was added after it opened.
+
+## 2026-11-13T16:59+00:00 Structural review and maintainability refactor
+
+- Review conclusion: no wholesale restructure; six targeted steps, each a
+  separate commit, with tests, all 1416 stress images and 24 sheets
+  byte-identical to `main`, and benchmarks unchanged within this machine's
+  noise (interleave runs; load is high).
+- (a) `tools/common.jl` holds the tools' shared font, glyph, and canvas
+  helpers.  Tools now resolve glyphs through `GlyphRuntime` (the whole slot
+  fallback chain), as the adapters do, instead of `_font_path_for_slot` (the
+  first font only).  No current case resolves differently.
+- (b) `_LayoutCtx` holds the `MathTable` itself (`ctx.mt.constants`, …) plus
+  `upm`; variants are built with one `_with` helper.
+- (c) Typed `Node.payload` (`_DelimiterPairPayload`, `_BigDelimiterPayload`,
+  `_MatrixPayload`) replaces `\0`-separated `Node.value`.  A stale
+  `isempty(node.value)` guard in `_layout_big_delim!` silently dropped every
+  `\big` delimiter after the change.  The stress suite flagged it first, but
+  reinserting the guard later showed that three existing `\big` testsets fail
+  too (corrected; this note first said the unit tests missed it).
+- (d) Tests split by feature (`test_layout_*.jl`, `test_text_*.jl`, shared
+  `helpers.jl`); `Pkg.test(test_args = [...])` selects files by substring.
+- (e) Math-alphabet mapping moved to `src/tables/math_alphabets.jl`.
+- (f) `AGENTS.md` cut from 593 to 109 lines (purpose, map, invariants,
+  working rules); architecture moved to `docs/src/91-design/` (seven pages),
+  replacing `91-developer.md`.  `future.md` is the single list of
+  limitations.
+- Documenter gotchas: a bare `[`FontFamily`](@ref)` had resolved to a heading
+  on the deleted developer page, so it needs `@ref TeXLayout.FontFamily`; a
+  `|` inside a code span still ends a table cell in Julia's Markdown parser.
+- Open: `tools/visualise_metrics_makie.jl` draws its metric guides offset
+  from the glyphs; identical on `main`, so pre-existing.  `compare_tex.jl`
+  PDF builds fail locally for want of `standalone.cls` in TinyTeX.
+
+## 2026-11-13T17:38+00:00 Payload benchmarks, \big tests, metric guides, and a TeX compare
+
+- Typed payloads cost nothing: four commits (`main`, before and after the
+  payload change, head) interleaved over 4 rounds at load ≈ 1.  Payload step
+  geometric-mean time ratio 0.984 (worst +1.1%, inside the 2 to 12% round
+  spread); allocations never rise and fall for matrices, `\left…\right`, and
+  documents; `parse/matrix_cases` is about 8% faster (tuned re-timing).
+  `head`/`main` 1.000.  Single-evaluation timings of sub-microsecond cases
+  (`parse/simple_atom`) are too noisy to read alone; re-time with `tune!`.
+- Mutation check of the `\big` tests: reinserting the stale
+  `isempty(node.value)` guard fails three existing testsets, so the earlier
+  claim that only the stress suite caught it was wrong (corrected above).
+  Making every `\big` ordinary failed nothing in the whole suite; the new
+  spacing testset now catches it.
+- `visualise_metrics_makie.jl` guides: Makie 0.24's `get_yshift` has no
+  `:baseline` case, so a `LaTeXString` aligns by its bounding-box bottom; the
+  tools environment runs Makie 0.24.17.  Overlays used the reported offset,
+  the guides did not.
+- TinyTeX: installed standalone, varwidth, luatex85, mathtools, extarrows, and
+  pgf (plus adjustbox, collectbox, currfile, filemod, fp, gincltex, svn-prov);
+  `tlmgr update --self` was needed first.  No `magick` here: use
+  `--density=0` and `pdftoppm`.
+- compare_tex, all eight fonts at 10 pt: exact agreement for `\left…\right`,
+  `pmatrix`, ruled `array`, `\sqrt[3]`, `\sum` limits, and the binomial
+  shifts.  Differences, all pre-existing and now in `future.md`: `\big` sizes
+  (KaTeX's fixed 1.2/1.8/2.4/3.0 em against amsmath's font-dependent
+  `\big@size` through `\left`; up to 1.43× too tall in Termes); variant choice
+  by MATH advance rather than ink at an exact edge (Schola `\tbinom`);
+  `\xrightarrow` padding and label drop (KaTeX's rather than `\ext@arrow`'s);
+  `\overbrace` 0.05 to 0.21 em too wide.  NCM's display `\binom` difference is
+  the recorded 2.39 vs 2.40 em choice (katex_rules 15e).
+- Open: whether `\big` should follow amsmath (the geometry reference is
+  LuaLaTeX, but KaTeX's fixed sizes are scale-independent and simpler).
+
+## 2026-11-13T17:52+00:00 Decision: keep KaTeX's \big tiers and arrow padding
+
+- David's call: keep KaTeX's fixed `\big` tiers (1.2/1.8/2.4/3.0 em) and
+  `\xrightarrow` padding rather than amsmath's `\big@size` and `\ext@arrow`;
+  the differences are small.  Recorded with the measurements in
+  `katex_rules.md`; removed from `future.md`.  The `\overbrace` width and the
+  advance-against-ink variant edge stay in `future.md`.
+- `compare_tex.jl` now falls back to ImageMagick 6's `convert` (never on
+  Windows, where `convert` is a disk utility).

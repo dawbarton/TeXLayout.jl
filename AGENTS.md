@@ -1,586 +1,102 @@
-# TeXLayout.jl — Architecture and Developer Guide
+# TeXLayout.jl: guide for agents and developers
 
-This file documents key architectural decisions, invariants, and caveats for
-agents and human developers working on this codebase.
+This file holds what every change needs: where things are, the invariants that
+must hold, and the working rules.  How TeXLayout works (pipeline, data
+structures, algorithms, adapters) is in the design documentation; read the page
+for the area you are changing before you change it.
 
 ## Purpose
 
-TeXLayout.jl is a Julia-idiomatic OpenType-aware LaTeX math typesetter.  It is intended
-as a drop-in replacement for MathTeXEngine.jl in Makie.jl.  The design reference is
-[KaTeX](https://katex.org/); the implementation is not a direct port but follows the same
-algorithmic structure where it is sound.
+TeXLayout.jl is an OpenType-aware LaTeX math typesetter in Julia, intended as a
+drop-in replacement for MathTeXEngine.jl in Makie.  Its design reference is
+[KaTeX](https://katex.org/), followed where it is sound rather than ported; its
+geometry reference is LuaLaTeX with unicode-math and the same font files.
 
-## File structure
+## Where things are
 
-```
-TeXLayout.jl/
-├── src/
-│   ├── TeXLayout.jl        # Module entry point; exports and include order
-│   ├── math_table.jl       # OpenType MATH table parser + per-font MathTable cache
-│   ├── enums.jl            # Internal namespaced enums (EnumX): FontSlot, LayoutMode, Alignment, NodeKind, TokenKind
-│   ├── text_styles.jl      # Shared TextAttrs/TextFeatures and nested text-command semantics
-│   ├── fonts.jl            # FontFamily, GlyphMetrics, artifact-backed font lookup, font cache
-│   ├── style.jl            # TexStyle enum (D/T/S/SS × cramped), style transition helpers
-│   ├── lexer.jl            # Tokeniser: LaTeX string → Vector{Token}
-│   ├── payloads.jl         # Structured encoders/decoders for data stored in Node.value
-│   ├── ast.jl              # Node AST type and AST helper constructors
-│   ├── parser.jl           # Recursive-descent parser implementation
-│   ├── tables/             # Parser/layout lookup tables kept out of implementation files
-│   │   ├── parser_tables.jl
-│   │   ├── layout_atoms.jl
-│   │   ├── layout_spacing.jl
-│   │   └── layout_symbols.jl
-│   ├── layout.jl           # Core layout types, shared helpers, recursive dispatch, public layout API
-│   ├── layout/             # Feature-specific layout helpers
-│   │   ├── constructs.jl
-│   │   ├── extensible.jl
-│   │   ├── matrix.jl
-│   │   └── scripts.jl
-│   ├── boxes.jl            # Internal measured box tree + shape pass for composition
-│   ├── shaping.jl          # TextShaper interface, MetricShaper, HarfBuzzShaper seam
-│   ├── document.jl         # Document AST (Block/Line/Run/TextSpan) + parse_document
-│   ├── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
-│   └── render_support.jl   # Shared adapter helpers: LaTeXString routing, GlyphRuntime
-├── ext/
-│   ├── HarfBuzzExt.jl      # Optional HarfBuzz_jll-backed TextShaper implementation
-│   ├── MakieExt.jl         # Makie 0.25 text_handler implementation
-│   └── MathTeXEngineExt.jl # Legacy Makie 0.24 adapter
-├── test/
-│   ├── runtests.jl         # Top-level testset; includes all test files
-│   ├── fixtures/
-│   │   └── newcm_math.jl   # Ground-truth constants extracted from NewCMMath-Regular.otf
-│   ├── test_math_table.jl  # Tests for MATH table parsing and cache behaviour
-│   ├── test_metrics.jl     # Tests for glyph metric lookups
-│   ├── test_style.jl       # Tests for style cascade transitions
-│   ├── test_lexer.jl       # Tests for the tokeniser
-│   ├── test_parser.jl      # Tests for AST structure
-│   ├── test_layout.jl      # Tests for layout engine invariants and feature coverage
-│   ├── test_katex.jl       # KaTeX-derived test suite (smoke, malformed, nested)
-│   ├── test_text.jl        # Text/document layout tests
-│   └── test_snapshots.jl   # Layout-equivalence hashes for math and document layout
-├── benchmark/
-│   ├── Project.toml
-│   ├── README.md
-│   └── runbenchmarks.jl    # BenchmarkTools harness with baseline comparison support
-├── tools/
-│   ├── visualise_bitmap.jl        # Rasterise one expression to PNG via FreeType
-│   ├── visualise_metrics.jl       # MathTeXEngine-style glyph metric overlay visualiser
-│   ├── visualise_metrics_makie.jl # CairoMakie text! + metric overlay visualiser
-│   ├── stress_test_content.jl     # Shared test expression definitions (library, not executable)
-│   ├── stress_test_freetype.jl    # Render stress-test sheet via FreeType (no Makie required)
-│   ├── stress_test_makie.jl       # Render stress-test sheet via CairoMakie
-│   ├── stress_test_text.jl        # Render mixed text/math document stress-test sheet
-│   ├── stress_test_latex.jl       # Generate .tex stress-test source for xelatex comparison
-│   ├── compare_tex.jl             # Overlay TeXLayout on LuaLaTeX/XeLaTeX output with the same fonts
-│   ├── stress_test_suite.jl       # Unified per-case stress PNG generator/packer/comparator
-│   ├── stress_test_all.jl         # Compatibility wrapper for stress_test_suite.jl
-│   ├── visualise_text.jl          # Render a mixed text/math string to PNG via FreeType
-│   └── prepare_font_artifacts.jl  # Build artifact tarballs + draft Artifacts.toml stanzas
-├── docs/
-│   ├── make.jl             # Documenter.jl build script
-│   ├── Project.toml
-│   └── src/                # Markdown source pages
-├── external/               # Source references (read-only; not part of the package)
-│   ├── KaTeX/
-│   ├── Makie.jl/
-│   └── MathTeXEngine.jl/
-├── artifacts/              # Bundled font payloads and extracted font files
-├── Artifacts.toml          # Artifact definitions for bundled fonts
-├── CHANGELOG.md            # Keep a Changelog format; update [Unreleased] with every change
-├── AGENTS.md               # This architecture/developer guide
-├── CLAUDE.md               # Symlink to AGENTS.md for compatibility
-├── katex_rules.md          # Rule-by-rule implementation notes against KaTeX/TeX
-├── notes.md                # Cross-session engineering notes
-├── future.md               # Focused backlog notes for known follow-up layout work
-├── justfile                # Common developer/test/stress-suite command shortcuts
-├── Project.toml
-└── README.md
-```
+- `src/`: the pipeline `tokenize` → `parse_latex` → `layout` →
+  `Vector{LayoutBox}` (`lexer.jl`, `parser.jl`, `ast.jl`, `payloads.jl`,
+  `layout.jl`, `src/layout/`), fonts and the MATH table (`fonts.jl`,
+  `math_table.jl`), the text and document layer (`shaping.jl`, `document.jl`,
+  `boxes.jl`, `compose.jl`), lookup tables (`src/tables/`), and what the
+  renderer adapters share (`render_support.jl`).
+- `ext/`: `MakieExt.jl` (the Makie 0.25 text handler), `MathTeXEngineExt.jl`
+  (Makie 0.24), and `HarfBuzzExt.jl` (`HarfBuzzShaper`).
+- `test/`: one file per area, listed in `runtests.jl`; shared helpers in
+  `helpers.jl`.
+- `tools/`: visualisers, the stress suite, and `compare_tex.jl`, with shared
+  helpers in `tools/common.jl`; run as `julia --project=tools tools/<script>.jl`.
+- `docs/src/91-design/`: the design documentation.
+  - `01-overview.md`: pipeline, source map, caches, thread safety, invariants.
+  - `02-parsing.md`: lexer, parser, AST, and node payloads.
+  - `03-layout.md`: layout context, output types, spacing, styles, and every
+    construct.
+  - `04-fonts.md`: font families, glyph lookup, and the MATH table.
+  - `05-text.md`: documents, whitespace, shaping, and composition.
+  - `06-renderers.md`: the Makie and MathTeXEngine adapters and their contracts.
+  - `07-contributing.md`: adding commands and fonts, tests, stress references,
+    tools, comparing against TeX, and benchmarks.
+- `katex_rules.md`: the TeX rule behind each construct, the MATH constants it
+  reads, and deviations from KaTeX.
+- `future.md`: the single list of known limitations and planned work.
+- `notes.md`: cross-session engineering notes (see Note taking below).
+- `external/`: read-only source references (KaTeX, Makie, MathTeXEngine), not
+  part of the package.
 
-### Rendering tools
+## Invariants
 
-All tools in `tools/` share a single `Project.toml` / `Manifest.toml` and activate automatically via `julia --project=tools/ tools/<script>.jl`.  Most PNG outputs are written directly from Julia; some single-expression visualisers may still require ImageMagick (`magick` / `convert`) on `PATH`.
+These hold everywhere; `01-overview.md` explains each.
 
-| Script | Purpose | Key invocation |
-|--------|---------|----------------|
-| `visualise_bitmap.jl` | Pixel-accurate FreeType render of a single expression — first sanity check after changing the layout engine. | `julia tools/visualise_bitmap.jl "expr" out.png` |
-| `visualise_metrics.jl` | Metric overlay: coloured left-bearing / advance-gap / above-baseline / descender regions, plus baseline and axis guides. | `julia tools/visualise_metrics.jl "expr" [out.png] [:font_symbol\|/path/to/math.otf]` |
-| `visualise_metrics_makie.jl` | CairoMakie companion to the above: draws via `text!` and overlays TeXLayout metric guides in data space. | `julia tools/visualise_metrics_makie.jl "expr" [out.png\|out.svg\|out.pdf] [:font\|/path]` |
-| `compare_tex.jl` | Overlay TeXLayout's boxes on LuaLaTeX (default) or XeLaTeX output typeset with unicode-math and the same font files: cyan TeX, magenta TeXLayout, dark where they agree.  The check for any "matches TeX" claim; see "Comparing against TeX" below. | `julia tools/compare_tex.jl [--engine=xelatex] [--fonts=new_cm,stix_two] "expr" "T:expr" "B:{n}{k}"` |
-| `stress_test_freetype.jl` | Visual full-sheet math stress render via FreeType — no CairoMakie or LaTeXStrings required. | `julia tools/stress_test_freetype.jl [:font_symbol] [out.png]` |
-| `stress_test_makie.jl` | Visual full-sheet math stress render via CairoMakie. | `julia tools/stress_test_makie.jl [:font_symbol] [png\|pdf\|svg] [out]` |
-| `stress_test_text.jl` | Visual full-sheet mixed text/math document stress render via `layout_document`; source text appears beside the rendered output. Most cases use `MetricShaper`; a small final section opts into `HarfBuzzShaper`. | `julia tools/stress_test_text.jl [:font_symbol] [out.png]` |
-| `stress_test_suite.jl` | Unified stress suite: generate per-case PNGs for all bundled fonts, optionally include CairoMakie integration checks, pack a reference tarball, and compare current output against a local or downloaded reference. | `julia tools/stress_test_suite.jl all` |
-| `stress_test_all.jl` | Compatibility wrapper for the unified suite. Old font-list invocations still work, and explicit suite commands pass through. | `julia tools/stress_test_all.jl [all\|generate\|pack\|compare]` |
-| `prepare_font_artifacts.jl` | Download fonts from CTAN/GitHub, build artifact tarballs, and draft `Artifacts.toml` stanzas.  Run when adding fonts or publishing a release. | `julia tools/prepare_font_artifacts.jl [output_dir]` |
+1. **The `TokenKind.EOF` sentinel is never consumed.**  Every parser loop checks
+   for it before calling a sub-parser.
+2. **The parser never throws** on ill-formed input, and layout accepts any tree
+   it produces.
+3. **Metric constants come from the MATH table**, never hard-coded; the only
+   fixed lengths are TeX's and LaTeX's own (`src/tables/`).
+4. **Glyphs are found by Unicode codepoint**, not PostScript name; names differ
+   between fonts.  Names are used only where the font keys data by name (MATH
+   constructions, italic corrections, accent attachments, `ssty` alternates).
+5. **Math layout emits by range.**  A helper measures and moves only the box
+   ranges it has just emitted (`_translate_range!`); append order is not paint
+   order.
+6. **Structured AST data lives in `Node.payload`** (typed payloads in
+   `payloads.jl`); never pack fields into `Node.value`.
+7. **Caches are locked and FreeType calls hold the face's `FTFont.lock`.**  Use
+   `_load_glyph_metrics` and `_char_index` rather than calling FreeType directly.
+8. **Exports stay minimal.**  `NodeKind`, `TokenKind`, and the other enums are
+   internal; a name can be made public later, but not withdrawn.
 
-The root `justfile` provides shortcuts for the common paths:
+## Working rules
 
-```
-just test
-just stress-generate
-just stress-generate-makie
-just stress-pack
-just stress-compare
-just stress-all
-```
-
-### Comparing against TeX
-
-`tools/compare_tex.jl` checks geometry against a real TeX engine.  It typesets
-each expression with unicode-math and the bundled font files themselves, then
-draws TeXLayout's boxes into the same PDF glyph by glyph, so differences show as
-cyan (TeX) or magenta (TeXLayout) fringes.  `tools/stress_test_latex.jl` loads no
-OpenType math font and cannot be used for this.  Prefixes select Text (`T:`) or
-Script (`S:`) style, and `B:{num}{den}` compares a binomial without its
-delimiters with `{num \atop den}`, isolating the vertical shifts.
-
-- **LuaLaTeX is the reference.**  It implements OpenType MATH directly:
-  `SpaceAfterScript` after scripts, the Stack* constants for rule-less
-  fractions, radical degrees measured from the bottom of the sign.  Where LuaTeX
-  and XeTeX disagree, follow LuaTeX and record the difference in
-  `katex_rules.md`.  One recorded exception: LuaTeX adds a `\left` delimiter
-  variant's italic correction to the delimiter's width, XeTeX does not, and
-  TeXLayout follows XeTeX (see `future.md`).
-- **Compare at 10 pt when scripts are involved.**  TeXLayout always uses the
-  font's `ssty` script alternates, as unicode-math does at normal sizes, but
-  unicode-math did not apply them at `\Huge` (24.88 pt) or 60 pt in our
-  measurements.  The tool's default is 24 pt, so pass `--size=10` for anything
-  with scripts, primes, radical degrees, or `smallmatrix`.
-- **XeLaTeX differs in known ways.**  It puts `\scriptspace` (LaTeX: 0.5pt)
-  after scripts, which the tool replaces by the font's `SpaceAfterScript`; it
-  keeps the Fraction* shifts for rule-less fractions except `num3`; and
-  unicode-math raises radical degrees by p × (ht − dp) of the radical box.
-- **Display mode is not display style.**  `$\displaystyle …$` is still inline
-  mode, so amsmath's `\if@display` (used by `\pmod` and friends) is false; the
-  tool sets `\@displaytrue` for Display-style cases.
-- **Known residual differences**, not caused by the change under test:
-  TeXLayout has no OpenType math kerning (`MathKernInfo`) between a base and
-  its scripts; unicode-math's `\mathbf` uses the bold text font, while
-  TeXLayout uses Unicode math-alphabet letters; LaTeX adds an italic
-  correction after `\textit{…}`.
-- **Hand-written measurements.**  For a number the overlay cannot give (a box
-  height or depth, an array's struts), typeset `\setbox0\hbox{$…$}` and
-  `\typeout{\the\wd0\space\the\ht0\space\the\dp0}` at 10 pt (10 pt = 1 em)
-  with `amsmath` and unicode-math, loading the bundled font by path as the
-  tool does: `\setmathfont{<file>.otf}[Path=<artifact dir>/]`.  With a bare
-  file name TinyTeX may not find the font and silently falls back to Latin
-  Modern Math, so check the log for "not loadable" before trusting a number.
-
-### Stress references
-
-`tools/stress_test_suite.jl` is the canonical image regression tool.  It generates a directory tree of stable, per-expression PNGs grouped by font, suite, and source category:
-
-```
-stress_outputs/current/<font>/<suite>/<section>/<case>.png
-```
-
-The built-in suites are `math_freetype`, `text_freetype`, and the optional `makie_cairo` suite enabled with `--include-makie`.  `makie_cairo` is intentionally opt-in because it loads CairoMakie, but it should be used before changing Makie extension behaviour.
-
-Reference archives are named `stress_test_reference.tar` and are created with Julia's `Tar` stdlib:
-
-```
-julia tools/stress_test_suite.jl generate --out stress_outputs/current
-julia tools/stress_test_suite.jl pack --input stress_outputs/current --out stress_test_reference.tar
-julia tools/stress_test_suite.jl compare --current stress_outputs/current --reference stress_test_reference.tar
-```
-
-The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.4.0-stress` release asset `stress_test_reference.tar`.
-
-Full-sheet outputs remain useful for quick visual inspection and are written under each font's `sheets/` directory, but they are deliberately excluded from reference tarballs and comparisons.  Adding new stress cases is backwards-compatible: images present only in the current output are reported as `NEW` and do not fail comparison unless `--fail-on-new` is passed.  Missing, changed, or unreadable reference images still fail.
-
-### Formatting
-
-Format Julia code with Runic.jl.  The simplest path is the `runic` Bash command
-from the repository root; Runic is also installed in the global Julia
-environment `@runic`.  Any touched Julia source or test files should be left in
-Runic format before finishing a change.
-
-## Pipeline
-
-```
-String  ──tokenize──►  Vector{Token}  ──parse_latex──►  Node (AST)  ──layout(node, family, style)──►  Vector{LayoutBox}
-```
-
-Each stage is stateless and pure apart from memoization caches: `fonts.jl`
-caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
-parsed `MathTable` values by math-font path, and `render_support.jl` caches one
-`GlyphRuntime` (faces, slot fallback chains, glyph-name → glyph-index lookups)
-per `FontFamilyKey` for both renderer adapters to share.
-`ext/MathTeXEngineExt.jl` adds only its own derived `MathTeXEngine.FontFamily`
-cache on the same key.
-
-**Thread safety.** The caches and the cached FreeType faces are shared between
-threads.  `Base.Dict` is not safe for concurrent use, so each module-level cache
-(`_FONT_CACHE`, `_UPM_CACHE`, `_NAMED_METRICS_CACHE`, `_MATH_TABLE_CACHE`, the
-renderer adapters' `_GLYPH_RUNTIME_CACHE`, and the extensions' caches) is
-guarded by its own `ReentrantLock`, and its values are built under that lock.
-An `FT_Face` may be used by only one thread at a time, and `FT_Load_Glyph` writes the face's shared glyph slot, so every FreeType call on a
-cached face must hold that face's `FTFont.lock` (FreeTypeAbstraction's
-convention, which its own `glyph_index` follows).  Use `_load_glyph_metrics` and
-`_char_index` rather than calling FreeType directly.  Without these locks,
-concurrent layout crashed inside FreeType even with warm caches.
-`test/test_threads.jl` checks concurrent layout in a four-thread child process.
-
-## Key types
-
-### `Node` / `NodeKind` (`ast.jl`, `enums.jl`)
-- `NodeKind` is an internal `EnumX.@enumx` namespace; use values as
-  `NodeKind.Char`, `NodeKind.Sequence`, etc.  The namespace is intentionally not
-  exported yet.  It can be made public later without breaking callers, but making
-  an exported internal API private later would be breaking.
-- Immutable struct: `kind::NodeKind.T`, `value::String`,
-  `children::Vector{Node}`, `width::Float64`.  The `width` field is only
-  meaningful for `NodeKind.Space` nodes (em units; 1 mu = 1/18 em); all other
-  kinds leave it at `0.0`.  See the `EnumX.@enumx NodeKind` block in
-  `enums.jl` for the full kind list.
-- **Non-obvious encodings** — several kinds pack structured data into `value`
-  using `\x00` as a field separator:
-  - `NodeKind.Decorated` — children are always `[base, sub, sup]` regardless of
-    source order.  (`NodeKind.Superscript`/`NodeKind.Subscript` have children
-    `[base, script]` when only one script is present.)
-  - `NodeKind.Delimited` — `value = "left_ps\x00right_ps"` (PostScript glyph
-    names; empty string = null delimiter, no glyph rendered).
-  - `NodeKind.Genfrac` — same `"left_ps\x00right_ps"` convention; children =
-    `[numerator, denominator]`.
-  - `NodeKind.BigDelim` — `value = "ps_name\x00<size>\x00<class>"` where size
-    ∈ `'1'`–`'4'` (1.2 / 1.8 / 2.4 / 3.0 em) and class ∈ `'o'` / `'c'` /
-    `'r'` / `'d'` (open/close/rel/ord atom class).
-  - `NodeKind.Matrix` — `value = "env\x00nrow\x00colspec"`; children are a flat
-    row-major list of `NodeKind.Group` cells.  For `\begin{array}` the colspec
-    string is taken verbatim (e.g. `"|l|c|r|"`); for shorthand environments it
-    is derived automatically.  `||` produces two rules separated by
-    `_MATRIX_DOUBLERULESEP`.
-  - `NodeKind.StyleOverride` — for `\displaystyle` / `\textstyle` / etc. the
-    body `NodeKind.Sequence` consumes the **rest of the current group**; for
-    `\dfrac`/`\tfrac` the body is the single `NodeKind.Frac` node.  Both reset
-    style *and* scale absolutely, so `\dfrac` inside a subscript renders at full
-    display size.
-  - `NodeKind.Text` — children are `[body]`; `value` is empty for `\text` /
-    `\mbox`, or contains the full nested text-style command such as `"\textsc"`.
-    Math-internal text and document text share attribute transitions from
-    `text_styles.jl`.
-  - `NodeKind.Operator` — `value` is the bare operator name (e.g. `"sin"`).
-    Operators in `_LIMITS_OPERATORS` automatically use limits placement in
-    Display style.
-
-### `Token` / `TokenKind` (`lexer.jl`, `enums.jl`)
-- `TokenKind` is also an internal `EnumX.@enumx` namespace.  Use values as
-  `TokenKind.Char`, `TokenKind.Command`, `TokenKind.EOF`, etc.; do not introduce
-  new flat `TK*` bindings.
-- The lexer always appends exactly one `TokenKind.EOF` sentinel.  Parser loops
-  must check for that sentinel before calling sub-parsers.
-
-### Glyph lookup (`fonts.jl`)
-Three functions with different portability:
-- `glyph_metrics(family, name)` — PS glyph name in the math font.  **Avoid for
-  letters and symbols** — naming conventions diverge across fonts (AGL in
-  NewCMMath/Pagella/STIXTwo, `uni`-style in FiraMath, font-specific in Luciole).
-- `glyph_metrics_by_codepoint(family, cp)` — Unicode codepoint; the portable
-  path for all math symbols and letters.  Returns `nothing` on miss.
-- `glyph_metrics_upright(family, ch)` — upright (roman) form; uses the `regular`
-  font slot if present, else falls back to the math font's codepoint map.  Used
-  by `NodeKind.Operator` and default `MetricShaper` `\text{}`/`\mbox{}` rendering.
-
-Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
-`glyph_metrics` results are also memoised per (math-font path, glyph name) in
-`_NAMED_METRICS_CACHE`, because FreeType's name lookup otherwise dominates
-layout time.
-
-Script and scriptscript glyphs are replaced by the font's GSUB `ssty`
-alternates (`MathTable.script_alternates`, applied by `_script_glyph` in
-`layout.jl`), as unicode-math does.  The alternates are looked up by the
-math font's own PS names, so they are another place where a name, not a
-codepoint, is the key.
-
-### `LayoutBox` / `TeXElement` (`layout.jl`)
-- `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
-  Positions are in em units (design units / UPM × scale); x right, y up, origin at
-  formula baseline.
-- Element subtypes: `Glyph` (PS name + metrics), `GlyphID` (exact font path +
-  final glyph ID + metrics), `HRule` (width + thickness in em), `VRule` (height +
-  thickness in em), `Space` (width in em).
-- `Glyph.font_slot` — tells the renderer which font file to use for glyph-index
-  resolution.  Math-mode glyphs carry `FontSlot.Math`; document text glyphs may
-  carry `FontSlot.Regular`, `FontSlot.Bold`, `FontSlot.Italic`, or
-  `FontSlot.BoldItalic`, each falling back through the configured `FontFamily`
-  slots when the requested companion font is absent.
-- `GlyphID.font_path` — bypasses slot/name lookup for shaped text.  Renderers should
-  render `glyph_id` directly from this exact font file.
-- `_LayoutCtx` carries: `family`, `mc` (all MATH constants), `upm`,
-  `vert_constructions` / `horiz_constructions` (extensible glyph tables),
-  `top_accent_attachments`, `italic_corrections`, `min_connector_overlap`,
-  `mode` (`LayoutMode.Math` or `LayoutMode.Text`), `font_variant` (`:default`
-  or a `\mathXX` symbol), and `text_shaper` for optional shaping of math
-  `\text{}` / `\mbox{}` fragments.
-
-## Architectural invariants
-
-1. **The `TokenKind.EOF` sentinel is never consumed.** Every loop in the parser
-   checks for `TokenKind.EOF` before calling sub-parsers.  `_parse_primary!`
-   returns a zero-advance `NodeKind.Space` node on `TokenKind.EOF` without
-   advancing `pos`.
-
-2. **The parser never throws on ill-formed input.** Malformed expressions (double scripts,
-   unclosed braces, missing `\right`) produce degraded but structurally valid ASTs.
-
-3. **All metric constants come from the MATH table.** This includes axis height, script
-   shifts, fraction shifts, radical gaps, and rule thicknesses.  Adding support for a new
-   construct requires identifying the correct MATH table fields (see the OpenType spec
-   or KaTeX's `fontMetricsData.js`).
-
-4. **`NodeKind.Operator` uses codepoint lookup, not PS-name lookup.** The
-   codepoint path reliably returns the *upright* roman form in OpenType math
-   fonts.  (In NewCMMath, PS names like `"x"` also happen to map to the upright
-   form, but this is font-dependent — using codepoints is the portable approach
-   for upright text.)
-
-5. **Large operator glyphs are resolved by codepoint, not command name.** PS glyph names
-   in OpenType math fonts diverge from LaTeX command names (`\sum` → `"summation"`,
-   `\prod` → `"product"`, `\int` → `"integral"`, etc.).
-   `_DISPLAY_OP_CODEPOINTS` in `src/tables/layout_symbols.jl` maps bare command
-   names to Unicode codepoints; `glyph_name_by_codepoint` then obtains the
-   correct PS name.  The display-size variant is selected from `vert_constructions`
-   using the `display_operator_min_height` MATH constant.
-
-6. **All math symbol glyphs should be resolved by Unicode codepoint, not PostScript name.**
-   PS glyph naming conventions differ across fonts: NewCMMath/Pagella/STIXTwo use standard
-   AGL names (`"parenleft"`, `"ltimes"`, `"alpha"`), while FiraMath uses uni-style names
-   (`"uni0028"`, `"uni22C9"`, `"uni03B1"`) and Luciole uses its own convention (`"lparen"`,
-   `"muppi"`, etc.).  Resolving by codepoint via `glyph_metrics_by_codepoint` is the only
-   path that is portable across all fonts.  `_SYMBOL_CODEPOINTS` in
-   `src/tables/layout_symbols.jl` is the authoritative map from bare command
-   name → Unicode codepoint for all ordinary symbols.
-   Additionally, `glyph_metrics(family, "x")` returns the *upright* roman form in NewCMMath
-   (the glyph named "x" is the regular-weight slot), whereas the cmap at U+0078 correctly
-   yields the math-italic form — so codepoint resolution is also more correct for letters.
-   The only necessary use of PS names is in `_construction_key`, which translates canonical
-   AGL names to the font's own names when looking up `vert_constructions`/`horiz_constructions`
-   (those dicts are keyed by the font's MATH table PS names and cannot be changed).
-
-7. **Math layout uses range emission.** `_layout_node!` appends new boxes to the
-   shared `Vector{LayoutBox}`.  Construct helpers that need child measurements
-   record the just-emitted `(start, stop)` ranges, scan those ranges for extents,
-   and translate those same ranges in place with `_translate_range!`.  They must
-   not mutate boxes outside the ranges they emitted.  Append order is not
-   semantic; geometry, metrics, font slots, and rule/space dimensions are.
-
-## Feature index
-
-`katex_rules.md` is the authoritative per-feature reference: it records the KaTeX/TeX
-rule number, the OpenType MATH table field names used, implementation notes, and any
-deviations from KaTeX behaviour.  Features without a KaTeX rule number (font switching,
-array environments, text mode, etc.) are in the "Feature implementation index" section
-at the end of that file.
-
-## Known limitations / future work
-- **Multi-codepoint Unicode symbols** — a subset of negated and variant relations
-  (`\nleqslant`, `\ngeqslant`, `\nleqq`, `\ngeqq`, `\lvertneqq`, `\gvertneqq`,
-  `\varsubsetneq`, `\varsupsetneq`, `\npreceq`, `\nsucceq`, and similar) lack single
-  Unicode codepoints.  Unicode defines them as a base character + U+0338 (COMBINING
-  SOLIDUS OVERLAY) or U+FE00 (VARIATION SELECTOR-1), but OpenType math fonts do not
-  consistently encode them as single glyphs at any codepoint.  These commands currently
-  produce blank space.  Correct support would require two-glyph overlay (base + combining
-  stroke at x offset) — analogous to how TeX builds `\not\leq` — or per-font codepoint
-  investigation.  Do not add combining-sequence "codepoints" to `_SYMBOL_CODEPOINTS`; they
-  will not work with `glyph_metrics_by_codepoint`.
-- **`\bigplus` has no Unicode codepoint** — it is in `_CMD_ATOM_CLASS` (`:op`)
-  in `src/tables/layout_atoms.jl` but not in `_SYMBOL_CODEPOINTS`, so it
-  produces blank space on all fonts.  It is not a standard LaTeX/AMS symbol and
-  has no single Unicode codepoint; per-font investigation would be needed to
-  support it.
-- **Math-mode font switching uses Unicode variants** — `\mathbf`, `\boldsymbol`,
-  `\mathit` etc. map Latin, Greek, and common symbols (∇, ∂, variant letters)
-  to their Unicode math-variant codepoints.  The document text layer does use
-  `regular`, `bold`, `italic`, and `bolditalic` `FontFamily` slots for
-  `\textbf`, `\textit`, and nested text styles, and the Makie adapter now
-  resolves those slots through the same fallback chains.  Math-mode font
-  switching still does not use the text slots for characters outside the
-  Unicode math block.
-- **Makie integration** — Makie 0.25 uses `ext/MakieExt.jl` and the public
-  `Makie.layout_text(handler, source, attributes) -> Makie.TextLayout` protocol.
-  Users select `TeXLayoutHandler()` per plot or through `text_handler` in a theme;
-  unhandled source types fall through to Makie. The adapter emits glyph IDs,
-  exact FreeType faces, origins, extents, scales, block bounds, and `LineSegments`
-  plot specs for both horizontal and vertical rules. Makie owns alignment,
-  rotation, offset, validation, placement, and batching. Makie 0.24 continues to
-  use `ext/MathTeXEngineExt.jl`, whose specialised
-  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method is retained only
-  for compatibility. Once the Makie handler interface is active, that method
-  delegates to MathTeXEngine's original generic implementation.
-  **Routing:** `_is_inline_math` treats a string that starts and ends with a
-  single `$` and contains exactly two unescaped `$` math shifts (the usual
-  `L"…"` form) as one inline-math formula, laid out via `parse_latex` + `layout`
-  in Display style. Escaped `\$` literals do not change the route. Every other
-  string — surrounding text, multiple `$…$` spans, `\(…\)`, or `$$…$$` /
-  `\[…\]` display math — is routed through `layout_document`, and the resulting
-  `TeXBox.boxes` are converted by the selected adapter. Routing and glyph
-  resolution are shared: both adapters call `_inline_math_tokens` and the cached
-  `GlyphRuntime` in `src/render_support.jl`, so name-based `Glyph` values are
-  resolved through each slot's full fallback chain and shaped `GlyphID` values
-  render directly from their exact font path and glyph ID.
-  **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
-  (`HRule.y` = bottom edge, `VRule.x` = left edge), while both Makie line specs
-  and legacy `MathTeXEngine.HLine` / `VLine` use line-centre positions. Adapters
-  shift rules by half their thickness and must report the full visual spec bounds.
-  **Metric contract:** Makie derives every glyph bounding box from
-  `(0, descender)`–`(hadvance, ascender)` and expects those to be the *font's*
-  line metrics, not the glyph's ink, so that a box's height does not depend on
-  which characters it holds. `MakieExt._glyph_extent` therefore pads the ink
-  extents to `max(ink_top, font_ascender)` / `min(ink_bottom, font_descender)`,
-  matching `MathTeXEngine.TeXChar`, and `_block_bbox` pads `TeXBox.ascent` /
-  `descent` the same way so `align` behaves like it does for a plain string.
-  Reporting bare ink bounds instead makes `align = (:*, :center)` scatter
-  baselines across labels and makes axis tick-label space content-dependent.
-- **Display alignments are set as their inline forms** — `align` and `gather`
-  reuse the matrix machinery with amsmath's `aligned` / `gathered` spacing
-  (`_MATRIX_SPACING`: a `\strut@` per row, `\openup\jot` interline glue, and
-  `\minalignsep` between column pairs).  Cells after `&` insert the ordinary
-  atom needed for TeX-style spacing before leading relations such as `=`.
-  There is no display width, so `align` does not spread its column pairs
-  across the line, and equations are not numbered.  `equation` is a plain
-  display (`vcenter = false`, no strut), identical to `\[…\]`.
-- **Display alignment environments use Display style for cells** — the
-  environments in `_DISPLAY_MATH_ENVS` (`align`, `aligned`, `split`, `gather`,
-  `gathered`, `equation`) typeset each cell in Display style, so fractions,
-  scripts, and large operators keep their full display size.  Genuine array
-  environments (`matrix`/`array`/`cases`) stay in Text style and `smallmatrix`
-  in script-scaled Text style, matching TeX.  Starred forms (`align*`, …) are
-  accepted as aliases via `_canonical_env_name` (a trailing `*` is stripped);
-  equation numbering is not rendered.
-- **`multline` not yet implemented** — it does not fit the grid/column model:
-  it has no `&` alignment points and needs per-row alignment (first line flush
-  left, last line flush right, middle lines centred) measured against the target
-  line width.  Adding it requires a width-aware layout path rather than the
-  matrix machinery; `split`/`gathered` were aliasable but `multline` is not.
-- **Matrix vertical spacing helpers not yet implemented** — `\strut` and
-  `\phantom`/`\vphantom`/`\hphantom` are future work.  Row spacing `\\[len]`
-  is applied with LaTeX's semantics (units in `_TEX_UNIT_EM`, at
-  10 pt = 1 em), but register lengths such as `\\[\jot]` count as zero, and
-  `\hline`, `@{…}`, `\\*`, and `[t]` / `[b]` positions are ignored.  See
-  `future.md` for the current focused backlog.
-- **Whitespace conventions** — document text mode follows LaTeX: single newlines
-  collapse to one space, continuation-line indentation collapses, blank lines
-  start a new paragraph, and leading/trailing whitespace at line and block
-  boundaries is trimmed (a deferred-space model in `document.jl`:
-  `pending_space`/`at_line_start` on `_DocBuilder`).  Spaces inside `{…}` groups
-  and around inline math stay significant.  `%` line comments are handled in the
-  lexer: a `%` discards to end of line and, when the line ends in `%`, also drops
-  the newline and the next line's leading indent, unless the following line is
-  blank (the paragraph break is preserved).  Escaped `\%` is a literal.
-  Math mode (`parse_latex`) ignores leading, trailing, and repeated ordinary
-  whitespace, including a space after `^`/`_` or before a command argument
-  (`x^ 2`, `\frac 1 2`), before `^`/`_`/`\limits` (`x ^2`), before a
-  delimiter, dimension, or `\text` argument (`\left (`, `\kern 1em`,
-  `\text {a}`), and around `\sqrt`/xarrow optional `[…]` arguments.  The
-  space before a script is consumed only when a script actually follows
-  (`_peek_past_spaces` in `_parse_atom!`), so significant spaces inside
-  `\text{…}` survive.  `\\[dim]` in matrices does not skip a space before
-  `[`, matching amsmath's `matrix` environments, `cases`, and `align`, which use
-  `\new@ifnextchar`.  A plain LaTeX `array` uses the kernel's space-skipping
-  `\@ifnextchar`, so there `\\ [2pt]` is a row-spacing argument, which
-  TeXLayout renders as cell content.  The explicit interword spaces `~`, `\ `, `\space`, and
-  `\nobreakspace` are *not* ignorable: they emit a normal interword space
-  (`_NORMAL_SPACE_EM = 6/18` em, TeX's `fontdimen2`) in math mode and inside
-  `\text{…}`.  The parser distinguishes them from ignorable whitespace via
-  `_is_ignorable_space` (a `~` Space token is significant; a pure-whitespace
-  Space token is not).  `\text{…}` collapses whitespace runs and keeps internal
-  spaces, matching document `{…}` groups.  In document text mode `~` is a
-  significant non-breaking space (`_DocBuilder.pending_nbsp`): it renders as one
-  inter-word space, collapses with adjacent ordinary whitespace, and — unlike
-  ordinary whitespace — is never dropped at a line/paragraph boundary.  Soft
-  line-breaking is not implemented, so its non-breaking property is not yet
-  observable in wrapping.
-- **HarfBuzz shaper scope** — `ext/HarfBuzzExt.jl` implements optional HarfBuzz
-  shaping for document text spans and, when explicitly requested, math
-  `\text{}` / `\mbox{}` fragments.  It does not do full paragraph bidi reordering,
-  expose user-configurable HarfBuzz features/language/script settings, or shape
-  ordinary math glyphs/operators. Semantic features live in `TextFeatures`;
-  `\textsc` maps to OpenType `smcp` only inside the HarfBuzz extension.
-  `MetricShaper` must reject unsupported feature-bearing spans rather than
-  synthesizing approximations, and must stay independently testable without
-  `HarfBuzz_jll`.
-- **Makie text-handler wrapping and justification** — `TeXLayoutHandler` honors
-  the handler's pinned/default font family and layout options, and maps Makie's
-  `lineheight`, `word_wrap_width`, and resolved justification into document
-  options. Makie's `lineheight` is a multiplier and scales the options'
-  `line_height`; the reported `baseline` is the last line's, matching Makie's
-  own layouts. TeXLayout does not yet perform soft line breaking, so
-  `word_wrap_width` sets the document box width without wrapping content.
-  `LayoutOptions.align` is a three-value enum, so arbitrary fractional Makie
-  justification is currently mapped to the nearest left/centre/right choice.
-
-## Changelog
-
-`CHANGELOG.md` follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
-Every user-visible change — new features, bug fixes, removals, and breaking changes — must be
-recorded in the `[Unreleased]` section at the time it is made, grouped under the appropriate
-heading (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).  When a version
-is released, the `[Unreleased]` section is retitled with the version number and date, and a
-fresh `[Unreleased]` section is opened above it.
-
-## Test suite
-
-Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
-
-`Pkg.test()` includes `HarfBuzz_jll` and `Makie` from `[extras]`, so
-`HarfBuzzExt` and `MakieExt` both load and their assertions run.  A direct
-`julia --project=. test/runtests.jl` does not load those weak dependencies and
-should continue to pass with the extension tests skipped; use it to verify the
-core `MetricShaper` path stays independent.
-
-`test/test_makie_extension.jl` selects its assertions from what the installed
-Makie exposes: with Makie 0.25 it exercises `TeXLayoutHandler` through real
-`text!` calls and the public `Makie.layout_text` protocol, and with Makie 0.24
-it falls back to the legacy `generate_tex_elements` assertions.  Protocol-level
-assertions should use `Makie.layout_text` rather than `Text` compute-graph node
-names, which changed when MakieOrg/Makie.jl#5717 merged.  Inline-math routing is
-tested unconditionally because it lives in `src/render_support.jl` and needs no
-weak dependency.  Until Makie 0.25 is released, the main CI matrix runs the
-0.24 branch.  The experimental `makie-0-25` job develops `ComputePipeline` and
-`Makie` from Makie's `ff/breaking-0.25` branch into a scratch environment and
-runs the suite there.  It is `continue-on-error`, so a failure does not fail
-CI: check its result after every handler change.  To reproduce it locally,
-develop the same subdirectories (plus `CairoMakie` for the `makie_cairo`
-stress suite) into a scratch environment.
-
-The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
-`test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with
-inline comments citing the originating KaTeX file and line numbers.
-
-`test/test_snapshots.jl` is the layout-equivalence guard.  It hashes normalized
-layout output for representative math and document cases: glyph names, font
-slots, glyph metrics, rules, positions, scales, and document extents.  Box
-records are sorted before hashing so append order changes from range-emission
-refactors do not count as layout changes.  If a snapshot hash changes, either
-the geometry/metrics changed or the normalization changed.  Do not update a
-hash casually; inspect the rendered/serialized difference and document whether
-the change is an intentional bug fix or feature change.
-
-## Benchmarks
-
-The benchmark harness lives in `benchmark/runbenchmarks.jl`.
-
-Use a quick smoke run while refactoring:
-
-```
-julia --project=benchmark -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
-julia --project=benchmark benchmark/runbenchmarks.jl --seconds=0.05 --samples=2 --output=/tmp/texlayout-bench-smoke.toml
-```
-
-For performance-sensitive changes, compare against a baseline with the default
-longer settings:
-
-```
-julia --project=benchmark benchmark/runbenchmarks.jl --update-baseline
-julia --project=benchmark benchmark/runbenchmarks.jl --baseline=benchmark/baseline.toml
-```
-
-The default regression thresholds are `--time-threshold=1.15` and
-`--allocation-threshold=1.20`; both are configurable.  Treat sub-microsecond
-timing deltas as noise unless a targeted longer run confirms them.  Allocation
-or memory increases are usually more actionable than nanosecond-scale timing
-movement.
+- **Format** every touched Julia file with Runic: `runic --inplace <files>`
+  (also in the global `@runic` environment).  CI checks it.
+- **Changelog.**  Record every user-visible change (feature, fix, removal, or
+  breaking change) in the `[Unreleased]` section of `CHANGELOG.md` when you make
+  it, under `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`
+  ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).  At a release the
+  section is retitled with the version and date, and a new `[Unreleased]` opened.
+- **Tests.**  Run `julia --project=. -e 'using Pkg; Pkg.test()'`; pass
+  `test_args = ["layout_scripts"]` (any substring of file names) to run part of
+  it.  `julia --project=. test/runtests.jl` runs without the weak dependencies
+  and must still pass with the extension tests skipped.
+- **Snapshots.**  Never update a hash in `test/test_snapshots.jl` without
+  inspecting the layout difference and saying whether it is an intended fix or
+  feature.
+- **Stress images.**  After any change to layout or rendering, generate the
+  stress suite and compare it against the reference
+  (`tools/stress_test_suite.jl`, see `07-contributing.md`), and look at every
+  changed or new image.  Add `--include-makie` before changing the Makie
+  adapters.
+- **Makie 0.25.**  After any change to the handler, check the experimental
+  `makie-0-25` CI job; it is `continue-on-error`, so it does not fail CI.
+- **Claims that a result matches TeX** need `tools/compare_tex.jl` against
+  LuaLaTeX, at `--size=10` when scripts are involved; the caveats are in
+  `07-contributing.md`.
+- **Performance-sensitive changes** are compared against a baseline with
+  `benchmark/runbenchmarks.jl`.
+- **One home per fact.**  When a change alters something the design
+  documentation describes, update that page; limitations go in `future.md` and
+  TeX rules in `katex_rules.md`, not here.
 
 ## Note taking
 

@@ -19,7 +19,8 @@
 # because $\displaystyle ...$ is still inline mode for amsmath's \if@display.
 #
 # Requirements: lualatex or xelatex with unicode-math, fontspec, mathtools,
-# extarrows, and TikZ (TeX Live), and ImageMagick (`magick`) for the PNGs.
+# extarrows, TikZ, and the standalone class (TeX Live), and ImageMagick for the
+# PNGs (ImageMagick 7's `magick`, or ImageMagick 6's `convert` outside Windows).
 #
 # Usage:
 #   julia --project=tools tools/compare_tex.jl [options] EXPR [EXPR ...]
@@ -50,6 +51,8 @@ Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
 using TeXLayout: Glyph, GlyphID, HRule, VRule, layout, parse_latex
 using FreeTypeAbstraction
+
+include("common.jl")
 
 struct Options
     engine::String
@@ -105,21 +108,21 @@ function _glyph_name_of_id(path::String, gid::Integer)::String
     return String(buf[1:(something(i, length(buf) + 1) - 1)])
 end
 
-# TeX code that prints one glyph of the font at `path`, by name or by ID.
-function _glyph_tex(engine::String, path::String, size::Float64; name = nothing, gid = nothing)
+# TeX code that prints glyph `gid` of the font at `path`: by glyph ID under
+# XeLaTeX, by glyph name through luaotfload under LuaLaTeX.
+function _glyph_tex(engine::String, path::String, size::Float64, gid::Integer)
     font = "\\font\\tlf=\"[$path]\" at $(fmt(size))pt\\tlf"
     if engine == "lualatex"
-        glyph_name = name === nothing ? _glyph_name_of_id(path, gid) : name
+        glyph_name = _glyph_name_of_id(path, gid)
         return font * "\\directlua{tex.sprint(\"\\\\char\" .. luaotfload.aux.slot_of_name(font.current(), \"$glyph_name\"))}"
     end
-    id = gid === nothing ? FreeTypeAbstraction.glyph_index(_face(path), name) : gid
-    return font * "\\XeTeXglyph$(id)"
+    return font * "\\XeTeXglyph$(gid)"
 end
 
 # A binomial node with its delimiters removed (for `B:` cases).
 function _strip_binomial_delimiters(node)
-    node.kind === TeXLayout.NodeKind.Genfrac && return TeXLayout.Node(node.kind, "\0", node.children)
-    return TeXLayout.Node(node.kind, node.value, [_strip_binomial_delimiters(c) for c in node.children], node.width)
+    node.kind === TeXLayout.NodeKind.Genfrac && return TeXLayout.Node(node.kind, TeXLayout._DelimiterPairPayload("", ""), node.children)
+    return TeXLayout.Node(node.kind, node.value, [_strip_binomial_delimiters(c) for c in node.children], node.width, node.payload)
 end
 
 function texlayout_tikz(io, tree, family, style, opts::Options)
@@ -128,11 +131,14 @@ function texlayout_tikz(io, tree, family, style, opts::Options)
         el = b.element
         x, y = fmt(b.x * pt), fmt(b.y * pt)
         if el isa Glyph
-            path = TeXLayout._font_path_for_slot(family, el.font_slot)
-            glyph = _glyph_tex(opts.engine, path, pt * b.scale; name = el.glyph_name)
+            # The face and glyph index a renderer adapter would draw.
+            resolved = resolve_glyph(family, el)
+            resolved === nothing && continue
+            _, gid, path = resolved
+            glyph = _glyph_tex(opts.engine, path, pt * b.scale, gid)
             println(io, "  \\node[tl] at ($(x)pt,$(y)pt) {$glyph};")
         elseif el isa GlyphID
-            glyph = _glyph_tex(opts.engine, el.font_path, pt * b.scale; gid = el.glyph_id)
+            glyph = _glyph_tex(opts.engine, el.font_path, pt * b.scale, el.glyph_id)
             println(io, "  \\node[tl] at ($(x)pt,$(y)pt) {$glyph};")
         elseif el isa HRule
             println(io, "  \\fill[tlfill] ($(x)pt,$(y)pt) rectangle ++($(fmt(el.width * pt))pt,$(fmt(el.thickness * pt))pt);")
@@ -236,9 +242,22 @@ function write_tex(path::String, font::Symbol, opts::Options)
     return path
 end
 
+# The ImageMagick executable for rasterising: ImageMagick 7's `magick`, or else
+# ImageMagick 6's `convert`, which takes the same arguments.  On Windows
+# `convert` is the system's file-system converter, so only `magick` is used.
+function find_imagemagick()
+    candidates = Sys.iswindows() ? ("magick",) : ("magick", "convert")
+    for exe in candidates
+        path = Sys.which(exe)
+        path === nothing || return path
+    end
+    return nothing
+end
+
 function main(args = ARGS)
     opts = parse_options(args)
     mkpath(opts.out)
+    imagemagick = opts.density > 0 ? find_imagemagick() : nothing
     for font in opts.fonts
         tex = abspath(joinpath(opts.out, "$(opts.name)_$(font).tex"))
         write_tex(tex, font, opts)
@@ -250,9 +269,16 @@ function main(args = ARGS)
         pdf = splitext(tex)[1] * ".pdf"
         println(pdf)
         if opts.density > 0
+            if imagemagick === nothing
+                println(stderr, "no ImageMagick (`magick` or `convert`) found; skipping the PNG for :$font")
+                continue
+            end
             png = splitext(tex)[1] * ".png"
-            run(`magick -density $(opts.density) $pdf -background white -alpha remove -alpha off $png`)
-            println(png)
+            if success(`$imagemagick -density $(opts.density) $pdf -background white -alpha remove -alpha off $png`)
+                println(png)
+            else
+                println(stderr, "ImageMagick could not rasterise $pdf (an ImageMagick 6 security policy may block PDF input); pass --density=0 to skip the PNGs")
+            end
         end
     end
     return nothing

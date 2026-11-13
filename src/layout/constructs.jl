@@ -14,7 +14,7 @@ function _layout_style_override!(node, ctx, style, x0, y0, scale, boxes)
     else
         ScriptScript
     end
-    new_scale = size_scale(new_style, ctx.mc)
+    new_scale = size_scale(new_style, ctx.mt.constants)
     return _layout_node!(node.children[1], ctx, new_style, x0, y0, new_scale, boxes)
 end
 
@@ -34,7 +34,7 @@ end
 #   - Minimum arrow width: max(natural width, widest_label + 2*PAD*scale).
 #   - Both labels and arrow centred horizontally over the full advance.
 function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     cmd = node.value
     above_node = node.children[1]
     below_node = length(node.children) >= 2 ? node.children[2] : nothing
@@ -63,7 +63,7 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
 
     # Natural arrow width from the reference glyph (smallest pre-built variant
     # or the base glyph itself).
-    hc = get(ctx.horiz_constructions, arrow_ps, nothing)
+    hc = get(ctx.mt.horiz_constructions, arrow_ps, nothing)
     ref_ps = arrow_ps
     if hc !== nothing && !isempty(hc.variants)
         ref_ps = hc.variants[1].glyph_name
@@ -122,8 +122,7 @@ end
 # the same glyph variant is selected at every style level; the glyph renders at the
 # current scale so it appears smaller in subscripts, matching KaTeX behaviour.
 function _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
-    isempty(node.value) && return 0.0
-    payload = _decode_big_delimiter_payload(node.value)
+    payload = _big_delimiter(node)
     ps_name = payload.glyph_name
     size = payload.size
     (isempty(ps_name) || size < 1 || size > length(_BIG_DELIM_HEIGHTS)) && return 0.0
@@ -132,7 +131,7 @@ function _layout_big_delim!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     num_node, den_node = node.children[1], node.children[2]
     num_s = frac_num_style(style); num_scale = _scale_for_child(scale, style, num_s, mc)
     den_s = frac_den_style(style); den_scale = _scale_for_child(scale, style, den_s, mc)
@@ -190,9 +189,9 @@ end
 # between delimiters.  Implements Rule 15c (no-rule fraction) and Rule 15e
 # (delimiters of fixed size delim1/delim2, centred on the math axis).
 function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
 
-    payload = _decode_delimiter_pair_payload(node.value)
+    payload = _delimiter_pair(node)
     left_name = payload.left
     right_name = payload.right
 
@@ -256,7 +255,7 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     # \sqrt[degree]{body}: children are [body] or [degree, body].
     has_degree = length(node.children) > 1
     degree_node = has_degree ? node.children[1] : nothing
@@ -344,9 +343,9 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     # \left…\right: size delimiters to the inner content, centred on the math axis.
-    payload = _decode_delimiter_pair_payload(node.value)
+    payload = _delimiter_pair(node)
     left_name = payload.left
     right_name = payload.right
 
@@ -529,7 +528,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     # KaTeX Rule 12 (accent.ts).  Build base in cramped style, then place the
     # accent glyph above it, aligned via MathTopAccentAttachment when available.
     isempty(node.children) && return 0.0
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
 
     # Build base in cramped style (Rule 12: base is typeset cramped).
     base_start = lastindex(boxes) + 1
@@ -558,7 +557,7 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
 
     # Wide accents (\widehat, \widetilde) are placed using a horizontally
     # extensible glyph centred over the base; no MathTopAccentAttachment alignment.
-    if node.value ∈ _WIDE_ACCENT_COMMANDS && haskey(ctx.horiz_constructions, accent_ps)
+    if node.value ∈ _WIDE_ACCENT_COMMANDS && haskey(ctx.mt.horiz_constructions, accent_ps)
         _layout_wide_accent!(ctx, accent_ps, base_w, accent_y, x0, scale, boxes)
         return base_w
     end
@@ -569,11 +568,11 @@ function _layout_accent!(node, ctx, style, x0, y0, scale, boxes)
     # data is unavailable.
     single_glyph = base_start == base_stop && boxes[base_start].element isa Glyph
     base_attach_du = if single_glyph
-        get(ctx.top_accent_attachments, (boxes[base_start].element::Glyph).glyph_name, nothing)
+        get(ctx.mt.top_accent_attachments, (boxes[base_start].element::Glyph).glyph_name, nothing)
     else
         nothing
     end
-    accent_attach_du = get(ctx.top_accent_attachments, accent_ps, nothing)
+    accent_attach_du = get(ctx.mt.top_accent_attachments, accent_ps, nothing)
 
     accent_x = if base_attach_du !== nothing && accent_attach_du !== nothing
         x0 + (base_attach_du - accent_attach_du) * scale / upm
@@ -606,7 +605,7 @@ function _layout_overunder!(node, ctx, style, x0, y0, scale, boxes)
     # \overline  (Rule 9):  body in cramped style; HRule above with gap from MATH table.
     # \underline (Rule 10): body in current style; HRule below with gap from MATH table.
     isempty(node.children) && return 0.0
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     is_over = node.value == "overline"
     child_style = is_over ? cramp_style(style) : style
 

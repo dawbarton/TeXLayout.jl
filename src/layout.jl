@@ -95,35 +95,38 @@ end
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 # Immutable context shared across all recursive layout calls.
+# `mt` is the math font's parsed MATH table: constants, italic corrections,
+# accent attachments, extensible constructions, and `ssty` alternates.
 # `mode` is either LayoutMode.Math (default) or LayoutMode.Text (inside \text{…}/\mbox{…}).
 # Math-mode character remapping and automatic inter-atom spacing are suppressed
 # in text mode.
 # `font_variant` is :default or the variant name set by an enclosing NodeKind.FontSwitch
 # node (e.g. :mathbf, :mathbb).  Propagates through all recursive calls so that
 # \mathbf{x_i} produces bold x and bold subscript i.
+# `text_shaper` shapes math `\text{…}` / `\mbox{…}` fragments.
 struct _LayoutCtx
     family::FontFamily
-    mc::MathConstants
-    upm::Float64
-    vert_constructions::Dict{String, GlyphConstruction}
-    horiz_constructions::Dict{String, GlyphConstruction}  # for \widehat, \widetilde
-    top_accent_attachments::Dict{String, Int}  # PS glyph name → x position (design units)
-    italic_corrections::Dict{String, Int}      # PS glyph name → design units (from MATH table)
-    min_connector_overlap::Int
-    script_alternates::Dict{String, Tuple{String, String}}  # GSUB 'ssty' (Script, ScriptScript)
+    mt::MathTable
+    upm::Float64          # mt.upm as a Float64, for em arithmetic
     mode::LayoutMode.T
     font_variant::Symbol  # :default | :mathbf | :mathit | :mathrm | :mathbb | …
-    text_shaper
+    text_shaper::TextShaper
 end
+
+# Math-mode context for `family`, loading (or reusing) its MATH table.
+function _LayoutCtx(family::FontFamily, shaper::TextShaper = MetricShaper())
+    mt = load_math_table(family.math)
+    return _LayoutCtx(family, mt, Float64(mt.upm), LayoutMode.Math, :default, shaper)
+end
+
+# Copy of `ctx` with `mode` and/or `font_variant` replaced.  Apart from the
+# constructors, this is the only code that lists the fields.
+@inline _with(ctx::_LayoutCtx; mode = ctx.mode, font_variant = ctx.font_variant) =
+    _LayoutCtx(ctx.family, ctx.mt, ctx.upm, mode, font_variant, ctx.text_shaper)
 
 # Return a copy of `ctx` with `font_variant` replaced.  Used by NodeKind.FontSwitch so
 # the rest of the context (family, math constants, mode, …) is inherited.
-@inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _LayoutCtx(
-    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
-    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    ctx.script_alternates,
-    ctx.mode, variant, ctx.text_shaper,
-)
+@inline _with_variant(ctx::_LayoutCtx, variant::Symbol) = _with(ctx; font_variant = variant)
 
 # Propagate a font-size multiplier (from \large, \tiny, etc.) through a style
 # transition.  `scale` is the parent's absolute scale (which already includes
@@ -146,21 +149,11 @@ end
 # math-mode italic remapping and inter-atom spacing are suppressed.  As in LaTeX,
 # an enclosing \mathbf, \boldsymbol, … does not restyle the text (KaTeX differs:
 # it keeps the math font inside \text).
-@inline _with_text_mode(ctx::_LayoutCtx) = _LayoutCtx(
-    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
-    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    ctx.script_alternates,
-    LayoutMode.Text, :default, ctx.text_shaper,
-)
+@inline _with_text_mode(ctx::_LayoutCtx) = _with(ctx; mode = LayoutMode.Text, font_variant = :default)
 
 # Return a copy of `ctx` back in math mode with no font variant.  Used by
 # NodeKind.InlineMath (`$…$` inside `\text{…}`), where math restarts from scratch.
-@inline _with_math_mode(ctx::_LayoutCtx) = _LayoutCtx(
-    ctx.family, ctx.mc, ctx.upm, ctx.vert_constructions, ctx.horiz_constructions,
-    ctx.top_accent_attachments, ctx.italic_corrections, ctx.min_connector_overlap,
-    ctx.script_alternates,
-    LayoutMode.Math, :default, ctx.text_shaper,
-)
+@inline _with_math_mode(ctx::_LayoutCtx) = _with(ctx; mode = LayoutMode.Math, font_variant = :default)
 
 # Return the TeX atom class for a given AST node.
 # Scripted nodes (NodeKind.Superscript, NodeKind.Subscript, NodeKind.Decorated) inherit from their
@@ -179,9 +172,7 @@ function _atom_class(node::Node)::Symbol
     elseif k === NodeKind.Operator
         return :op
     elseif k === NodeKind.BigDelim
-        # Class char is the last byte of value: 'o'=open, 'c'=close, 'r'=rel, 'd'=ord.
-        isempty(node.value) && return :ord
-        c = node.value[end]
+        c = _big_delimiter(node).atom_class   # 'o' open, 'c' close, 'r' rel, 'd' ord
         c == 'o' && return :open
         c == 'c' && return :close
         c == 'r' && return :rel
@@ -195,7 +186,7 @@ function _atom_class(node::Node)::Symbol
     elseif k === NodeKind.Matrix
         # amsmath's delimited environments (pmatrix, cases, …) are
         # \left…\right, an Inner atom; the others are a \vcenter box, an Ord.
-        info = get(_MATRIX_ENVS, _decode_matrix_payload(node.value).env_name, nothing)
+        info = get(_MATRIX_ENVS, _matrix_payload(node).env_name, nothing)
         return info !== nothing && !(isempty(info.left) && isempty(info.right)) ? :inner : :ord
     elseif k === NodeKind.Delimited || k === NodeKind.HorizBrace
         return :inner
@@ -333,11 +324,11 @@ end
 # store the entry under "uni0028" rather than "parenleft"; we translate by
 # resolving the codepoint to the font's own PS name.
 function _construction_key(ctx::_LayoutCtx, canonical_name::String)::String
-    haskey(ctx.vert_constructions, canonical_name) && return canonical_name
+    haskey(ctx.mt.vert_constructions, canonical_name) && return canonical_name
     cp = get(_CANONICAL_CODEPOINTS, canonical_name, nothing)
     cp === nothing && return canonical_name
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    !isempty(ps) && haskey(ctx.vert_constructions, ps) && return ps
+    !isempty(ps) && haskey(ctx.mt.vert_constructions, ps) && return ps
     return canonical_name
 end
 
@@ -345,12 +336,12 @@ end
 # horiz_constructions.  Most fonts use "uni23DE" etc., but some (e.g. Luciole)
 # use AGL names ("overbrace").  Resolve via the font's own codepoint→PS mapping.
 function _horiz_construction_key(ctx::_LayoutCtx, uni_name::String)::String
-    haskey(ctx.horiz_constructions, uni_name) && return uni_name
+    haskey(ctx.mt.horiz_constructions, uni_name) && return uni_name
     m = match(r"^uni([0-9A-Fa-f]{4,6})$", uni_name)
     m === nothing && return uni_name
     cp = parse(UInt32, m.captures[1]; base = 16)
     ps = glyph_name_by_codepoint(ctx.family, cp)
-    !isempty(ps) && haskey(ctx.horiz_constructions, ps) && return ps
+    !isempty(ps) && haskey(ctx.mt.horiz_constructions, ps) && return ps
     return uni_name
 end
 
@@ -514,7 +505,7 @@ end
 # Italic correction of a math-font glyph from the MATH table, in em at `scale`.
 # Glyphs from the text font slots (operator names, \text) get none.
 @inline _math_italic_correction_em(ctx::_LayoutCtx, g::Glyph, scale::Float64)::Float64 =
-    g.font_slot === FontSlot.Math ? get(ctx.italic_corrections, g.glyph_name, 0) * scale / ctx.upm : 0.0
+    g.font_slot === FontSlot.Math ? get(ctx.mt.italic_corrections, g.glyph_name, 0) * scale / ctx.upm : 0.0
 
 # The italic correction to take back from a base's advance when placing a
 # subscript.  A math character's advance includes its italic correction (see
@@ -677,7 +668,7 @@ const _TEXT_ALPHABETS = (:mathrm, :mathit, :mathbf, :mathsf, :mathtt, :mathsfit)
 function _script_glyph(ctx::_LayoutCtx, g::Glyph, style::TexStyle)::Glyph
     level = is_script_script(style) ? 2 : is_script(style) ? 1 : 0
     (level == 0 || g.font_slot !== FontSlot.Math) && return g
-    alts = get(ctx.script_alternates, g.glyph_name, nothing)
+    alts = get(ctx.mt.script_alternates, g.glyph_name, nothing)
     alts === nothing && return g
     name = alts[level]
     m = glyph_metrics(ctx.family, name)
@@ -723,7 +714,7 @@ function _layout_char!(node, ctx, style, x0, y0, scale, boxes)
 end
 
 function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
-    mc, upm = ctx.mc, ctx.upm
+    mc, upm = ctx.mt.constants, ctx.upm
     name = _command_name(node.value)
     if haskey(_DISPLAY_OP_CODEPOINTS, name)
         # Large operator: resolve glyph by codepoint so the correct PS name
@@ -736,9 +727,9 @@ function _layout_command!(node, ctx, style, x0, y0, scale, boxes)
         # the largest one when none is (STIX Two's minimum exceeds all of its
         # operator variants).
         chosen = ps
-        if is_display(style) && haskey(ctx.vert_constructions, ps)
+        if is_display(style) && haskey(ctx.mt.vert_constructions, ps)
             min_h = Float64(mc.display_operator_min_height)
-            variants = ctx.vert_constructions[ps].variants
+            variants = ctx.mt.vert_constructions[ps].variants
             i = findfirst(v -> Float64(v.advance) >= min_h, variants)
             i === nothing && !isempty(variants) && (i = lastindex(variants))
             i === nothing || (chosen = variants[i].glyph_name)
@@ -901,15 +892,9 @@ function _layout_with_advance(
         style::TexStyle;
         shaper = MetricShaper(),
     )::Tuple{Vector{LayoutBox}, Float64}
-    mt = load_math_table(family.math)
-    ctx = _LayoutCtx(
-        family, mt.constants, Float64(mt.upm), mt.vert_constructions,
-        mt.horiz_constructions, mt.top_accent_attachments,
-        mt.italic_corrections,
-        mt.min_connector_overlap, mt.script_alternates, LayoutMode.Math, :default, shaper
-    )
+    ctx = _LayoutCtx(family, shaper)
     boxes = LayoutBox[]
-    advance = _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, mt.constants), boxes)
+    advance = _layout_node!(node, ctx, style, 0.0, 0.0, size_scale(style, ctx.mt.constants), boxes)
     return boxes, advance
 end
 

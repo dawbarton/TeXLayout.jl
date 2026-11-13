@@ -99,8 +99,8 @@ function _layout_assembly!(
         boxes::Vector{LayoutBox},
     )::Float64
     upm = ctx.upm
-    mc = ctx.mc
-    min_conn = ctx.min_connector_overlap
+    mc = ctx.mt.constants
+    min_conn = ctx.mt.min_connector_overlap
 
     n = _min_extender_reps(asm.parts, required_du, min_conn)
     parts = _expand_assembly_parts(asm.parts, n)
@@ -170,7 +170,7 @@ function _layout_radical_assembly!(
         boxes::Vector{LayoutBox},
     )
     upm = ctx.upm
-    min_conn = ctx.min_connector_overlap
+    min_conn = ctx.mt.min_connector_overlap
 
     n = _min_extender_reps(asm.parts, required_du, min_conn)
     parts = _expand_assembly_parts(asm.parts, n)
@@ -207,8 +207,8 @@ end
 # or `nothing` if no variant information is available.  Does NOT push to boxes.
 function _peek_radical_glyph(ctx::_LayoutCtx, required_du::Float64)::Union{Glyph, Nothing}
     rkey = _construction_key(ctx, "radical")
-    if haskey(ctx.vert_constructions, rkey)
-        vc = ctx.vert_constructions[rkey]
+    if haskey(ctx.mt.vert_constructions, rkey)
+        vc = ctx.mt.vert_constructions[rkey]
         for v in vc.variants
             Float64(v.advance) >= required_du && return _cmd_glyph(ctx, v.glyph_name)
         end
@@ -219,8 +219,8 @@ end
 
 function _peek_radical_cover_du(ctx::_LayoutCtx, required_du::Float64)::Float64
     rkey = _construction_key(ctx, "radical")
-    if haskey(ctx.vert_constructions, rkey)
-        vc = ctx.vert_constructions[rkey]
+    if haskey(ctx.mt.vert_constructions, rkey)
+        vc = ctx.mt.vert_constructions[rkey]
         for v in vc.variants
             if Float64(v.advance) >= required_du
                 g = _cmd_glyph(ctx, v.glyph_name)
@@ -228,7 +228,7 @@ function _peek_radical_cover_du(ctx::_LayoutCtx, required_du::Float64)::Float64
             end
         end
         if vc.assembly !== nothing
-            min_conn = ctx.min_connector_overlap
+            min_conn = ctx.mt.min_connector_overlap
             n = _min_extender_reps(vc.assembly.parts, required_du, min_conn)
             parts = _expand_assembly_parts(vc.assembly.parts, n)
             overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
@@ -263,11 +263,11 @@ function _layout_radical!(
     end
 
     rkey = _construction_key(ctx, "radical")
-    if !haskey(ctx.vert_constructions, rkey)
+    if !haskey(ctx.mt.vert_constructions, rkey)
         return _place_variant("radical")
     end
 
-    vc = ctx.vert_constructions[rkey]
+    vc = ctx.mt.vert_constructions[rkey]
 
     for v in vc.variants
         Float64(v.advance) >= required_du && return _place_variant(v.glyph_name)
@@ -311,7 +311,7 @@ function _layout_delim!(
         return _NULL_DELIMITER_SPACE
     end
     upm = ctx.upm
-    mc = ctx.mc
+    mc = ctx.mt.constants
 
     function _place_glyph(name::String)::Float64
         g = _cmd_glyph(ctx, name)
@@ -323,11 +323,11 @@ function _layout_delim!(
     end
 
     dkey = _construction_key(ctx, glyph_name)
-    if !haskey(ctx.vert_constructions, dkey)
+    if !haskey(ctx.mt.vert_constructions, dkey)
         return _place_glyph(glyph_name)
     end
 
-    vc = ctx.vert_constructions[dkey]
+    vc = ctx.mt.vert_constructions[dkey]
 
     # Try pre-built variants (smallest sufficient first).
     for v in vc.variants
@@ -360,10 +360,10 @@ function _layout_wide_accent!(
         boxes::Vector{LayoutBox},
     )::Nothing
     upm = ctx.upm
-    min_conn = ctx.min_connector_overlap
+    min_conn = ctx.mt.min_connector_overlap
     required_du = base_w_em / scale * upm   # convert em to design units
 
-    hc = get(ctx.horiz_constructions, accent_ps, nothing)
+    hc = get(ctx.mt.horiz_constructions, accent_ps, nothing)
 
     # Helper: centre a named glyph over the base and push it to boxes.
     # Uses ink midpoint (x_min+x_max)/2 rather than advance_width/2: this correctly
@@ -425,7 +425,7 @@ end
 function _horiz_construction_falls_short(
         ctx::_LayoutCtx, ps::String, width_em::Float64, scale::Float64
     )::Bool
-    hc = get(ctx.horiz_constructions, ps, nothing)
+    hc = get(ctx.mt.horiz_constructions, ps, nothing)
     hc === nothing && return true
     hc.assembly === nothing || return false
     required_du = width_em / scale * ctx.upm
@@ -500,7 +500,7 @@ function _layout_horiz_brace!(
         boxes::Vector{LayoutBox},
     )::Float64
     upm = ctx.upm
-    mc = ctx.mc
+    mc = ctx.mt.constants
     is_over = startswith(brace_node.value, "\\over")
     glyph_ps = _horiz_construction_key(ctx, _HORIZ_BRACE_GLYPHS[brace_node.value])
 
@@ -531,7 +531,7 @@ function _layout_horiz_brace!(
 
     # Reference glyph for brace ink-extent calculation: find the same variant
     # that _layout_wide_accent! would select (smallest covering body_w or largest).
-    hc = get(ctx.horiz_constructions, glyph_ps, nothing)
+    hc = get(ctx.mt.horiz_constructions, glyph_ps, nothing)
     req_du = body_w / scale * upm
     sel_name = glyph_ps
     if hc !== nothing

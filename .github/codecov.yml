@@ -1,0 +1,14 @@
+# Codecov status checks for pull requests.
+#
+# Julia's coverage misses some lines that do run (often a function's first
+# statement), so a refactor that rewrites such lines reads as new uncovered
+# code.  The patch status is therefore informational, and the project status
+# fails only when overall coverage drops by more than half a percentage point.
+coverage:
+  status:
+    project:
+      default:
+        threshold: 0.5%
+    patch:
+      default:
+        informational: true

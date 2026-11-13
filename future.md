@@ -1,8 +1,8 @@
 # Future Work
 
-This is the focused engineering backlog for work that is not part of v0.3.0.
-Current limitations are also summarized in the user and developer documentation;
-this file records the intended implementation direction.
+This is the single list of TeXLayout's known limitations and the planned work
+on them.  The design documentation (`docs/src/91-design/`) describes what is
+implemented; this file records what is not, and the intended direction.
 
 ## Paragraph shaping and line breaking
 
@@ -38,12 +38,12 @@ this file records the intended implementation direction.
   and `\overbrace{a}+b` against LuaLaTeX first.  A script on the brace's far
   side (`^{m}` in `\underbrace{x+y}_{n}^{m}`) is set here as an ordinary
   superscript; as a `\limits` Op, TeX would centre it above the nucleus.
+  The brace itself is also chosen differently: `\overbrace{a+b}` is 0.05 to
+  0.21 em wider here than in LuaLaTeX (all eight bundled fonts) and up to
+  0.08 em taller.
 - LuaTeX adds a delimiter variant's italic correction after a `\left`
   delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
   neither does TeXLayout.
-- Size `\binom` and `\genfrac` delimiters from fixed sizes, as TeX does with
-  `delim1` / `delim2` (OpenType has no such constant; check what LuaTeX uses),
-  instead of fitting them to the content.
 
 - Add an invisible element with height and depth (a strut) to the box model.
   Layout is ink-based, so `RadicalExtraAscender` (space TeX keeps above a
@@ -65,6 +65,13 @@ this file records the intended implementation direction.
   `_assembly_overlaps`.
 - `\bigm\{` and `\bigm|` come out at different heights (about 1.9 em and
   1.1 em in Bonum); check the `\big` size tiers against each font's variants.
+  The tiers themselves are KaTeX's by choice (`katex_rules.md`).
+- Delimiter variants are compared by their MATH advance; LuaTeX appears to
+  compare the glyph's height plus depth, 1 du less in the bundled fonts.  At an
+  exact edge the choice differs: Schola's `\tbinom` (`delim2`, 1.01 em) gets
+  `parenleft.v1` (1011 du advance, 1010 du ink) here and `.v2` in LuaLaTeX.
+  (New Computer Modern's display `\binom` also differs, from the recorded
+  choice of 2.39 em over luaotfload's 2.40; see `katex_rules.md`, 15e.)
 - Fira Math's overbracket assembly has a visible step in its top rule.
 
 ## Sizing
@@ -114,15 +121,24 @@ this file records the intended implementation direction.
   method.
 - If Makie exposes per-render layout options, replace the current session-wide
   default bridge for document width and alignment.
-- Once Makie 0.25 is released, run the `TeXLayoutHandler` tests in CI against
-  it; until then they are checked by hand against Makie's `ff/breaking-0.25`
-  branch.
+- Once Makie 0.25 is released, run the `TeXLayoutHandler` tests in the main CI
+  matrix; until then they run in the experimental, `continue-on-error`
+  `makie-0-25` job against Makie's `ff/breaking-0.25` branch.  That job uploads
+  no coverage, so codecov does not see `ext/MakieExt.jl`.
+- Makie's `word_wrap_width` sets the document width without wrapping (there is
+  no soft line breaking yet), and fractional justification snaps to left,
+  centre, or right, the three `LayoutOptions.align` values.
+- A colour change re-runs `layout_text`, because Makie's display-only fast path
+  is limited to `text_handler === nothing`.  A handler-local cache keyed on
+  source, family, and options would recover most of the cost if it ever
+  measures as a problem.
 
 ## Regression tooling
 
-- Keep every visual renderer capable of consuming both name-based `Glyph` and
-  exact-path `GlyphID` elements; add renderer-contract tests when shared drawing
-  helpers are introduced.
+- The FreeType tools draw through `tools/common.jl`, which resolves glyphs as
+  `GlyphRuntime` does.  Add a renderer-contract test that checks every visual
+  renderer consumes both name-based `Glyph` and exact-path `GlyphID` elements
+  and resolves them the same way.
 - Consider separating stress generation, manifest management, and comparison
   into small library components if the suite gains more backends or output
   formats.

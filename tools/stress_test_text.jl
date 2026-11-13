@@ -14,20 +14,10 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
 using TeXLayout
-using TeXLayout:
-    FontFamily,
-    Glyph,
-    GlyphID,
-    HRule,
-    HarfBuzzShaper,
-    LayoutBox,
-    TeXBox,
-    VRule,
-    layout_document
+using TeXLayout: FontFamily, HarfBuzzShaper, LayoutBox, TeXBox, layout_document
 using HarfBuzz_jll
-using FreeTypeAbstraction
-using PNGFiles
-using Colors: Gray, N0f8
+
+include("common.jl")
 
 const BASE_PX = 64
 const LABEL_PX = 18
@@ -230,22 +220,6 @@ const TEXT_STRESS_SECTIONS = [
 
 # ── Canvas helpers ────────────────────────────────────────────────────────────
 
-@inline function composite!(canvas, ry, cx, alpha::UInt8, ink::UInt8 = 0x00)
-    1 <= ry <= size(canvas, 1) && 1 <= cx <= size(canvas, 2) || return
-    old = Int(canvas[ry, cx])
-    a = Int(alpha)
-    target = Int(ink)
-    return canvas[ry, cx] = UInt8((old * (255 - a) + target * a) ÷ 255)
-end
-
-function fill_rect!(canvas, r1, c1, r2, c2, val::UInt8)
-    r1c = clamp(min(r1, r2), 1, size(canvas, 1))
-    r2c = clamp(max(r1, r2), 1, size(canvas, 1))
-    c1c = clamp(min(c1, c2), 1, size(canvas, 2))
-    c2c = clamp(max(c1, c2), 1, size(canvas, 2))
-    return canvas[r1c:r2c, c1c:c2c] .= val
-end
-
 function paste!(dst, src, top::Int, left::Int)
     h, w = size(src)
     r1 = max(1, top); c1 = max(1, left)
@@ -258,38 +232,12 @@ function paste!(dst, src, top::Int, left::Int)
     return dst
 end
 
-write_png(path, canvas) = PNGFiles.save(path, reinterpret(Gray{N0f8}, canvas))
-
-function _slot_paths(family::FontFamily)
-    return Dict(
-        slot => TeXLayout._font_path_for_slot(family, slot) for slot in (
-                TeXLayout.FontSlot.Math,
-                TeXLayout.FontSlot.Regular,
-                TeXLayout.FontSlot.Italic,
-                TeXLayout.FontSlot.Bold,
-                TeXLayout.FontSlot.BoldItalic,
-            )
-    )
-end
-
-function _face_for!(cache::Dict{String, FTFont}, paths, slot)
-    path = get(paths, slot, paths[TeXLayout.FontSlot.Math])
-    return get!(cache, path) do
-        FTFont(path)
-    end
-end
-
-function _face_for_path!(cache::Dict{String, FTFont}, path::String)
-    return get!(cache, path) do
-        FTFont(path)
-    end
-end
-
-function _label_face(paths)
+# Monospace system font for the source labels, else the family's roman text font.
+function _label_face(family::FontFamily)
     for path in LABEL_FONT_CANDIDATES
         isfile(path) && return FTFont(path)
     end
-    return FTFont(paths[TeXLayout.FontSlot.Regular])
+    return FTFont(TeXLayout._font_path_for_slot(family, TeXLayout.FontSlot.Regular))
 end
 
 # ── Literal source-label rendering ────────────────────────────────────────────
@@ -348,13 +296,7 @@ function render_text_line!(
             x += max(1, px ÷ 2)
             continue
         end
-        left = x + round(Int, ext.horizontal_bearing[1])
-        top = baseline - round(Int, ext.horizontal_bearing[2])
-        for row in axes(bmp, 2), col in axes(bmp, 1)
-            alpha = bmp[col, row]
-            alpha == 0x00 && continue
-            composite!(canvas, top + row - 1, left + col - 1, alpha, ink)
-        end
+        blit!(canvas, bmp, ext, x, baseline; ink)
         x += round(Int, ext.advance[1])
     end
     return nothing
@@ -377,7 +319,7 @@ end
 
 # ── Document rendering ────────────────────────────────────────────────────────
 
-function render_document(case::TextCase, family::FontFamily, paths)::Matrix{UInt8}
+function render_document(case::TextCase, family::FontFamily)::Matrix{UInt8}
     result = try
         layout_document(case.source; family, case.kwargs...)
     catch err
@@ -392,7 +334,6 @@ function render_document(case::TextCase, family::FontFamily, paths)::Matrix{UInt
     H = max(90, 2MARGIN + round(Int, (result.ascent + result.descent + 0.3) * scale_px))
     canvas = fill(0xff, H, W)
 
-    face_cache = Dict{String, FTFont}()
     em_x(x) = MARGIN + round(Int, x * scale_px)
     baseline_row = MARGIN + round(Int, result.ascent * scale_px)
     em_y(y) = baseline_row - round(Int, y * scale_px)
@@ -401,62 +342,7 @@ function render_document(case::TextCase, family::FontFamily, paths)::Matrix{UInt
     guide = clamp(baseline_row, 1, H)
     canvas[guide, MARGIN:(W - MARGIN)] .= 0xdd
 
-    for box in result.boxes
-        el = box.element
-        if el isa Glyph
-            face = _face_for!(face_cache, paths, el.font_slot)
-            px_size = max(1, round(Int, box.scale * scale_px))
-            pen_cx = em_x(box.x)
-            pen_cy = em_y(box.y)
-            local bmp, ext
-            try
-                bmp, ext = renderface(face, el.glyph_name, px_size)
-            catch err
-                @warn "renderface failed for $(el.glyph_name): $err"
-                continue
-            end
-            left = pen_cx + round(Int, ext.horizontal_bearing[1])
-            top = pen_cy - round(Int, ext.horizontal_bearing[2])
-            for row in axes(bmp, 2), col in axes(bmp, 1)
-                alpha = bmp[col, row]
-                alpha == 0x00 && continue
-                composite!(canvas, top + row - 1, left + col - 1, alpha)
-            end
-        elseif el isa GlyphID
-            face = _face_for_path!(face_cache, el.font_path)
-            px_size = max(1, round(Int, box.scale * scale_px))
-            pen_cx = em_x(box.x)
-            pen_cy = em_y(box.y)
-            local bmp, ext
-            try
-                bmp, ext = renderface(face, Int(el.glyph_id), px_size)
-            catch err
-                @warn "renderface failed for glyph id $(el.glyph_id): $err"
-                continue
-            end
-            left = pen_cx + round(Int, ext.horizontal_bearing[1])
-            top = pen_cy - round(Int, ext.horizontal_bearing[2])
-            for row in axes(bmp, 2), col in axes(bmp, 1)
-                alpha = bmp[col, row]
-                alpha == 0x00 && continue
-                composite!(canvas, top + row - 1, left + col - 1, alpha)
-            end
-        elseif el isa HRule
-            fill_rect!(
-                canvas,
-                em_y(box.y + el.thickness), em_x(box.x),
-                em_y(box.y), em_x(box.x + el.width),
-                0x00,
-            )
-        elseif el isa VRule
-            fill_rect!(
-                canvas,
-                em_y(box.y + el.height), em_x(box.x),
-                em_y(box.y), em_x(box.x + el.thickness),
-                0x00,
-            )
-        end
-    end
+    draw_boxes!(canvas, result.boxes, family, scale_px, em_x, em_y)
     return canvas
 end
 
@@ -497,8 +383,7 @@ end
 # ── Sheet construction ────────────────────────────────────────────────────────
 
 function build_sheet(family::FontFamily, font_name::String)::Matrix{UInt8}
-    paths = _slot_paths(family)
-    label_face = _label_face(paths)
+    label_face = _label_face(family)
     W = SOURCE_W + COLUMN_GAP + RENDER_W
     rows = Matrix{UInt8}[
         header_strip(
@@ -514,7 +399,7 @@ function build_sheet(family::FontFamily, font_name::String)::Matrix{UInt8}
     for (section, cases) in TEXT_STRESS_SECTIONS
         push!(rows, header_strip(label_face, section, W, SECTION_H, SECTION_PX, 0x44))
         for case in cases
-            push!(rows, hjoin(render_label(label_face, case, SOURCE_W), render_document(case, family, paths)))
+            push!(rows, hjoin(render_label(label_face, case, SOURCE_W), render_document(case, family)))
         end
     end
 
@@ -522,33 +407,16 @@ function build_sheet(family::FontFamily, font_name::String)::Matrix{UInt8}
     return vstack(rows, 0)
 end
 
-# ── Font helpers ──────────────────────────────────────────────────────────────
-
-function _resolve_font(spec)::FontFamily
-    spec isa FontFamily && return spec
-    s = string(spec)
-    startswith(s, ":") && return font_family(Symbol(s[2:end]))
-    isfile(s) && return FontFamily(s)
-    return font_family(Symbol(s))
-end
-
-function _default_output(font_name::String)::String
-    slug = lowercase(replace(font_name, r"[^a-zA-Z0-9]+" => "_"))
-    slug = strip(slug, '_')
-    return "stress_test_text_$(slug).png"
-end
-
 if abspath(PROGRAM_FILE) == @__FILE__
     _font_spec = length(ARGS) >= 1 ? ARGS[1] : ":new_cm"
     _output = length(ARGS) >= 2 ? ARGS[2] : nothing
 
-    family = _resolve_font(_font_spec)
-    face = FTFont(family.math)
-    font_name = FreeTypeAbstraction.family_name(face)
-    outpath = _output !== nothing ? String(_output) : _default_output(font_name)
+    family = resolve_font(_font_spec)
+    font_name = FreeTypeAbstraction.family_name(FTFont(family.math))
+    outpath = _output !== nothing ? String(_output) : "stress_test_text_$(font_slug(font_name)).png"
 
     canvas = build_sheet(family, font_name)
-    write_png(outpath, canvas)
+    write_gray_png(outpath, canvas)
     H, W = size(canvas)
     println("Written $outpath  ($(W)x$(H) px)")
 end

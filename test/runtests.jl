@@ -1,15 +1,16 @@
 # TeXLayout.jl test suite.
 #
-# Tests are organised in six levels mirroring the implementation pipeline:
-#   1. MATH table parser   — OpenType binary parsing
-#   2. Glyph metrics       — advance widths, ink bounds via FreeType
-#   3. Lexer               — token stream output
-#   4. Parser              — AST structure
-#   5. Style cascade       — TeX style transitions
-#   6. Layout engine       — positioned elements, rule thicknesses, shifts
+# Files follow the pipeline: MATH table and glyph metrics, style cascade,
+# lexer, parser, math layout (one file per feature area), KaTeX-derived
+# cases, text and document layout, renderer adapters, layout snapshots, and
+# thread safety.  Ground-truth values for the MATH table and metrics come
+# from NewCMMath-Regular.otf parsed independently by fonttools/ttx (see
+# test/fixtures/newcm_math.jl).
 #
-# All ground-truth values for levels 1 and 2 come from NewCMMath-Regular.otf
-# parsed independently by fonttools/ttx (see test/fixtures/newcm_math.jl).
+# Run a subset by naming files (any substring of the file name):
+#
+#     julia --project=. -e 'using Pkg; Pkg.test(test_args = ["layout_scripts"])'
+#     julia --project=. -e 'using Pkg; Pkg.test(test_args = ["layout", "parser"])'
 
 using Test
 using TeXLayout
@@ -65,28 +66,49 @@ using TeXLayout: is_cramped, is_display, is_script, is_script_script,
 # Lexer
 using TeXLayout: tokenize, TokenKind
 
-# Parser / AST node kinds
-using TeXLayout: NodeKind
+# Parser / AST node kinds and their structured payloads
+using TeXLayout: NodeKind, _DelimiterPairPayload, _BigDelimiterPayload, _MatrixPayload
 
 # Ground-truth fixture constants (NewCMMath-Regular.otf values from fonttools/ttx).
-# Included once here so that test_math_table.jl, test_metrics.jl, and
-# test_layout.jl can all reference them without redefining constants.
+# Included once here so that every test file can reference them without
+# redefining constants.
 include("fixtures/newcm_math.jl")
 
-# Wrap all test files in a single top-level testset so that an "Error During Test"
-# in one file (e.g., a stub throwing "not implemented") does not abort the run for
-# subsequent files.  The top-level testset collects all results and throws once at
-# the very end.
+include("helpers.jl")
+
+const TEST_FILES = [
+    "test_math_table.jl",
+    "test_metrics.jl",
+    "test_style.jl",
+    "test_lexer.jl",
+    "test_parser.jl",
+    "test_layout_core.jl",
+    "test_layout_scripts.jl",
+    "test_layout_fractions.jl",
+    "test_layout_delimiters.jl",
+    "test_layout_operators.jl",
+    "test_layout_alphabets.jl",
+    "test_layout_accents.jl",
+    "test_layout_matrices.jl",
+    "test_layout_extensibles.jl",
+    "test_katex.jl",
+    "test_text_shaping.jl",
+    "test_text_parser.jl",
+    "test_text_composition.jl",
+    "test_text_whitespace.jl",
+    "test_makie_extension.jl",
+    "test_snapshots.jl",
+    "test_threads.jl",
+]
+
+# Test arguments select files by substring; none runs everything.
+const SELECTED = isempty(ARGS) ? TEST_FILES : filter(f -> any(a -> occursin(a, f), ARGS), TEST_FILES)
+isempty(SELECTED) && error("no test file matches $(ARGS); files: $(join(TEST_FILES, ", "))")
+
+# One top-level testset, so an error in one file does not stop the files
+# after it; the results are reported together at the end.
 @testset "TeXLayout.jl" begin
-    include("test_math_table.jl")
-    include("test_metrics.jl")
-    include("test_style.jl")
-    include("test_lexer.jl")
-    include("test_parser.jl")
-    include("test_layout.jl")
-    include("test_katex.jl")
-    include("test_text.jl")
-    include("test_makie_extension.jl")
-    include("test_snapshots.jl")
-    include("test_threads.jl")
+    for file in SELECTED
+        include(file)
+    end
 end

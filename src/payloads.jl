@@ -1,78 +1,46 @@
-# Encoded AST payload helpers.
+# Structured data carried by some AST nodes in `Node.payload`.
 #
-# Node currently stores auxiliary data in `value::String`.  These helpers keep
-# the wire format in one place while the AST migrates toward typed node payloads.
+#   NodeKind.Delimited, NodeKind.Genfrac   _DelimiterPairPayload
+#   NodeKind.BigDelim                      _BigDelimiterPayload
+#   NodeKind.Matrix                        _MatrixPayload
+#
+# Every other node carries `nothing`.  The accessors in ast.jl
+# (`_delimiter_pair`, `_big_delimiter`, `_matrix_payload`) return a neutral
+# default when a node lacks the expected payload, so layout never throws on a
+# hand-built node.
 
-const _PAYLOAD_SEPARATOR = '\x00'
-
+"""Left and right delimiters as PostScript glyph names; `""` is a null delimiter."""
 struct _DelimiterPairPayload
     left::String
     right::String
 end
 
+"""A `\\big`-family delimiter: glyph name, size 1–4 (`\\big` … `\\Bigg`), and atom class."""
 struct _BigDelimiterPayload
     glyph_name::String
     size::Int
-    atom_class::Char
+    atom_class::Char   # 'o' open, 'c' close, 'r' relation, 'd' ordinary
 end
 
-# `row_gaps[r]` is the `\\[len]` argument after row r, in em (0.0 without one).
-struct _MatrixPayload{E <: AbstractString, C <: AbstractString}
-    env_name::E
+"""
+A matrix-like environment: its name, row count, column specification (verbatim
+for `array`, derived for the others), and `row_gaps[r]`, the `\\\\[len]`
+argument after row `r` in em (0.0 without one).
+"""
+struct _MatrixPayload
+    env_name::String
     nrow::Int
-    colspec::C
+    colspec::String
     row_gaps::Vector{Float64}
 end
 
 _MatrixPayload(env_name, nrow, colspec) = _MatrixPayload(env_name, nrow, colspec, zeros(nrow))
 
-_payload_before(value::AbstractString, i::Integer) =
-    i == firstindex(value) ? "" : String(value[firstindex(value):prevind(value, i)])
+const _NodePayload = Union{Nothing, _DelimiterPairPayload, _BigDelimiterPayload, _MatrixPayload}
 
-_payload_after(value::AbstractString, i::Integer) =
-    i == lastindex(value) ? "" : String(value[nextind(value, i):lastindex(value)])
-
-_encode_payload(p::_DelimiterPairPayload) =
-    string(p.left, _PAYLOAD_SEPARATOR, p.right)
-
-function _decode_delimiter_pair_payload(value::AbstractString)::_DelimiterPairPayload
-    sep = findfirst(_PAYLOAD_SEPARATOR, value)
-    sep === nothing && return _DelimiterPairPayload(String(value), "")
-    return _DelimiterPairPayload(_payload_before(value, sep), _payload_after(value, sep))
-end
-
-_encode_payload(p::_BigDelimiterPayload) =
-    string(p.glyph_name, _PAYLOAD_SEPARATOR, p.size, _PAYLOAD_SEPARATOR, p.atom_class)
-
-function _decode_big_delimiter_payload(value::AbstractString)::_BigDelimiterPayload
-    sep1 = findfirst(_PAYLOAD_SEPARATOR, value)
-    sep2 = findlast(_PAYLOAD_SEPARATOR, value)
-    (sep1 === nothing || sep2 === nothing || sep1 === sep2) &&
-        return _BigDelimiterPayload("", 0, 'd')
-    glyph_name = _payload_before(value, sep1)
-    size_str = String(value[nextind(value, sep1):prevind(value, sep2)])
-    size = something(tryparse(Int, size_str), 0)
-    atom_class_str = _payload_after(value, sep2)
-    atom_class = isempty(atom_class_str) ? 'd' : first(atom_class_str)
-    return _BigDelimiterPayload(glyph_name, size, atom_class)
-end
-
-# Row gaps are a comma-separated fourth field, omitted when all are zero.
-function _encode_payload(p::_MatrixPayload)
-    base = string(p.env_name, _PAYLOAD_SEPARATOR, p.nrow, _PAYLOAD_SEPARATOR, p.colspec)
-    all(iszero, p.row_gaps) && return base
-    return string(base, _PAYLOAD_SEPARATOR, join(p.row_gaps, ","))
-end
-
-function _decode_matrix_payload(value::AbstractString)
-    parts = split(value, _PAYLOAD_SEPARATOR; limit = 4)
-    length(parts) < 3 && return _MatrixPayload("", 0, "")
-    nrow = something(tryparse(Int, parts[2]), 0)
-    gaps = zeros(nrow)
-    if length(parts) == 4 && !isempty(parts[4])
-        for (r, g) in enumerate(split(parts[4], ","))
-            r <= nrow && (gaps[r] = something(tryparse(Float64, g), 0.0))
-        end
-    end
-    return _MatrixPayload(parts[1], nrow, parts[3], gaps)
+# Payloads compare and hash by value (`_MatrixPayload` holds a vector, which
+# the default `===`-based equality would compare by identity).
+for T in (:_DelimiterPairPayload, :_BigDelimiterPayload, :_MatrixPayload)
+    @eval Base.:(==)(a::$T, b::$T) = all(getfield(a, i) == getfield(b, i) for i in 1:fieldcount($T))
+    @eval Base.hash(p::$T, h::UInt) = hash(ntuple(i -> getfield(p, i), fieldcount($T)), hash($T, h))
 end
