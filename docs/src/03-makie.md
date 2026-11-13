@@ -1,10 +1,35 @@
 # Makie Integration
 
-Makie 0.25 exposes a public text-layout protocol. TeXLayout implements it with
-[`TeXLayoutHandler`](@ref), so integration no longer requires intercepting
-MathTeXEngine methods.
+TeXLayout works with Makie 0.24, the current release, through an automatic
+adapter. Makie 0.25, still in development, adds a public text-layout protocol,
+which TeXLayout implements with [`TeXLayoutHandler`](@ref), so integration no
+longer requires intercepting MathTeXEngine methods. CI tests the handler
+against Makie's development branch; most of this page describes it.
 
-## Quick start
+## Makie 0.24
+
+Makie 0.24 has no `text_handler` attribute. On that release the
+`MathTeXEngineExt` package extension, loaded when TeXLayout, MathTeXEngine,
+GeometryBasics, and LaTeXStrings are all in the session (CairoMakie and GLMakie
+bring the last three), replaces MathTeXEngine's layout of every `LaTeXString`
+with TeXLayout's. No other code changes are needed:
+
+```julia
+using TeXLayout, CairoMakie, LaTeXStrings
+set_default_font_family!(:stix_two)   # optional; read at layout time
+
+fig = Figure()
+Axis(fig[1, 1]; xlabel = L"x", ylabel = L"\int_0^x f(t)\,dt")
+save("output.png", fig)
+```
+
+Font family and layout options come from [`default_font_family`](@ref) and
+[`default_layout_options`](@ref); strings are routed between formula and
+document layout as described below. Once Makie 0.25's handler interface is
+present, this adapter delegates to MathTeXEngine's original implementation, so
+merely loading TeXLayout does not change Makie's default LaTeX renderer.
+
+## Quick start (Makie 0.25)
 
 Select the handler on one text plot:
 
@@ -58,7 +83,8 @@ parsed OpenType MATH tables.
 
 ## Inline math vs. mixed text and math
 
-The handler routes each `LaTeXString` in one of two ways:
+The handler, like the Makie 0.24 adapter, routes each `LaTeXString` in one of
+two ways:
 
 - A string that consists of one `$…$` span (the usual `L"…"` value) is laid out
   in `Display` style. Escaped dollar literals do not change this route.
@@ -142,15 +168,5 @@ set_theme!(
 ```
 
 All eight bundled families populate the four primary text faces. Shared Heros
-and Cursor artifacts provide sans-serif and monospace companions.
-
-## Makie 0.24 compatibility
-
-Makie 0.24 has no `text_handler` attribute. On that release TeXLayout retains
-the legacy automatic `MathTeXEngineExt` adapter, selected when TeXLayout,
-MathTeXEngine, GeometryBasics, and LaTeXStrings are loaded together.
-
-Once Makie 0.25's handler interface is present, the legacy specialization
-delegates to MathTeXEngine's original implementation. Merely loading TeXLayout
-therefore does not change Makie's default LaTeX renderer; the user explicitly
-selects `TeXLayoutHandler` instead.
+and Cursor artifacts provide sans-serif and monospace companions. On Makie
+0.24, leave out `text_handler`.

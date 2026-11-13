@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-11-13
+
+**Breaking:** rendered output changes throughout.  Spacing, delimiter sizes,
+fractions, scripts, matrices, and alignments follow TeX's rules more closely,
+with the font's MATH constants, and were checked against LuaLaTeX with
+unicode-math and the same fonts (remaining differences are in `future.md` and
+`katex_rules.md`), so most formulas lay out somewhat differently from v0.3.2 and pixel
+references need regenerating.  Exported names are unchanged apart from the new
+`TeXLayoutHandler`, for the text-handler interface of Makie 0.25 (in
+development); Makie 0.24 keeps the automatic adapter.  Of the qualified names,
+`MathTable` gains a field and some AST nodes carry their data in a new
+`payload` field.  Layout is now safe to call from several threads.
+
 ### Added
 - `tools/compare_tex.jl` (and `just compare-tex`), which overlays TeXLayout's
   layout on LuaLaTeX or XeLaTeX output typeset with unicode-math and the same
@@ -44,9 +57,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`\text{if $x>0$}`). It previously printed literal dollar signs and upright
   text. A `$` nested in braces no longer forces a `LaTeXString` onto the
   document route in the Makie adapters.
-- `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
-  including glyph IDs, exact font faces, horizontal and vertical rule specs,
-  block bounds, and per-plot or theme-level selection.
+- `TeXLayoutHandler` implements the public `layout_text` interface of Makie
+  0.25 (in development), selected on a plot or in a theme with
+  `text_handler = TeXLayoutHandler()`.  It returns glyph IDs, exact font
+  faces, horizontal and vertical rule specs, and block bounds.  Glyph and block
+  metrics are padded to the font's ascender and descender, as Makie's own
+  layouters report them, so labels of differing ink height share a baseline
+  under `align = (:*, :center)`.  Makie's `lineheight` multiplies the document
+  baselineskip, and a multi-line document is anchored on its last line's
+  baseline at `valign = :baseline`, as Makie's own text is.  On Makie 0.25,
+  loading TeXLayout leaves Makie's LaTeX renderer in place; the automatic
+  `MathTeXEngineExt` adapter applies only to Makie 0.24.
 - `\\[len]` row spacing in matrices, arrays, `cases`, `smallmatrix`, and the
   alignments, with LaTeX's semantics: in an array a positive length deepens
   the row to at least the strut depth plus the length, and elsewhere it adds
@@ -56,10 +77,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were understood, so `\kern 3pt` gave no space.
 
 ### Changed
-- Makie 0.25 integration no longer relies on intercepting
-  `MathTeXEngine.generate_tex_elements(::LaTeXString)`. The legacy automatic
-  adapter remains active only for Makie versions without the public text-handler
-  interface.
 - Inline-math routing and cached glyph/face resolution moved from the two
   renderer extensions into `src/render_support.jl`, so both adapters share one
   implementation and one per-`FontFamily` runtime cache.
@@ -212,15 +229,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0.11–0.16 em below that of `y_{t+1}`, and `\tilde{A}^2` raised its
   superscript 0.3 em, so accented labels sat at different heights from their
   neighbours when aligned by their bottom edge.
-- `TeXLayoutHandler` treats Makie's `lineheight` as a multiplier of the
-  document baselineskip. It previously replaced the baselineskip outright, so
-  handler documents were set 1.0 em apart instead of 1.2 em and a pinned
-  `LayoutOptions(line_height = …)` was ignored.
-- `TeXLayoutHandler` reports the last line's baseline for multi-line documents,
-  so `valign = :baseline` anchors them the way it anchors Makie's own text.
-- The Makie handler tests use the public `Makie.layout_text` protocol instead of
-  `Text` compute-graph node names that changed when Makie's text-handler pull
-  request merged, and `tools/Project.toml` accepts CairoMakie 0.16.
 - Upright glyphs taken from a family's regular font (`\text{…}`, `\mbox{…}`,
   and operator names such as `\sin`) are measured in that font's own units per
   em and emitted as `GlyphID`s naming the exact font file. They were previously
@@ -242,14 +250,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   901 and `\delimitershortfall` 5 pt: a delimiter need reach only
   max(0.901 × 2δ, 2δ − 0.5 em) for content extending δ from the axis. They
   previously had to cover the content completely, so `\left(\frac{a}{b}\right)`
-  in text style took a parenthesis two sizes larger than TeX's. Matrix
-  delimiters are unchanged, because the matrix grid lacks TeX's row struts.
+  in text style took a parenthesis two sizes larger than TeX's.  A matrix
+  among other content inside `\left…\right` still gets full coverage, because
+  its ink is measured where TeX measures its strutted box; for the matrix
+  environments, and `\left…\right` around a lone matrix, see the matrix
+  spacing entry under Changed.
 - The text alphabets (`\mathit`, `\mathrm`, `\mathbf`, `\mathsf`, `\mathtt`)
   add no italic correction between letters, as LaTeX's text fonts do, so
   `\mathit{AaBbXx}` is no longer letter-spaced.
-- `\left…\right` around a matrix keeps full delimiter coverage, like the
-  matrix environments' own delimiters, since the matrix grid lacks TeX's row
-  struts.
 - Assembled horizontal braces and arrows widen their part overlaps to match
   the required width, as vertical assemblies already did. They could overshoot
   by up to one extender per side (a Pagella `\underbrace` ran 0.84 em past its
@@ -266,12 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   output was reinterpreted as bytes (a striped, 4×-tall image), and the label
   was clipped at the top because Makie aligns its padded block box rather
   than the ink. Captures are now converted to greyscale and cropped to the
-  ink. Existing `makie_cairo` reference images need regenerating.
-- `TeXLayoutHandler` reports glyph and block metrics padded to the font's
-  ascender and descender rather than bare ink bounds, matching what Makie's own
-  layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
-  placed labels of differing ink height on different baselines, and `Axis`
-  tick-label space depended on whether a label happened to have a descender.
+  ink.  The `v0.4.0-stress` reference holds the regenerated images.
 - `tools/visualise_metrics_makie.jl` draws the baseline and math-axis guides on
   the formula's baseline under Makie 0.24, which aligns a `LaTeXString` at
   `:baseline` by the bottom of its bounding box. The guides were drawn at that
@@ -588,9 +591,14 @@ Initial public release.
 - CI workflow with Runic formatting enforcement and Dependabot for GitHub Actions and
   Julia packages
 
-[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.3.2...v0.4.0
 [v0.3.2]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.3.1...v0.3.2
 [v0.3.1]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.3.0...v0.3.1
 [v0.3.0]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.3...v0.3.0
 [v0.2.3]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.2...v0.2.3
+[v0.2.2]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.1...v0.2.2
+[v0.2.1]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.2.0...v0.2.1
+[v0.2.0]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.1.1...v0.2.0
+[v0.1.1]: https://github.com/dawbarton/TeXLayout.jl/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dawbarton/TeXLayout.jl/commit/ec8d72d5d8da6eac7f0532438064ab9fd5ae5568
