@@ -2061,3 +2061,17 @@
   at `\Huge`; `Path=` font loading; the `\left` italic-correction exception
   where we follow XeTeX); its "known residual differences" no longer list
   `ssty` or `\nulldelimiterspace`, which the branch implements.
+- **Stress review against `v0.4.0-stress`** (merged tree, with `makie_cairo`).
+  1272 images identical, 72 changed, 72 new, none missing.  Changed: four
+  binomial cases per font (#45 Stack* constants, #53 fixed `delim1`/`delim2`
+  sizes), and five text cases per font where text after an inline formula
+  ending in a script moves right by `SpaceAfterScript` and centred displays
+  move left by half of it (measured shift 1–3 px, scaling with each font's
+  constant).  Two of those also lose 2 px of height only because
+  `stress_test_text.jl` picks an integer pixel size to fit 820 px.  New:
+  section 38 (each spaced or aliased spelling lays out identically to its
+  canonical form) and the `makie_cairo` 2π case.  Section 38 also exposed
+  two pre-merge branch bugs that `main` had already fixed: an array colspec
+  with more columns than cells misplaced cells, and `\sinh`, `\cosh`,
+  `\tanh`, `\coth`, `\lg` rendered nothing.  The release's files were
+  replaced in place with the merged tree's output.

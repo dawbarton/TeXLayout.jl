@@ -35,7 +35,9 @@ this file records the intended implementation direction.
   to an Ord agree in LuaLaTeX (thin space either way), but a following binary
   operator or opening delimiter would be spaced differently.
   Changing the class touches limit placement, so check `\overbrace{x}^{n}`
-  and `\overbrace{a}+b` against LuaLaTeX first.
+  and `\overbrace{a}+b` against LuaLaTeX first.  A script on the brace's far
+  side (`^{m}` in `\underbrace{x+y}_{n}^{m}`) is set here as an ordinary
+  superscript; as a `\limits` Op, TeX would centre it above the nucleus.
 - LuaTeX adds a delimiter variant's italic correction after a `\left`
   delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
   neither does TeXLayout.
