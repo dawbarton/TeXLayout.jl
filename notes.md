@@ -2168,3 +2168,13 @@
   the recorded 2.39 vs 2.40 em choice (katex_rules 15e).
 - Open: whether `\big` should follow amsmath (the geometry reference is
   LuaLaTeX, but KaTeX's fixed sizes are scale-independent and simpler).
+
+## 2026-11-13T17:52+00:00 Decision: keep KaTeX's \big tiers and arrow padding
+
+- David's call: keep KaTeX's fixed `\big` tiers (1.2/1.8/2.4/3.0 em) and
+  `\xrightarrow` padding rather than amsmath's `\big@size` and `\ext@arrow`;
+  the differences are small.  Recorded with the measurements in
+  `katex_rules.md`; removed from `future.md`.  The `\overbrace` width and the
+  advance-against-ink variant edge stay in `future.md`.
+- `compare_tex.jl` now falls back to ImageMagick 6's `convert` (never on
+  Windows, where `convert` is a disk utility).
