@@ -39,10 +39,12 @@ TeXLayout.jl/
 │   ├── boxes.jl            # Internal measured box tree + shape pass for composition
 │   ├── shaping.jl          # TextShaper interface, MetricShaper, HarfBuzzShaper seam
 │   ├── document.jl         # Document AST (Block/Line/Run/TextSpan) + parse_document
-│   └── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
+│   ├── compose.jl          # TeXBox, hconcat, vstack, LayoutOptions, layout_document
+│   └── render_support.jl   # Shared adapter helpers: LaTeXString routing, GlyphRuntime
 ├── ext/
 │   ├── HarfBuzzExt.jl      # Optional HarfBuzz_jll-backed TextShaper implementation
-│   └── MathTeXEngineExt.jl # Makie/MathTeXEngine extension + cached runtime conversion bundle
+│   ├── MakieExt.jl         # Makie 0.25 text_handler implementation
+│   └── MathTeXEngineExt.jl # Legacy Makie 0.24 adapter
 ├── test/
 │   ├── runtests.jl         # Top-level testset; includes all test files
 │   ├── fixtures/
@@ -137,7 +139,14 @@ delimiters with `{num \atop den}`, isolating the vertical shifts.
   `SpaceAfterScript` after scripts, the Stack* constants for rule-less
   fractions, radical degrees measured from the bottom of the sign.  Where LuaTeX
   and XeTeX disagree, follow LuaTeX and record the difference in
-  `katex_rules.md`.
+  `katex_rules.md`.  One recorded exception: LuaTeX adds a `\left` delimiter
+  variant's italic correction to the delimiter's width, XeTeX does not, and
+  TeXLayout follows XeTeX (see `future.md`).
+- **Compare at 10 pt when scripts are involved.**  TeXLayout always uses the
+  font's `ssty` script alternates, as unicode-math does at normal sizes, but
+  unicode-math did not apply them at `\Huge` (24.88 pt) or 60 pt in our
+  measurements.  The tool's default is 24 pt, so pass `--size=10` for anything
+  with scripts, primes, radical degrees, or `smallmatrix`.
 - **XeLaTeX differs in known ways.**  It puts `\scriptspace` (LaTeX: 0.5pt)
   after scripts, which the tool replaces by the font's `SpaceAfterScript`; it
   keeps the Fraction* shifts for rule-less fractions except `num3`; and
@@ -146,13 +155,17 @@ delimiters with `{num \atop den}`, isolating the vertical shifts.
   mode, so amsmath's `\if@display` (used by `\pmod` and friends) is false; the
   tool sets `\@displaytrue` for Display-style cases.
 - **Known residual differences**, not caused by the change under test:
-  TeXLayout does not use the `ssty` script-size glyph variants, so its scripts
-  are narrower than TeX's (New CM `i.st` is 404 units wide against 345 for `i`);
-  it has no OpenType math kerning (`MathKernInfo`) between a base and its
-  scripts; it adds no `\nulldelimiterspace` (1.2 pt in LaTeX) either side of
-  `\frac`; unicode-math's `\mathbf` uses the bold text font, while TeXLayout
-  uses Unicode math-alphabet letters; LaTeX adds an italic correction after
-  `\textit{…}`.
+  TeXLayout has no OpenType math kerning (`MathKernInfo`) between a base and
+  its scripts; unicode-math's `\mathbf` uses the bold text font, while
+  TeXLayout uses Unicode math-alphabet letters; LaTeX adds an italic
+  correction after `\textit{…}`.
+- **Hand-written measurements.**  For a number the overlay cannot give (a box
+  height or depth, an array's struts), typeset `\setbox0\hbox{$…$}` and
+  `\typeout{\the\wd0\space\the\ht0\space\the\dp0}` at 10 pt (10 pt = 1 em)
+  with `amsmath` and unicode-math, loading the bundled font by path as the
+  tool does: `\setmathfont{<file>.otf}[Path=<artifact dir>/]`.  With a bare
+  file name TinyTeX may not find the font and silently falls back to Latin
+  Modern Math, so check the log for "not loadable" before trusting a number.
 
 ### Stress references
 
@@ -172,7 +185,7 @@ julia tools/stress_test_suite.jl pack --input stress_outputs/current --out stres
 julia tools/stress_test_suite.jl compare --current stress_outputs/current --reference stress_test_reference.tar
 ```
 
-The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.3.0-stress` release asset `stress_test_reference.tar`.
+The `all` command runs generate, downloads or reads a reference, and compares in one step.  A reference can be a local path or URL; the default remote is the `v0.4.0-stress` release asset `stress_test_reference.tar`.
 
 Full-sheet outputs remain useful for quick visual inspection and are written under each font's `sheets/` directory, but they are deliberately excluded from reference tarballs and comparisons.  Adding new stress cases is backwards-compatible: images present only in the current output are reported as `NEW` and do not fail comparison unless `--fail-on-new` is passed.  Missing, changed, or unreadable reference images still fail.
 
@@ -191,15 +204,18 @@ String  ──tokenize──►  Vector{Token}  ──parse_latex──►  Node
 
 Each stage is stateless and pure apart from memoization caches: `fonts.jl`
 caches loaded FreeType faces and `hmtx` data by path, `math_table.jl` caches
-parsed `MathTable` values by math-font path, and `ext/MathTeXEngineExt.jl`
-caches the Makie-facing runtime bundle by effective `FontFamily`.
+parsed `MathTable` values by math-font path, and `render_support.jl` caches one
+`GlyphRuntime` (faces, slot fallback chains, glyph-name → glyph-index lookups)
+per `FontFamilyKey` for both renderer adapters to share.
+`ext/MathTeXEngineExt.jl` adds only its own derived `MathTeXEngine.FontFamily`
+cache on the same key.
 
 **Thread safety.** The caches and the cached FreeType faces are shared between
 threads.  `Base.Dict` is not safe for concurrent use, so each module-level cache
-(`_FONT_CACHE`, `_UPM_CACHE`, `_MATH_TABLE_CACHE`, and the caches in both
-extensions) is guarded by its own `ReentrantLock`, and its values are built under
-that lock.  An `FT_Face` may be used by only one thread at a time, and
-`FT_Load_Glyph` writes the face's shared glyph slot, so every FreeType call on a
+(`_FONT_CACHE`, `_UPM_CACHE`, `_NAMED_METRICS_CACHE`, `_MATH_TABLE_CACHE`, the
+renderer adapters' `_GLYPH_RUNTIME_CACHE`, and the extensions' caches) is
+guarded by its own `ReentrantLock`, and its values are built under that lock.
+An `FT_Face` may be used by only one thread at a time, and `FT_Load_Glyph` writes the face's shared glyph slot, so every FreeType call on a
 cached face must hold that face's `FTFont.lock` (FreeTypeAbstraction's
 convention, which its own `glyph_index` follows).  Use `_load_glyph_metrics` and
 `_char_index` rather than calling FreeType directly.  Without these locks,
@@ -267,6 +283,15 @@ Three functions with different portability:
   by `NodeKind.Operator` and default `MetricShaper` `\text{}`/`\mbox{}` rendering.
 
 Fonts are cached in `_FONT_CACHE` by path; safe to call repeatedly.
+`glyph_metrics` results are also memoised per (math-font path, glyph name) in
+`_NAMED_METRICS_CACHE`, because FreeType's name lookup otherwise dominates
+layout time.
+
+Script and scriptscript glyphs are replaced by the font's GSUB `ssty`
+alternates (`MathTable.script_alternates`, applied by `_script_glyph` in
+`layout.jl`), as unicode-math does.  The alternates are looked up by the
+math font's own PS names, so they are another place where a name, not a
+codepoint, is the key.
 
 ### `LayoutBox` / `TeXElement` (`layout.jl`)
 - `LayoutBox`: `element::TeXElement`, `x::Float64`, `y::Float64`, `scale::Float64`.
@@ -372,40 +397,49 @@ at the end of that file.
   resolves those slots through the same fallback chains.  Math-mode font
   switching still does not use the text slots for characters outside the
   Unicode math block.
-- **Makie integration** — implemented via `ext/MathTeXEngineExt.jl` (a Julia package
-  extension).  When `TeXLayout`, `MathTeXEngine`, `GeometryBasics`, and `LaTeXStrings`
-  are all loaded, the extension adds a specialised
-  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method that uses TeXLayout's
-  OpenType layout engine.  Makie's `texelems_and_glyph_collection` always passes a
-  `LaTeXString`, so dispatch picks our method over MathTeXEngine's fallback.  The
-  extension is fully precompiled (no `__precompile__(false)` needed) because adding
-  a method with a more specific argument type is a new method, not an overwrite.
+- **Makie integration** — Makie 0.25 uses `ext/MakieExt.jl` and the public
+  `Makie.layout_text(handler, source, attributes) -> Makie.TextLayout` protocol.
+  Users select `TeXLayoutHandler()` per plot or through `text_handler` in a theme;
+  unhandled source types fall through to Makie. The adapter emits glyph IDs,
+  exact FreeType faces, origins, extents, scales, block bounds, and `LineSegments`
+  plot specs for both horizontal and vertical rules. Makie owns alignment,
+  rotation, offset, validation, placement, and batching. Makie 0.24 continues to
+  use `ext/MathTeXEngineExt.jl`, whose specialised
+  `MathTeXEngine.generate_tex_elements(::LaTeXString)` method is retained only
+  for compatibility. Once the Makie handler interface is active, that method
+  delegates to MathTeXEngine's original generic implementation.
   **Routing:** `_is_inline_math` treats a string that starts and ends with a
   single `$` and contains exactly two unescaped `$` math shifts (the usual
   `L"…"` form) as one inline-math formula, laid out via `parse_latex` + `layout`
   in Display style. Escaped `\$` literals do not change the route. Every other
   string — surrounding text, multiple `$…$` spans, `\(…\)`, or `$$…$$` /
   `\[…\]` display math — is routed through `layout_document`, and the resulting
-  `TeXBox.boxes` are converted by the same `_box_to_mte` adapter.
-  The extension also maintains a per-font runtime cache so repeated Makie renders
-  reuse loaded FreeType faces for every configured font-slot fallback path, the
-  derived `MathTeXEngine.FontFamily`, and glyph lookup tables.  Name-based `Glyph`
-  values are resolved by `(font path, glyph name)`; shaped `GlyphID` values render
-  directly from their exact font path and glyph ID.
+  `TeXBox.boxes` are converted by the selected adapter. Routing and glyph
+  resolution are shared: both adapters call `_inline_math_tokens` and the cached
+  `GlyphRuntime` in `src/render_support.jl`, so name-based `Glyph` values are
+  resolved through each slot's full fallback chain and shaped `GlyphID` values
+  render directly from their exact font path and glyph ID.
   **Geometry contract:** `TeXLayout.HRule` / `VRule` store rectangle edges
-  (`HRule.y` = bottom edge, `VRule.x` = left edge), while
-  `MathTeXEngine.HLine` / `VLine` use line-centre positions.  The adapter in
-  `_box_to_mte` is responsible for converting between these conventions by
-  shifting rule positions by half the thickness.
-  **This is type piracy**: TeXLayout owns neither the function (`MathTeXEngine.generate_tex_elements`)
-  nor the argument type (`LaTeXStrings.LaTeXString`).  It is pragmatic and confined
-  to the extension, but alternative integration strategies (e.g. a dedicated Makie
-  recipe or a proper upstream extension point in MathTeXEngine) will be investigated
-  in future.
-- **`align` column-spacing approximation** — `\begin{align}` reuses the matrix column
-  machinery and its column-separation model.  Cells after `&` do insert the
-  ordinary atom needed for TeX-style spacing before leading relations such as
-  `=`, but the environment is not a full amsmath alignment template.
+  (`HRule.y` = bottom edge, `VRule.x` = left edge), while both Makie line specs
+  and legacy `MathTeXEngine.HLine` / `VLine` use line-centre positions. Adapters
+  shift rules by half their thickness and must report the full visual spec bounds.
+  **Metric contract:** Makie derives every glyph bounding box from
+  `(0, descender)`–`(hadvance, ascender)` and expects those to be the *font's*
+  line metrics, not the glyph's ink, so that a box's height does not depend on
+  which characters it holds. `MakieExt._glyph_extent` therefore pads the ink
+  extents to `max(ink_top, font_ascender)` / `min(ink_bottom, font_descender)`,
+  matching `MathTeXEngine.TeXChar`, and `_block_bbox` pads `TeXBox.ascent` /
+  `descent` the same way so `align` behaves like it does for a plain string.
+  Reporting bare ink bounds instead makes `align = (:*, :center)` scatter
+  baselines across labels and makes axis tick-label space content-dependent.
+- **Display alignments are set as their inline forms** — `align` and `gather`
+  reuse the matrix machinery with amsmath's `aligned` / `gathered` spacing
+  (`_MATRIX_SPACING`: a `\strut@` per row, `\openup\jot` interline glue, and
+  `\minalignsep` between column pairs).  Cells after `&` insert the ordinary
+  atom needed for TeX-style spacing before leading relations such as `=`.
+  There is no display width, so `align` does not spread its column pairs
+  across the line, and equations are not numbered.  `equation` is a plain
+  display (`vcenter = false`, no strut), identical to `\[…\]`.
 - **Display alignment environments use Display style for cells** — the
   environments in `_DISPLAY_MATH_ENVS` (`align`, `aligned`, `split`, `gather`,
   `gathered`, `equation`) typeset each cell in Display style, so fractions,
@@ -419,11 +453,12 @@ at the end of that file.
   left, last line flush right, middle lines centred) measured against the target
   line width.  Adding it requires a width-aware layout path rather than the
   matrix machinery; `split`/`gathered` were aliasable but `multline` is not.
-- **Matrix vertical spacing helpers not yet implemented** — `\strut`,
-  `\phantom`/`\vphantom`/`\hphantom`, and effective matrix row-spacing arguments
-  such as `\\[0.2em]` are future work.  The parser currently recognises and skips
-  bracketed row-spacing arguments in matrix bodies, but layout does not apply
-  them.  See `future.md` for the current focused backlog.
+- **Matrix vertical spacing helpers not yet implemented** — `\strut` and
+  `\phantom`/`\vphantom`/`\hphantom` are future work.  Row spacing `\\[len]`
+  is applied with LaTeX's semantics (units in `_TEX_UNIT_EM`, at
+  10 pt = 1 em), but register lengths such as `\\[\jot]` count as zero, and
+  `\hline`, `@{…}`, `\\*`, and `[t]` / `[b]` positions are ignored.  See
+  `future.md` for the current focused backlog.
 - **Whitespace conventions** — document text mode follows LaTeX: single newlines
   collapse to one space, continuation-line indentation collapses, blank lines
   start a new paragraph, and leading/trailing whitespace at line and block
@@ -439,9 +474,9 @@ at the end of that file.
   delimiter, dimension, or `\text` argument (`\left (`, `\kern 1em`,
   `\text {a}`), and around `\sqrt`/xarrow optional `[…]` arguments.  The
   space before a script is consumed only when a script actually follows
-  (`_skip_spaces_before_script!`), so significant spaces inside `\text{…}`
-  survive.  `\\[dim]` in matrices does not skip a space before `[`, matching
-  amsmath's `matrix` environments, `cases`, and `align`, which use
+  (`_peek_past_spaces` in `_parse_atom!`), so significant spaces inside
+  `\text{…}` survive.  `\\[dim]` in matrices does not skip a space before
+  `[`, matching amsmath's `matrix` environments, `cases`, and `align`, which use
   `\new@ifnextchar`.  A plain LaTeX `array` uses the kernel's space-skipping
   `\@ifnextchar`, so there `\\ [2pt]` is a row-spacing argument, which
   TeXLayout renders as cell content.  The explicit interword spaces `~`, `\ `, `\space`, and
@@ -465,14 +500,15 @@ at the end of that file.
   `MetricShaper` must reject unsupported feature-bearing spans rather than
   synthesizing approximations, and must stay independently testable without
   `HarfBuzz_jll`.
-- **Makie extension ignores caller-specified font family** — the overridden
-  `generate_tex_elements` accepts a `font_family` argument (for API compatibility
-  with MathTeXEngine) but always uses `TeXLayout.default_font_family()` regardless.
-  Users can change the font used by Makie by calling `TeXLayout.set_default_font_family!`
-  before rendering; the extension will pick up the new default automatically.
-  Likewise, the document path's width/alignment cannot be passed through Makie's
-  fixed call site, so it reads `TeXLayout.default_layout_options()`; set these with
-  `TeXLayout.set_default_layout_options!` (e.g. `width`, `align`, `display_align`).
+- **Makie text-handler wrapping and justification** — `TeXLayoutHandler` honors
+  the handler's pinned/default font family and layout options, and maps Makie's
+  `lineheight`, `word_wrap_width`, and resolved justification into document
+  options. Makie's `lineheight` is a multiplier and scales the options'
+  `line_height`; the reported `baseline` is the last line's, matching Makie's
+  own layouts. TeXLayout does not yet perform soft line breaking, so
+  `word_wrap_width` sets the document box width without wrapping content.
+  `LayoutOptions.align` is a three-value enum, so arbitrary fractional Makie
+  justification is currently mapped to the nearest left/centre/right choice.
 
 ## Changelog
 
@@ -487,11 +523,26 @@ fresh `[Unreleased]` section is opened above it.
 
 Run with `julia --project=. -e 'using Pkg; Pkg.test()'`.
 
-`Pkg.test()` includes `HarfBuzz_jll` from `[extras]`, so the `HarfBuzzExt`
-extension loads and HarfBuzz-specific assertions run.  A direct
-`julia --project=. test/runtests.jl` does not load that weak dependency and should
-continue to pass with the HarfBuzz tests skipped; use it to verify the core
-`MetricShaper` path stays independent.
+`Pkg.test()` includes `HarfBuzz_jll` and `Makie` from `[extras]`, so
+`HarfBuzzExt` and `MakieExt` both load and their assertions run.  A direct
+`julia --project=. test/runtests.jl` does not load those weak dependencies and
+should continue to pass with the extension tests skipped; use it to verify the
+core `MetricShaper` path stays independent.
+
+`test/test_makie_extension.jl` selects its assertions from what the installed
+Makie exposes: with Makie 0.25 it exercises `TeXLayoutHandler` through real
+`text!` calls and the public `Makie.layout_text` protocol, and with Makie 0.24
+it falls back to the legacy `generate_tex_elements` assertions.  Protocol-level
+assertions should use `Makie.layout_text` rather than `Text` compute-graph node
+names, which changed when MakieOrg/Makie.jl#5717 merged.  Inline-math routing is
+tested unconditionally because it lives in `src/render_support.jl` and needs no
+weak dependency.  Until Makie 0.25 is released, the main CI matrix runs the
+0.24 branch.  The experimental `makie-0-25` job develops `ComputePipeline` and
+`Makie` from Makie's `ff/breaking-0.25` branch into a scratch environment and
+runs the suite there.  It is `continue-on-error`, so a failure does not fail
+CI: check its result after every handler change.  To reproduce it locally,
+develop the same subdirectories (plus `CairoMakie` for the `makie_cairo`
+stress suite) into a scratch environment.
 
 The fixture font is `NewCMMath-Regular.otf`; ground-truth constants are in
 `test/fixtures/newcm_math.jl`.  KaTeX-derived tests live in `test/test_katex.jl` with

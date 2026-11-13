@@ -1737,3 +1737,341 @@
   every change is a trailing correction (`y`, `d`, `b`, `f`, `B`, `C`) or the
   inline-math width (SpaceAfterScript after `x_i`; the align display recentred
   by `f`'s correction).
+## 2026-08-01T10:30+00:00 Makie 0.25 text-handler integration
+
+- Fast-forwarded local `main` to `origin/main` at `eac6b8b` and created
+  `feat/makie-layout-text-interface` from that tip.
+- Reviewed [Makie PR #5717](https://github.com/MakieOrg/Makie.jl/pull/5717) at
+  head `a21d5edf`: the return-value `layout_text(handler, source,
+  TextAttributes) -> TextLayout` protocol gives Makie ownership of validation,
+  placement, and batching and removes TeXLayout's need for type piracy.
+- Added `TeXLayoutHandler` and `MakieExt`: direct glyph IDs/faces/extents, exact
+  font-slot fallbacks, measured block bounds, and combined horizontal/vertical
+  rule specs with explicit visual bounds. Handler family/options can use session
+  defaults or be pinned per handler.
+- Retained Makie 0.24 compatibility. When Makie 0.25's interface is active, the
+  legacy MathTeXEngine specialization delegates to MathTeXEngine's original
+  method so loading TeXLayout alone no longer changes Makie's default renderer.
+- Focused tests against the PR checkout and a real CairoMakie 0.16 render pass;
+  the render covers fractions, radicals, mixed text/math, plain-string fallback,
+  and matrix vertical rules.
+- Review follow-ups: make Makie's display-only cacheability trait depend on the
+  handler as well as the source; TeXLayout still lacks soft wrapping and
+  fractional document justification; fontsize-scaled `TextLayout` output means
+  handlers need their own em-layout cache to avoid recomputation on size changes.
+- Makie PR unit-test and formatting jobs pass, but its current overall CI is not
+  merge-ready: docs still read removed `text_scales`, WGL rendering reads a
+  missing `strokewidth` field after the `uniform_strokewidth` rename, one Cairo
+  reference case still supplies per-character color under the new per-string
+  contract, and several reference images require inspection/update.
+- Final TeXLayout verification: 1,568/1,568 full tests, 11/11 focused Makie 0.25
+  handler assertions, Runic and diff checks, Documenter build, legacy Makie
+  metric-visualizer smoke, and CairoMakie 0.16 rendering against PR #5717.
+
+## 2026-08-01T11:04+00:00 TeXLayoutHandler naming and cache design
+
+- Renamed the unreleased public handler from `MakieTeXHandler` to
+  `TeXLayoutHandler` throughout source, extensions, tests, tools, and
+  documentation to avoid confusion with the existing MakieTeX ecosystem name.
+- A handler-local bounded cache can retain source/font/options-dependent em-space
+  geometry and avoid repeated parsing, shaping, and glyph lookup. Makie would
+  still call the handler and require a lightweight materialization step for
+  fontsize and display attributes.
+- A Makie-side cacheability capability should distinguish layout dependencies
+  from display dependencies per handler/source. Reusing the complete result is
+  not sufficient for TeXLayout because fraction/radical rules are emitted as
+  plot specs whose color currently comes from the text attributes; a display
+  refresh hook or separate stable geometry representation is needed alongside
+  handler-aware cacheability.
+- Post-rename verification passes: 11/11 focused Makie 0.25 assertions,
+  1,568/1,568 full package tests, and the Documenter build.
+
+## 2026-08-06T11:39+00:00 Review against Makie PR #5717 head 727b340b
+
+- Re-reviewed [Makie PR #5717](https://github.com/MakieOrg/Makie.jl/pull/5717)
+  from the branch's original review point `a21d5edf` to the current head
+  `727b340b`. Only `Makie/src/basic_recipes/text.jl` and
+  `text_boundingbox.jl` changed in ways that could touch us, and the
+  handler-facing protocol (`layout_text`, `TextAttributes`, `TextLayout`) is
+  byte-for-byte unchanged. All 11 focused handler assertions pass against
+  `727b340b` with no TeXLayout changes, so the interface work needed no update.
+- Three upstream commits are relevant as context rather than as work:
+  - `53948fd7` adds `display_independent_layout(::LaTeXString) = false`, fixing
+    stale rule colours on Makie's *own* LaTeX path. Verified our handler was
+    already correct here: rule specs carry `attributes.color` and track a
+    recolour.
+  - `727b340b` removes the overloadable `bakes_display_attributes` hook, so any
+    non-`nothing` handler is assumed to bake display attributes and a colour
+    change re-runs `layout_text`. This closes out the "make cacheability depend
+    on the handler" follow-up from 2026-08-01: upstream considered it and
+    deliberately went the other way, because an opted-out handler would leave
+    its plot specs' colours stale. Docs updated to record it as a decision, not
+    a gap.
+  - `acf2fb84` routes Axis3D tick-label measurement through
+    `layout_text(nothing, …)`, i.e. hardcoded to Makie's own layout. Not our
+    bug, but worth knowing that Axis3D ignores the handler when measuring.
+
+### Glyph metric bug found and fixed
+
+- `MakieExt._glyph_extent` reported per-glyph `ascender`/`descender` as pure ink
+  bounds. Makie turns every `GlyphExtent` into
+  `height_insensitive_boundingbox_with_advance` = `(0, descender)`–`(hadvance,
+  ascender)`, and both Makie's own layouters and `MathTeXEngine.TeXChar` put the
+  *font's* line metrics there precisely so that a box's height does not depend
+  on which characters it holds.
+- Measured at fontsize 20 before the fix: `L"$x$"` → 9.06 px tall, `L"$y$"` →
+  12.94 px, against 20.0 / 20.2 px from Makie's own LaTeX path. Consequences:
+  `align = (:*, :center)` scattered baselines across labels of differing ink
+  height (visible in a side-by-side render), and `Axis` tick-label space, which
+  comes from `raw_string_boundingboxes`, became content-dependent.
+- This was a regression relative to shipped behaviour: the legacy
+  `MathTeXEngineExt` path got the padding for free from
+  `MathTeXEngine.ascender(::TeXChar) = max(ascender(math_font), topinkbound)`.
+- Fixed by padding each glyph's ink extent to `max(ink_top, font_ascender)` /
+  `min(ink_bottom, font_descender)`, and by deriving the block bbox as the union
+  of the placed padded glyph boxes plus rule spec bounds. The latter matters
+  because Makie's `raw_string_boundingboxes` unions those same boxes: deriving
+  the align box any other way makes a label align to one box and measure as
+  another. `texelems_and_layout` builds Makie's own LaTeX bbox the same way.
+  After the fix `L"$x$"`/`L"$y$"` measure 20.0 / 20.22 px, identical to Makie.
+
+### Quality pass
+
+- De-duplicated ~120 lines that both extensions had carried verbatim into
+  `src/render_support.jl`: `_strip_math_delimiters`, `_inline_math_tokens`,
+  `_is_inline_math`, `_single_char`, `_uni_glyph_codepoint`,
+  `_glyph_index_uncached`, and a shared `GlyphRuntime` (faces, slot fallback
+  chains, memoized glyph-name → glyph-index lookups) cached per `FontFamilyKey`.
+  Nothing there needs a weak dependency. `MathTeXEngineExt` keeps only its own
+  derived `MathTeXEngine.FontFamily` cache on the same key.
+- `FontFamilyKey` is now a named type in `src/fonts.jl`, so the 13-tuple arity
+  of `_font_family_key` is stated once instead of being restated in each
+  extension.
+- `Makie` added to `[extras]`/`[targets]`. The handler tests were silently
+  skipped under `Pkg.test()` because Makie was not a test dependency, so nothing
+  in CI loaded `MakieExt` at all. Until Makie 0.25 is released only the 0.24
+  branch runs, which at least verifies the extension precompiles and the legacy
+  delegation path still works.
+- Inline-math routing tests moved out of the extension-conditional block; they
+  now exercise `TeXLayout._is_inline_math` directly and run unconditionally.
+- `docs/src/03-makie.md` showed `Label(fig[1, 1], …; text_handler = handler)`,
+  which errors: `text_handler` is a `text` plot attribute inherited from the
+  theme, not a `Block` attribute. Replaced with `with_theme` and a note.
+- Three tool scripts had their own copy of the handler-kwargs helper; now
+  `tools/makie_handler.jl`.
+
+### Open
+
+- Stress-suite `makie_cairo` reference images need regenerating: the metric fix
+  changes alignment, which is the point of the fix.
+
+## 2026-11-12T13:37+00:00 Makie 0.25 readiness review and layout-correctness sweep
+
+- **ddpm baseline report.** Two causes. (1) Makie 0.24's `get_yshift` maps
+  `valign = :baseline` to the bottom edge for LaTeX labels; this cannot be fixed
+  from TeXLayout and disappears with Makie 0.25's handler protocol, whose
+  `TextLayout.baseline` is honoured. (2) A TeXLayout bug: scripts on an accented
+  single character (`\hat{y}_{t+1}`) did not attach to the character (TeX rule
+  12), which accounted exactly for the 3 px offset seen in ddpm.
+- **Makie 0.25.** `TeXLayoutHandler` now scales Makie's `lineheight` as a
+  multiplier of the document baselineskip and reports the last line's baseline,
+  as Makie's own layouts do. Tests use `Makie.layout_text` rather than
+  compute-graph node names. Full suite passes against the `ff/breaking-0.25`
+  checkout (Makie 0.25.0) and under `Pkg.test()` with Makie 0.24.
+- **Environments re-resolved for Julia 1.13** (`Pkg.update`, since
+  `Pkg.resolve` failed on 1.10-era manifests); `tools/Project.toml` accepts
+  CairoMakie 0.16. Pkg 1.13 writes absolute `[sources]` paths into
+  `benchmark/Project.toml`; that edit was reverted.
+- **Engine references.** Where TeX engines disagree, TeXLayout follows LuaTeX
+  (the OpenType-native engine), checked empirically with box measurements
+  (`\setbox0\hbox{$…$}\typeout{\the\ht0}`) in LuaLaTeX and XeLaTeX with
+  NewCMMath:
+  - radical degree: LuaTeX `\Uroot` puts the degree *baseline* at sign bottom +
+    `RadicalDegreeBottomRaisePercent` × sign height and clamps the negative
+    after-kern; XeLaTeX uses LaTeX's `\root` (0.6 × (ht − dp), no MATH
+    constant). TeXLayout now matches LuaTeX to 0.001 pt;
+  - script baseline drops (`SuperscriptBaselineDropMax`,
+    `SubscriptBaselineDropMin`): LuaTeX applies them unscaled; XeTeX and KaTeX
+    scale them by the script size (classic σ18/σ19 from the script font).
+    TeXLayout already matched LuaTeX; documented as a deviation from KaTeX;
+  - null delimiter space (1.2 pt, unscaled in scripts) and rule 19 delimiter
+    sizing (901, 5 pt) agree across engines; the variants chosen now match
+    LuaLaTeX's in every case tried (XeLaTeX differs where its fraction and
+    script placement differ).
+- **Pitfall: TinyTeX does not have the bundled math fonts installed.**
+  `\setmathfont{NewCMMath-Regular.otf}` silently falls back to Latin Modern
+  Math (the log says `not loadable`, then `latinmodern-math.otf`).  Load the
+  artifact file explicitly with `\setmathfont{math.otf}[Path=<artifact dir>/]`
+  and grep the log for `not loadable` before trusting a measurement.  The
+  first round of comparisons here used LM by accident; re-run with the real
+  NewCMMath they gave identical numbers (LM and NewCM share these metrics).
+- **Stress review.** All 1116 changed images (8 fonts) were reviewed visually
+  by four parallel reviewers against the pre-fix baseline, then the 580 images
+  changed by the follow-up fixes in a second pass.  The first pass found
+  regressions from this session's changes (no text-font italic-correction
+  rule, rule 19 around matrices) and older bugs it exposed
+  (horizontal assemblies overshooting, harpoon shafts off the axis, display
+  operators falling back to the base glyph, missing `\neg` and harpoons).  It
+  also showed the `makie_cairo` suite had never produced usable images:
+  `_read_png` reinterpreted RGBA as bytes and the label was aligned by Makie's
+  padded block box, clipping the top.  Captures are now greyscale and cropped
+  to the ink.
+- **`clean_box` tried and reverted.** TeX82 drops a lone character's italic
+  correction in fraction parts, scripts, radicands, and accent nuclei
+  (tex.web §720–721); implementing that made Bonum's f collide with `(` and
+  integral subscripts collide with the integrand (second-pass review).
+  Measuring XeLaTeX and LuaLaTeX with the real Bonum file showed both engines
+  *keep* the correction in all these contexts with OpenType fonts, so the
+  change was reverted.  Lesson: check OpenType-engine behaviour empirically
+  before porting a tex.web rule.
+- **Judged faithful, not changed:** an atom after a subscripted integral sits
+  closer than before (`\int_D f`; TeX's width arithmetic, LuaLaTeX differs only
+  by its `ssty` subscript glyphs), and STIX Two radical degrees touch the
+  sign's tick (LuaLaTeX places them identically, to 0.001 pt).
+- **Matrix delimiters deliberately not moved to rule 19**: TeX's array rows have
+  `\arraystretch` struts, ours are ink-tight, so the shortfall would leave
+  parentheses shorter than the entries. Needs strut rows first (future.md).
+- **Fonts lacking constructions.** Fira Math has no horizontal arrow
+  constructions; STIX Two none for ↠, ⇌, or =. Arrows are now built as
+  amsmath's `\arrowfill@` does; tail-shaped arrows fall back to natural width.
+- **Not done, by design or deferred:** `\textsc` under `MetricShaper` still
+  throws inside the Makie handler (feature-bearing spans need HarfBuzz); `ssty`
+  script alternates; CI job for Makie 0.25; fixed-size `\binom` delimiters.
+
+## 2026-11-12T16:27+00:00 ssty script alternates, unicode-math primes, amsmath array spacing
+
+- **ssty.** GSUB `ssty` is parsed into `MathTable.script_alternates` (single,
+  alternate, and extension lookups) and applied by `_script_glyph` to math
+  characters, symbols, and large operators in Script/ScriptScript style.
+  unicode-math loads script sizes with `ssty=0` and scriptscript with
+  `ssty=1` (first/second alternate), and both XeTeX and LuaTeX honour it.
+  Script widths now agree with LuaLaTeX to 0.001 pt (Bonum `x_x`, `x_V`,
+  `\iiint_V`; NewCM `\scriptscriptstyle 3`, `\sqrt[3]{x}`; `\int_D` in four
+  fonts).  The earlier note that the prime "matches XeLaTeX" without ssty was
+  wrong: both engines use `minute.st`.
+- **Primes.** unicode-math merges 2–4 primes into U+2033/2034/2057 when the
+  font has the glyph, else (and for runs > 4) sets single primes with
+  `\g__um_primekern_muskip` = −1.5 mu (read from `unicode-math-xetex.sty`).
+  Implemented in the parser; `f'`…`f'''''`, `f''^2`, `f'_1` agree with
+  LuaLaTeX in NewCM and Bonum.
+- **Arrays.** Spacing from amsmath.sty and measurement: `array` 5 pt
+  `\arraycolsep` both sides; matrix family cancels the outer two; `cases` is
+  `@{}l@{\quad}l@{}` with `\arraystretch` 1.2; `smallmatrix` is
+  `\null\,\vcenter{…}\,` with `\scriptstyle` cells, `\thickspace` (text-mode
+  0.2777 em) between columns, 6 pt `\baselineskip`, 1.5 pt `\lineskip`.  Rows
+  carry 8.4/3.6 pt struts and touch (tall entries such as fractions touch, as
+  in TeX/KaTeX).  `|` is zero-width; `||` adds 2 pt.  Delimiters: rule 19
+  against the strutted box; `\left…\right` around a lone array delegates to
+  the matrix layout.  30 cases × 2 fonts agree in width with LuaLaTeX to
+  0.001 pt, except LuaTeX adds a `\left` variant's italic correction (XeTeX
+  does not; we follow XeTeX).
+- **Trailing margins.** `measure` only sees emitted boxes, so an array's right
+  margin vanished from Makie bounding boxes; the matrix layout now emits it as
+  a `Space`.  Display alignments unchanged (still ink-tight rows).
+- **Performance.** Name-based `glyph_metrics` was uncached and doubled script
+  layout time once ssty used it; memoised per (path, name), layouts are now
+  1.5–6× faster than before this session's work.
+- **CI.** Experimental `makie-0-25` job (continue-on-error) develops
+  `ComputePipeline` and `Makie` from `ff/breaking-0.25`; simulated locally in a
+  fresh environment: 1800/1800 pass.
+- **Stress review.** 711 changed images (8 fonts) reviewed in full by four
+  reviewers against before/after sheets; no regressions.  Visible changes
+  that look worse but match LuaLaTeX/XeTeX at 10 pt (checked numerically):
+  rows of fractions touch (`\left[\begin{matrix}\frac12…`), entries sit flush
+  against `‖`/`(` in the matrix family, scriptscript letters look loosely
+  spaced (`.sts` side bearings).  At `\Huge`/60 pt unicode-math does not apply
+  `ssty`, so compare at 10 pt only.  Pre-existing, unchanged: `K_\text{eq}`
+  overlap in Bonum/Termes, Pagella harpoon depth clipped, `gather` rows
+  tighter than `align`, Luciole arrow tips crowding the next atom.
+- **Atom classes (found during the review).** LaTeX's `\frac`/`\binom` are
+  `{…\over…}` (Ord) and undelimited arrays are `\vcenter` (Ord); we had Inner,
+  adding thin spaces LaTeX does not (`\frac12 a`, `\frac12(`, `\frac{x}{n!},`).
+  Fixed; `\left…\right` and delimited environments stay Inner.  `\overbrace`
+  is `\mathop` in the kernel (future.md).
+- **Reference.** Final outputs packed to the session scratchpad as
+  `stress_test_reference.tar` (1344 images, self-compare identical); not
+  uploaded.  The `v0.3.0-stress` default reference is now stale for 791+
+  images, so `stress_test_suite.jl all` will report CHANGED until replaced.
+
+## 2026-11-12T17:28+00:00 `\\[len]` row spacing, amsmath alignments, and `equation`
+
+- **`\\[len]`.** Carried as a fourth matrix-payload field (omitted when all
+  zero, so existing payloads are unchanged).  LaTeX array (`\@xargarraycr`): a
+  positive len makes the row depth `max(d, strut_d + len)`; zero or negative
+  is `\noalign{\vskip len}`.  amsmath smallmatrix and alignments: always
+  additive.  amsmath reads the bracket with `\new@ifnextchar` (no space
+  skipping), so `\\ [x]` starts the next row with `[x]`.  Registers such as
+  `\jot` are not evaluated (0).
+- **Units.** `_TEX_UNIT_EM` at 10 pt = 1 em; `ex` = 0.431 em (Latin Modern's
+  x-height, the fontspec default text font), so it is wrong by the x-height
+  ratio in other fonts.  Matters only for `ex`.
+- **Alignments.** One row model for all environments (`_MATRIX_SPACING`:
+  `rows = :touch` for array, `:interline` for TeX glue).  amsmath alignments:
+  `\strut@` 0.84/0.36 em, `\openup\jot` gives baselineskip 1.5, lineskip 0.4,
+  lineskiplimit 0.3 em; pairs `\minalignsep` (1 em) apart, no outer margin.
+  Verified against LuaLaTeX for widths, heights, and depths (1–3 rows, gaps,
+  tall rows, fraction rows) to 0.001 pt in NewCM and Bonum.
+- **`equation`.** Found in the stress review: it is a plain display in
+  amsmath (no strut, no `\vcenter`), but we laid it out as an axis-centred
+  one-cell array, so its baseline sat ~0.1 em off the reported one (before
+  and after the alignment change).  New `vcenter` flag; `equation` now
+  equals `\[…\]` exactly (regression test in `test_text.jl`).
+- **Stress review.** 40 changed images (5 display-block cases × 8 fonts),
+  all reviewed side by side; align/gather rows spread to 1.5 em, `equation`
+  now on its baseline.  No other changes.
+- **Open.** `align` is still set as `aligned` (no spreading of column pairs
+  over the display width, no numbering); array entries inside scripts shrink
+  where TeX keeps Text size; `\hline`, `@{…}`, `\\*`, `[t]`/`[b]` ignored.
+
+## 2026-11-13T11:07+00:00 Merging main (PRs #42–#53) into the Makie 0.25 branch
+
+- **Why it was hard.**  The branch left `main` on 2026-07-28 and was never
+  rebased; on 2026-11-12 it reimplemented about nine fixes `main` had merged on
+  2026-10-05/06 (italic correction, transparent explicit spaces, whitespace
+  before scripts and arguments, unbraced text arguments, radical degree,
+  extensible-arrow fallback, brace-note scaling, `makie_cairo` capture, spaces
+  in math `\text`).  46 conflict hunks in 18 files; the real risk was the same
+  fix applied twice in auto-merged code.  Lesson: merge `main` into a
+  long-lived branch before starting new work on it.
+- **Rule used.**  Keep the branch's version of a duplicated feature where later
+  branch work depends on it (italic correction as an explicit `Space` kern via
+  `_push_math_char!`, with `_drop_italic_kern!` for text alphabets; arrow
+  fallback via `_XARROW_FILL_PIECES`, which also covers constructions that fall
+  short; `makie_cairo` crop-to-ink capture, which does not depend on Makie
+  0.24's `texelems_and_glyph_collection`).  Take `main`'s version otherwise
+  (document text arguments, radical degree from the sign's ink, operator
+  spelling children, `_parse_optional_bracket!`, `\operatorname*`, the
+  last-wins `\limits` loop, the Ψ fix in `_layout_decorated!` measured from
+  `y0`).  Helper names standardised on `main`'s (`_subscript_italic_correction_em`,
+  `_math_italic_correction_em`, which also checks the font slot).
+- **Thread safety.**  `main` locks every module-level cache; the branch's new
+  caches were plain `Dict`s.  Added locks for `_NAMED_METRICS_CACHE`,
+  `_GLYPH_RUNTIME_CACHE` (and each runtime's `fonts`/`glyph_indices`), and
+  `_MTE_FAMILY_CACHE`; `test_threads.jl` now also clears the name cache.
+- **Verification.**  Both sides' tests pass unchanged on the merged code.  The
+  eight math snapshots are byte-identical to the branch's; the two document
+  snapshots move by exactly `SpaceAfterScript` (0.056 em) after an inline
+  formula ending in a script, which is `main`'s LuaLaTeX-verified
+  `hlayout_math` fix.
+- **Runic 1.13** (now registered; CI uses `version: '1'`) rejects alignment
+  padding in six files that neither side touched, so `main`'s own Runic check
+  would fail too; reformatted separately.
+- **Docs.**  `main`'s "Comparing against TeX" section absorbed this branch's
+  measurement notes (10 pt for anything with scripts: unicode-math skips `ssty`
+  at `\Huge`; `Path=` font loading; the `\left` italic-correction exception
+  where we follow XeTeX); its "known residual differences" no longer list
+  `ssty` or `\nulldelimiterspace`, which the branch implements.
+- **Stress review against `v0.4.0-stress`** (merged tree, with `makie_cairo`).
+  1272 images identical, 72 changed, 72 new, none missing.  Changed: four
+  binomial cases per font (#45 Stack* constants, #53 fixed `delim1`/`delim2`
+  sizes), and five text cases per font where text after an inline formula
+  ending in a script moves right by `SpaceAfterScript` and centred displays
+  move left by half of it (measured shift 1–3 px, scaling with each font's
+  constant).  Two of those also lose 2 px of height only because
+  `stress_test_text.jl` picks an integer pixel size to fit 820 px.  New:
+  section 38 (each spaced or aliased spelling lays out identically to its
+  canonical form) and the `makie_cairo` 2π case.  Section 38 also exposed
+  two pre-merge branch bugs that `main` had already fixed: an array colspec
+  with more columns than cells misplaced cells, and `\sinh`, `\cosh`,
+  `\tanh`, `\coth`, `\lg` rendered nothing.  The release's files were
+  replaced in place with the merged tree's output.

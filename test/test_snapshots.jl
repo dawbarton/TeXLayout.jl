@@ -1,21 +1,21 @@
 using SHA
 
 const SNAPSHOT_MATH_CASES = [
-    ("simple_atom", raw"x+y=z", "e6602eacd72a905048cffc0c2ec8ad9bcbd7a1df29ae4fe2b0de981fd31ddf84"),
-    ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "8590527a7489dd33a2f7c5ae9db6cdf8c42ccc64dd8f89b0b5e4268cf1f88aca"),
-    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "2157c21643a4090b28bb59bd15166e0589e08bb0c64676c7a883709273052467"),
-    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "68f95243cb51d3f6846e121840d2d7c0eaf6b318955258833f9379dd8c12f6a0"),
-    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "ea1a16135a9433bb0356309eaec3607e1587c8ee538ba95cc6c67d5760dd9289"),
-    ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "e1950914fa964ae4c7f30c182137d7750da18a2de46ed0be1aa5440b0828b075"),
+    ("simple_atom", raw"x+y=z", "89a80264270cc3247752bca2a9fb9db97664c671a3a0e4d43c1bc1f2af75015b"),
+    ("scripts_fraction", raw"\frac{x_i^2}{1+\sqrt{x}}", "8f1a4922cbf994fb3c0a913e61ff2f98aa0e0b6ef36c74469424f0a4c68ca807"),
+    ("radical_delimited", raw"\left(\frac{a}{b}\right)", "331abc8eca97da723f53ef1f038fe06ff9151bc564affac990843b7ad2c1bbd6"),
+    ("large_operator", raw"\sum_{i=1}^{n} i^2 + \int_0^\infty e^{-x}\,dx", "cd971a18c0d3c608917a1a131a034f4d65031afe1a8d158d57edac95ee23a748"),
+    ("accents_braces_arrows", raw"\widehat{ABC}+\overbrace{x+y}^{n}+\xrightarrow[a]{b}", "5ab7bcc8435f0601653206a1e3209e5f84874b89b212755ed8452521bef2a9d4"),
+    ("matrix_cases", raw"\begin{cases} x^2 & x < 0 \\ \sqrt{x} & x \geq 0 \end{cases}", "fb0d711ec94511853009b8cb54d5bc8505ce6da2c5874e68e0210021a0179e56"),
     # Display alignment environments typeset cells in Display style: fractions and
     # scripts keep full display size (contrast with the text-sized matrix cells above).
-    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "6ada751677923d5bb91b2218afe62822c1dfbef8a750beb15427b057749d9fc1"),
-    ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "f54bd6a7425b58b1e466221d5e924f33bb7844ff2bdcac07ca38a9b1cde4c4a2"),
+    ("align_fraction", raw"\begin{align} \frac{a}{b} &= c \\ d &= \frac{e}{f} \end{align}", "2cdb3c6e57faafc4a150d99b9bcd4f692e5d81f8d2e9f3fc74a3a4218a0a08f1"),
+    ("gathered_script", raw"\begin{gathered} x^{\frac{1}{2}} \\ \sum_{i=1}^{n} i \end{gathered}", "4acc36219cb53cf2bf454443966e95eea9403d44e85f50f7d5c1726163676f00"),
 ]
 
 const SNAPSHOT_DOCUMENT_CASES = [
-    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "789c8ef0f310f5f949ca502bb7fab972eda2255a8d4857c04a64f8822ccc8d11"),
-    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "b363bb9f6cc25cb4b967de541d791fad42a24aa887ea8d9a7e39208f6c4b9589"),
+    ("document_inline_display", raw"Energy $E=mc^2$\\\begin{align} a&=b+c\\ d&=e-f \end{align}", "9e2225a12622b6fb899a598e18d3aada3423e312fe3d852f819c184ecc2b7a68"),
+    ("document_text_styles", raw"A \textbf{bold $x_i$} word and $\frac{1}{2}$", "0c5c7f52083014d15d82916f3bd476d6b039361f1a559d854f15a50eb8774101"),
 ]
 
 _snapshot_float(x) = string(round(Float64(x); digits = 10))

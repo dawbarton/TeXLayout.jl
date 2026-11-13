@@ -48,20 +48,20 @@ Each `LayoutBox` carries a `TeXElement` (a `Glyph`, `GlyphID`, `HRule`, `VRule`,
 
 ## Makie integration
 
-When `TeXLayout` and `MathTeXEngine` are both loaded in the same Julia session, a
-package extension (`MathTeXEngineExt`) activates automatically and replaces
-MathTeXEngine's layout engine with TeXLayout's OpenType-aware pipeline.  No further
-code changes are needed — LaTeX strings passed to `text!` in CairoMakie or GLMakie are
-rendered via TeXLayout transparently.
+Makie 0.25's public text-layout interface is implemented by
+`TeXLayoutHandler`. Select it on a text plot or in a theme to route
+`LaTeXString` values through TeXLayout without type piracy. Makie 0.24 retains
+the legacy automatic adapter.
 
 ```julia
-using TeXLayout          # activates MathTeXEngineExt automatically
+using TeXLayout
 using CairoMakie, LaTeXStrings
 
 fig = Figure()
 ax  = Axis(fig[1, 1])
 text!(ax, 0.5, 0.5;
       text      = L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
+      text_handler = TeXLayoutHandler(),
       fontsize  = 32,
       align     = (:center, :center))
 save("output.png", fig)

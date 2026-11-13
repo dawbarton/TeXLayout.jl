@@ -153,7 +153,20 @@ if the glyph is absent.  `glyph_name` is the PostScript name (e.g. `"f"`,
 `"parenleft"`, `"alpha"`).
 """
 function glyph_metrics(family::FontFamily, glyph_name::String)::Union{GlyphMetrics, Nothing}
-    face, hmtx = _load_font(family.math)
+    return @lock _NAMED_METRICS_CACHE_LOCK get!(_NAMED_METRICS_CACHE, (family.math, glyph_name)) do
+        _named_metrics(family.math, glyph_name)
+    end
+end
+
+# Metrics by glyph name, memoised per (font path, name): FreeType's name lookup
+# and glyph load are slow enough to double layout time when every script glyph
+# is swapped for its `ssty` alternate by name.  Locked like every module-level
+# cache (see the thread-safety note above).
+const _NAMED_METRICS_CACHE = Dict{Tuple{String, String}, Union{GlyphMetrics, Nothing}}()
+const _NAMED_METRICS_CACHE_LOCK = ReentrantLock()
+
+function _named_metrics(path::String, glyph_name::String)::Union{GlyphMetrics, Nothing}
+    face, hmtx = _load_font(path)
     gid = Int(FreeTypeAbstraction.glyph_index(face, glyph_name))
     gid == 0 && return nothing
 
@@ -326,7 +339,16 @@ function _text_glyph(
     return nothing
 end
 
-function _font_family_key(family::FontFamily)
+"""
+Cache key identifying a `FontFamily` by its font paths alone.
+
+`_font_family_key` is the only place that fixes the tuple's arity; anything
+caching per family (the renderer adapters in `ext/`, say) should key on this
+type rather than restating the arity.
+"""
+const FontFamilyKey = NTuple{13, Union{String, Nothing}}
+
+function _font_family_key(family::FontFamily)::FontFamilyKey
     path_fields(set) = set === nothing ?
         (nothing, nothing, nothing, nothing) :
         (set.regular, set.italic, set.bold, set.bolditalic)

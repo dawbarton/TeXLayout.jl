@@ -20,7 +20,7 @@ Pkg.activate(@__DIR__; io = devnull)
 using FreeTypeAbstraction
 using TeXLayout
 using TeXLayout:
-    FontFamily, Glyph, HRule, LayoutBox, Space, VRule, layout, parse_latex
+    FontFamily, Glyph, GlyphID, HRule, LayoutBox, Space, VRule, layout, parse_latex
 using PNGFiles
 using Colors: RGB, N0f8
 
@@ -74,8 +74,9 @@ function em_bbox(boxes::Vector{LayoutBox}, upm::Real)
     bx1 = bx2 = by1 = by2 = 0.0
     for box in boxes
         el = box.element
-        if el isa Glyph
-            s = box.scale / upm_f
+        if el isa Glyph || el isa GlyphID
+            # A GlyphID names its own font file, whose UPM may differ.
+            s = box.scale / (el isa GlyphID ? TeXLayout._font_upm(el.font_path) : upm_f)
             bx1 = min(bx1, box.x + el.x_min * s, box.x + el.advance_width * s)
             bx2 = max(bx2, box.x + el.x_max * s, box.x + el.advance_width * s)
             by1 = min(by1, box.y + el.y_min * s)
@@ -229,8 +230,8 @@ function main()
 
     for box in boxes
         el = box.element
-        if el isa Glyph
-            s = box.scale / upm
+        if el isa Glyph || el isa GlyphID
+            s = box.scale / (el isa GlyphID ? TeXLayout._font_upm(el.font_path) : upm)
             x0 = box.x
             y0 = box.y
             left = el.x_min * s
@@ -268,13 +269,16 @@ function main()
             )
 
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
-            face = face_for(el.font_slot)
-
             local bmp, ext
             try
-                bmp, ext = renderface(face, el.glyph_name, pixel_size)
+                bmp, ext = if el isa GlyphID
+                    id_face = get!(() -> FTFont(el.font_path), face_cache, el.font_path)
+                    renderface(id_face, Int(el.glyph_id), pixel_size)
+                else
+                    renderface(face_for(el.font_slot), el.glyph_name, pixel_size)
+                end
             catch err
-                @warn "renderface failed for $(el.glyph_name): $err"
+                @warn "renderface failed for $(el): $err"
                 continue
             end
 

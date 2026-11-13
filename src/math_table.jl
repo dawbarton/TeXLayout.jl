@@ -129,6 +129,8 @@ struct MathTable
     min_connector_overlap::Int                        # MathVariants.MinConnectorOverlap
     vert_constructions::Dict{String, GlyphConstruction}
     horiz_constructions::Dict{String, GlyphConstruction}
+    # GSUB 'ssty': glyph name → (Script, ScriptScript) alternate glyph names
+    script_alternates::Dict{String, Tuple{String, String}}
 end
 
 # Parsed MATH tables are immutable and depend only on the math-font path, so
@@ -291,32 +293,32 @@ function _cff_top_dict_charset_offset(dict_bytes::Vector{UInt8})::Int
         if b == 28                     # int16
             v = (Int(dict_bytes[i + 1]) << 8) | Int(dict_bytes[i + 2])
             v >= 0x8000 && (v -= 0x00010000)
-            push!(operands, v);  i += 3
+            push!(operands, v); i += 3
         elseif b == 29                 # int32
             v = (Int(dict_bytes[i + 1]) << 24) | (Int(dict_bytes[i + 2]) << 16) |
                 (Int(dict_bytes[i + 3]) << 8) | Int(dict_bytes[i + 4])
             # 0x100000000 is UInt64; subtract as Int to avoid UInt64 promotion.
             v >= 0x80000000 && (v -= Int(0x0000000100000000))
-            push!(operands, v);  i += 5
+            push!(operands, v); i += 5
         elseif b == 30                 # real — skip to 0xF end nibble
             i += 1
             while i <= length(dict_bytes)
-                byte = dict_bytes[i];  i += 1
+                byte = dict_bytes[i]; i += 1
                 ((byte & 0xF0) == 0xF0 || (byte & 0x0F) == 0x0F) && break
             end
         elseif 32 <= b <= 246
-            push!(operands, b - 139);  i += 1
+            push!(operands, b - 139); i += 1
         elseif 247 <= b <= 250
-            push!(operands, (b - 247) * 256 + Int(dict_bytes[i + 1]) + 108);  i += 2
+            push!(operands, (b - 247) * 256 + Int(dict_bytes[i + 1]) + 108); i += 2
         elseif 251 <= b <= 254
-            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i + 1]) - 108);  i += 2
+            push!(operands, -(b - 251) * 256 - Int(dict_bytes[i + 1]) - 108); i += 2
         elseif b == 12                 # two-byte escape operator
-            empty!(operands);  i += 2
+            empty!(operands); i += 2
         else                           # single-byte operator
             if b == 15 && !isempty(operands)
                 return last(operands)
             end
-            empty!(operands);  i += 1
+            empty!(operands); i += 1
         end
     end
     return 0
@@ -368,24 +370,24 @@ function _parse_cff_glyph_names(data::Vector{UInt8}, cff_start::Int)::Vector{Str
             end
         elseif fmt == 1
             # Ranges with uint8 numLeft
-            gid = 1;  p = cs + 1
+            gid = 1; p = cs + 1
             while gid < num_glyphs
                 sid = Int(_u16(data, p))
                 n_left = Int(data[p + 2])
                 for k in 0:n_left
                     gid >= num_glyphs && break
-                    names[gid + 1] = sid_to_name(sid + k);  gid += 1
+                    names[gid + 1] = sid_to_name(sid + k); gid += 1
                 end
                 p += 3
             end
         else  # fmt == 2: ranges with uint16 numLeft
-            gid = 1;  p = cs + 1
+            gid = 1; p = cs + 1
             while gid < num_glyphs
                 sid = Int(_u16(data, p))
                 n_left = Int(_u16(data, p + 2))
                 for k in 0:n_left
                     gid >= num_glyphs && break
-                    names[gid + 1] = sid_to_name(sid + k);  gid += 1
+                    names[gid + 1] = sid_to_name(sid + k); gid += 1
                 end
                 p += 4
             end
@@ -464,7 +466,7 @@ function _parse_glyph_names(data::Vector{UInt8})::Vector{String}
         p = ps + 34 + 2 * n          # first Pascal string
         post_end = ps + tlen - 1
         while length(custom) < n_custom && p <= post_end
-            len = Int(data[p]);  p += 1
+            len = Int(data[p]); p += 1
             push!(custom, len > 0 ? String(data[p:(p + len - 1)]) : "")
             p += len
         end
@@ -516,10 +518,10 @@ end
 
 function _parse_math_constants(data::Vector{UInt8}, p::Int)::MathConstants
     # Fields 1–4: plain int16 / uint16 (NOT MathValueRecord)
-    script_percent = Int(_i16(data, p));     p += 2
-    script_script_percent = Int(_i16(data, p));     p += 2
-    delim_min_h = Int(_u16(data, p));     p += 2
-    display_op_min_h = Int(_u16(data, p));     p += 2
+    script_percent = Int(_i16(data, p)); p += 2
+    script_script_percent = Int(_i16(data, p)); p += 2
+    delim_min_h = Int(_u16(data, p)); p += 2
+    display_op_min_h = Int(_u16(data, p)); p += 2
 
     # Fields 5–55: MathValueRecord = int16 value + Offset16 device table.
     # We read only the signed value and skip the device-table offset (2 bytes).
@@ -754,6 +756,92 @@ end
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+# ── GSUB 'ssty' (script-style alternates) ─────────────────────────────────────
+
+# Glyph substitutions of one GSUB lookup subtable as 0-based glyph ID → list of
+# substitutes: one for a single substitution (type 1), the alternates in order
+# for an alternate substitution (type 3).  Extension subtables (type 7) are
+# followed; other lookup types are ignored.
+function _gsub_subtable_alternates!(
+        out::Dict{Int, Vector{Int}}, data::Vector{UInt8}, p::Int, lookup_type::Int
+    )
+    if lookup_type == 7
+        ext_type = Int(_u16(data, p + 2))
+        ext_off = Int(_u32(data, p + 4))
+        return _gsub_subtable_alternates!(out, data, p + ext_off, ext_type)
+    end
+    fmt = Int(_u16(data, p))
+    coverage = _read_coverage(data, p + Int(_u16(data, p + 2)))
+    if lookup_type == 1 && fmt == 1
+        delta = Int(_i16(data, p + 4))
+        for g in coverage
+            get!(out, g, [mod(g + delta, 65536)])
+        end
+    elseif lookup_type == 1 && fmt == 2
+        for (i, g) in enumerate(coverage)
+            get!(out, g, [Int(_u16(data, p + 6 + 2 * (i - 1)))])
+        end
+    elseif lookup_type == 3 && fmt == 1
+        for (i, g) in enumerate(coverage)
+            set = p + Int(_u16(data, p + 6 + 2 * (i - 1)))
+            n = Int(_u16(data, set))
+            n > 0 || continue
+            get!(out, g, [Int(_u16(data, set + 2 + 2 * (k - 1))) for k in 1:n])
+        end
+    end
+    return out
+end
+
+# Parse the GSUB 'ssty' feature: glyph name → (Script alternate, ScriptScript
+# alternate).  XeTeX and LuaTeX load script-size math fonts with `ssty=0` and
+# scriptscript sizes with `ssty=1` (unicode-math), selecting the first and second
+# alternate; a single substitution, or a glyph with one alternate, uses it for
+# both.  Every 'ssty' feature record is used, whatever script or language system
+# lists it; math fonts register it once, under the 'math' script.  Returns an
+# empty table when the font has no GSUB table, no 'ssty' feature, or no glyph
+# names to key it by.
+function _parse_script_alternates(
+        data::Vector{UInt8}, glyph_names::Vector{String}
+    )::Dict{String, Tuple{String, String}}
+    result = Dict{String, Tuple{String, String}}()
+    isempty(glyph_names) && return result
+    loc = _find_table_opt(data, "GSUB")
+    loc === nothing && return result
+    gsub = loc[1]
+    feature_list = gsub + Int(_u16(data, gsub + 6))
+    lookup_list = gsub + Int(_u16(data, gsub + 8))
+
+    lookup_indices = Int[]
+    for i in 0:(Int(_u16(data, feature_list)) - 1)
+        rec = feature_list + 2 + 6 * i
+        String(data[rec:(rec + 3)]) == "ssty" || continue
+        feature = feature_list + Int(_u16(data, rec + 4))
+        for k in 0:(Int(_u16(data, feature + 2)) - 1)
+            push!(lookup_indices, Int(_u16(data, feature + 4 + 2 * k)))
+        end
+    end
+
+    subs = Dict{Int, Vector{Int}}()
+    for li in unique(lookup_indices)
+        lookup = lookup_list + Int(_u16(data, lookup_list + 2 + 2 * li))
+        lookup_type = Int(_u16(data, lookup))
+        for s in 0:(Int(_u16(data, lookup + 4)) - 1)
+            sub = lookup + Int(_u16(data, lookup + 6 + 2 * s))
+            _gsub_subtable_alternates!(subs, data, sub, lookup_type)
+        end
+    end
+
+    name(g) = g + 1 <= length(glyph_names) ? glyph_names[g + 1] : ""
+    for (g, alts) in subs
+        base = name(g)
+        script = name(alts[1])
+        scriptscript = name(alts[min(2, end)])
+        (isempty(base) || isempty(script) || isempty(scriptscript)) && continue
+        result[base] = (script, scriptscript)
+    end
+    return result
+end
+
 """
     load_math_table(font_path) -> MathTable
 
@@ -780,9 +868,12 @@ function load_math_table(font_path::AbstractString)::MathTable
         min_overlap, vert_constructions, horiz_constructions =
             _parse_math_variants(data, math_start + var_off, glyph_names)
 
+        script_alternates = _parse_script_alternates(data, glyph_names)
+
         return MathTable(
             upm, constants, italic_corrections, top_accent_attachments,
-            extended_shapes, min_overlap, vert_constructions, horiz_constructions
+            extended_shapes, min_overlap, vert_constructions, horiz_constructions,
+            script_alternates,
         )
     end
 end

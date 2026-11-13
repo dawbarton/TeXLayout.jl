@@ -142,6 +142,24 @@ function render_expr(
                 alpha = bmp[col, row]; alpha == 0x00 && continue
                 composite!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
             end
+        elseif el isa GlyphID
+            # Upright text (`\text{}`, `\sin`) and shaped spans name their exact
+            # font file and glyph index.
+            pixel_size = max(1, round(Int, box.scale * BASE_PX))
+            pen_cx = em_x(box.x); pen_cy = em_y(box.y)
+            face = get!(() -> FTFont(el.font_path), face_cache, el.font_path)
+            local bmp, ext
+            try
+                bmp, ext = renderface(face, Int(el.glyph_id), pixel_size)
+            catch
+                continue
+            end
+            bmp_top = pen_cy - round(Int, ext.horizontal_bearing[2])
+            bmp_left = pen_cx + round(Int, ext.horizontal_bearing[1])
+            for row in axes(bmp, 2), col in axes(bmp, 1)
+                alpha = bmp[col, row]; alpha == 0x00 && continue
+                composite!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
+            end
         elseif el isa HRule
             fill_rect!(
                 canvas,

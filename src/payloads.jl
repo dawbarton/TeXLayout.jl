@@ -16,11 +16,15 @@ struct _BigDelimiterPayload
     atom_class::Char
 end
 
+# `row_gaps[r]` is the `\\[len]` argument after row r, in em (0.0 without one).
 struct _MatrixPayload{E <: AbstractString, C <: AbstractString}
     env_name::E
     nrow::Int
     colspec::C
+    row_gaps::Vector{Float64}
 end
+
+_MatrixPayload(env_name, nrow, colspec) = _MatrixPayload(env_name, nrow, colspec, zeros(nrow))
 
 _payload_before(value::AbstractString, i::Integer) =
     i == firstindex(value) ? "" : String(value[firstindex(value):prevind(value, i)])
@@ -53,12 +57,22 @@ function _decode_big_delimiter_payload(value::AbstractString)::_BigDelimiterPayl
     return _BigDelimiterPayload(glyph_name, size, atom_class)
 end
 
-_encode_payload(p::_MatrixPayload) =
-    string(p.env_name, _PAYLOAD_SEPARATOR, p.nrow, _PAYLOAD_SEPARATOR, p.colspec)
+# Row gaps are a comma-separated fourth field, omitted when all are zero.
+function _encode_payload(p::_MatrixPayload)
+    base = string(p.env_name, _PAYLOAD_SEPARATOR, p.nrow, _PAYLOAD_SEPARATOR, p.colspec)
+    all(iszero, p.row_gaps) && return base
+    return string(base, _PAYLOAD_SEPARATOR, join(p.row_gaps, ","))
+end
 
 function _decode_matrix_payload(value::AbstractString)
-    parts = split(value, _PAYLOAD_SEPARATOR; limit = 3)
+    parts = split(value, _PAYLOAD_SEPARATOR; limit = 4)
     length(parts) < 3 && return _MatrixPayload("", 0, "")
     nrow = something(tryparse(Int, parts[2]), 0)
-    return _MatrixPayload(parts[1], nrow, parts[3])
+    gaps = zeros(nrow)
+    if length(parts) == 4 && !isempty(parts[4])
+        for (r, g) in enumerate(split(parts[4], ","))
+            r <= nrow && (gaps[r] = something(tryparse(Float64, g), 0.0))
+        end
+    end
+    return _MatrixPayload(parts[1], nrow, parts[3], gaps)
 end

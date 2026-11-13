@@ -30,7 +30,7 @@ space_node(w::Real) = Node(NodeKind.Space, "", Node[], Float64(w))
 # Extract the plain-text content of a node as a string.  Used to recover the
 # operator name from the braced argument of \operatorname{…}.
 function _node_text(node::Node)::String
-    node.kind === NodeKind.Char    && return node.value
+    node.kind === NodeKind.Char && return node.value
     node.kind === NodeKind.Command && return startswith(node.value, "\\") ? node.value[2:end] : node.value
     (node.kind === NodeKind.Sequence || node.kind === NodeKind.Group) &&
         return join(_node_text(c) for c in node.children)

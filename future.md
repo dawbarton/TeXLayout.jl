@@ -21,11 +21,56 @@ this file records the intended implementation direction.
   depth.
 - Add `\phantom`, `\vphantom`, and `\hphantom` using the same invisible measured
   box representation.
-- Preserve optional matrix row-spacing dimensions such as `\\[0.2em]` in the
-  parsed matrix representation and apply them when computing row baselines.
-- Re-evaluate the fixed `_MATRIX_ROWGAP` only after explicit row spacing exists;
-  compare any proposed default change against TeX, KaTeX, and all snapshot
-  fonts.
+- Every array-like environment follows LaTeX + amsmath (`_MATRIX_SPACING`,
+  `\\[len]` included; LuaLaTeX agrees to 0.001 pt).  Remaining differences:
+  array entries inside a script shrink with it, where TeX sets them at full
+  Text size (`x_{\begin{matrix}a\\b\end{matrix}}`, measured in LuaLaTeX);
+  `\hline`, `@{…}`, `\\*`, and register lengths in `\\[…]` (`\jot`) are
+  ignored; `align` and `gather` are set as `aligned` and `gathered`, without
+  `align`'s spreading of column pairs across the display width or equation
+  numbers; `\begin{array}[t]` / `[b]` positions are ignored (always centred).
+- `\overbrace` and `\underbrace` are Op atoms in the LaTeX kernel
+  (`\mathop{…}\limits`, fontmath.ltx) and Inner here; unicode-math redeclares
+  them as `\mathover`/`\mathunder` characters, class unverified.  Widths next
+  to an Ord agree in LuaLaTeX (thin space either way), but a following binary
+  operator or opening delimiter would be spaced differently.
+  Changing the class touches limit placement, so check `\overbrace{x}^{n}`
+  and `\overbrace{a}+b` against LuaLaTeX first.  A script on the brace's far
+  side (`^{m}` in `\underbrace{x+y}_{n}^{m}`) is set here as an ordinary
+  superscript; as a `\limits` Op, TeX would centre it above the nucleus.
+- LuaTeX adds a delimiter variant's italic correction after a `\left`
+  delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
+  neither does TeXLayout.
+- Size `\binom` and `\genfrac` delimiters from fixed sizes, as TeX does with
+  `delim1` / `delim2` (OpenType has no such constant; check what LuaTeX uses),
+  instead of fitting them to the content.
+
+- Add an invisible element with height and depth (a strut) to the box model.
+  Layout is ink-based, so `RadicalExtraAscender` (space TeX keeps above a
+  radical's rule) cannot be represented and is ignored: `\frac{1}{\sqrt{x}}`
+  sets the fraction bar 0.04 em (NewCM) to 0.14 em (Termes) closer to the
+  radical than TeX does.  The same element would let `\left…\right` see the
+  row struts of a matrix among other content (a lone matrix already passes
+  its delimiters to the matrix layout).
+
+## Extensible glyph assemblies
+
+- Vertical arrow and double-arrow assemblies are broken in some fonts: Luciole
+  `\left\uparrow` shows two arrowheads and its `\downarrow` a detached bar;
+  STIX Two and Luciole `\Downarrow` show a seam, and `\Downarrow` comes out
+  taller than `\Uparrow` for the same content.
+- Radical assemblies still use minimum part overlaps
+  (`_layout_radical_assembly!`), so they can overshoot the required height by up
+  to one extender; horizontal and delimiter assemblies now share
+  `_assembly_overlaps`.
+- `\bigm\{` and `\bigm|` come out at different heights (about 1.9 em and
+  1.1 em in Bonum); check the `\big` size tiers against each font's variants.
+- Fira Math's overbracket assembly has a visible step in its top rule.
+
+## Sizing
+
+- Make `\tiny` … `\Huge` absolute, as in LaTeX, rather than multiplying the
+  enclosing size: `{\Large … {\small x}}` sets x at 1.44 × 0.9 instead of 0.9.
 
 ## Display environments
 
@@ -43,6 +88,24 @@ this file records the intended implementation direction.
   codepoint.
 - Define fallback behavior for math font switches applied to characters outside
   the Unicode Mathematical Alphanumeric Symbols block.
+- Add a fallback font for symbols a math font lacks.  Fira Math has no
+  `\setminus`, `\vdash`, `\triangle`, `\top`, `\bot`, or big set and lattice
+  operators (⋃ ⋂ ⨁ ⨂ ⨀ ⨄ ⨆ ⨅ ⋁ ⋀), which render as blank space; its `\mathcal`
+  and `\mathscr` fall back to upright sans, and `\widehat`/`\widetilde` do not
+  stretch.
+- An unknown command that is dropped still counts as an atom for spacing:
+  `\unknown + x` gives the leading `+` binary spacing.
+- `ssty` script alternates are applied to characters, symbols, and large
+  operators but not to delimiters or accents set in a script.  STIX Two and
+  Luciole have script delimiters (`parenleft.ssty`, `lparen.st`); substituting
+  them needs the vertical-construction lookup to follow the alternate's name.
+  Measure `x_{(a)}` and `x^{\hat{a}}` in LuaLaTeX first.  Conversely, the text
+  alphabets (`\mathrm`, `\mathit`, …) are text fonts in unicode-math and get
+  no `ssty` there, but take the math font's alternates here.
+- Extensible arrows without a single-codepoint tail piece (`\xmapsto`, the hook
+  arrows, the stacked harpoons) stay at natural width in fonts lacking a
+  horizontal construction (Fira Math).  They could be built from a vertical
+  rule or by overlapping two copies of the arrow glyph with clipping.
 
 ## Makie integration
 
@@ -51,6 +114,9 @@ this file records the intended implementation direction.
   method.
 - If Makie exposes per-render layout options, replace the current session-wide
   default bridge for document width and alignment.
+- Once Makie 0.25 is released, run the `TeXLayoutHandler` tests in CI against
+  it; until then they are checked by hand against Makie's `ff/breaking-0.25`
+  branch.
 
 ## Regression tooling
 

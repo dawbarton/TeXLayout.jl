@@ -233,28 +233,6 @@ function _vstack_tree(
     return VBox(children, offsets, dxs, W, ascent, descent)
 end
 
-function _vstack_with_skips(
-        items::Vector{TeXBox};
-        line_height::Float64,
-        lineskip::Float64,
-        width::Union{Nothing, Float64},
-        align_of,
-        extra_before::Vector{Float64},
-        extra_after_last::Float64 = 0.0,
-    )::TeXBox
-    return _as_texbox(
-        _vstack_tree(
-            items;
-            line_height,
-            lineskip,
-            width,
-            align_of,
-            extra_before,
-            extra_after_last,
-        ),
-    )
-end
-
 # ── Per-run and per-line layout ───────────────────────────────────────────────
 
 function hlayout_math(
@@ -328,6 +306,17 @@ function layout_document(
         opts::LayoutOptions;
         family::FontFamily = default_font_family(),
     )::TeXBox
+    return first(_layout_document_with_baseline(input, opts; family))
+end
+
+# `layout_document` plus the y of the last line's baseline in the result's frame
+# (0 for a one-line document, negative otherwise). Renderer adapters need it
+# because Makie's `valign = :baseline` anchors multi-line text on its last line.
+function _layout_document_with_baseline(
+        input::AbstractString,
+        opts::LayoutOptions;
+        family::FontFamily = default_font_family(),
+    )::Tuple{TeXBox, Float64}
     doc = parse_document(input)
     mc = load_math_table(family.math).constants
     base_scale = size_scale(Text, mc)
@@ -363,9 +352,9 @@ function layout_document(
         end
     end
 
-    isempty(items) && return TeXBox(LayoutBox[], 0.0, 0.0, 0.0)
+    isempty(items) && return (TeXBox(LayoutBox[], 0.0, 0.0, 0.0), 0.0)
 
-    return _vstack_with_skips(
+    tree = _vstack_tree(
         items;
         line_height = opts.line_height,
         lineskip = opts.lineskip,
@@ -374,4 +363,5 @@ function layout_document(
         extra_before,
         extra_after_last = pending_skip,
     )
+    return (_as_texbox(tree), last(tree.offsets))
 end

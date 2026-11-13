@@ -290,7 +290,7 @@ end
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
         @test any(c -> c.kind === NodeKind.Char && c.value == "x", delim.children)
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"
     end

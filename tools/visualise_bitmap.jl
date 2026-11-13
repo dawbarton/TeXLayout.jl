@@ -12,7 +12,7 @@ using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 using TeXLayout
 using TeXLayout:
-    FontFamily, Glyph, HRule, LayoutBox, Space, VRule, layout, parse_latex
+    FontFamily, Glyph, GlyphID, HRule, LayoutBox, Space, VRule, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
 using Colors: Gray, N0f8
@@ -27,8 +27,9 @@ function em_bbox(boxes, upm)
     bx1 = bx2 = by1 = by2 = 0.0
     for box in boxes
         el = box.element
-        if el isa Glyph
-            s = box.scale / upm
+        if el isa Glyph || el isa GlyphID
+            # A GlyphID names its own font file, whose UPM may differ.
+            s = box.scale / (el isa GlyphID ? TeXLayout._font_upm(el.font_path) : upm)
             bx1 = min(bx1, box.x + el.x_min * s)
             bx2 = max(bx2, box.x + el.x_max * s)
             by1 = min(by1, box.y + el.y_min * s)
@@ -119,11 +120,12 @@ function main()
     hline!(canvas, em_to_px_y(mt.constants.axis_height / upm), 1, W, 0xcc)
 
     face = FTFont(math_path)
+    id_faces = Dict{String, FTFont}()   # GlyphID fonts, by path
 
     for box in boxes
         el = box.element
 
-        if el isa Glyph
+        if el isa Glyph || el isa GlyphID
             pixel_size = max(1, round(Int, box.scale * BASE_PX))
             # Pen position on canvas (baseline of this box)
             pen_cx = em_to_px_x(box.x)
@@ -131,9 +133,14 @@ function main()
 
             local bmp, ext
             try
-                bmp, ext = renderface(face, el.glyph_name, pixel_size)
+                bmp, ext = if el isa GlyphID
+                    id_face = get!(() -> FTFont(el.font_path), id_faces, el.font_path)
+                    renderface(id_face, Int(el.glyph_id), pixel_size)
+                else
+                    renderface(face, el.glyph_name, pixel_size)
+                end
             catch e
-                @warn "renderface failed for $(el.glyph_name): $e"
+                @warn "renderface failed for $(el): $e"
                 continue
             end
 

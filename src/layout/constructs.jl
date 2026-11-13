@@ -28,7 +28,7 @@ end
 # Lay out an extensible arrow with optional above and below labels.
 #
 # Vertical positioning follows KaTeX xarrow.ts:
-#   - Arrow body centred on the math axis.
+#   - Arrow body at its natural baseline position (shaft on the math axis).
 #   - Above label: bottom of ink at arrow_top + KERN.
 #   - Below label: top of ink at arrow_bot − KERN.
 #   - Minimum arrow width: max(natural width, widest_label + 2*PAD*scale).
@@ -58,7 +58,7 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
 
     # Resolve the arrow glyph in horiz_constructions.
     cp = get(_XARROW_CODEPOINTS, cmd, 0x2192)
-    uni_name = "uni" * uppercase(string(cp, base = 16, pad = 4))
+    uni_name = "uni" * uppercase(string(cp; base = 16, pad = 4))
     arrow_ps = _horiz_construction_key(ctx, uni_name)
 
     # Natural arrow width from the reference glyph (smallest pre-built variant
@@ -78,10 +78,12 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
     # Total advance: same as arrow width (labels are centred within it).
     total_w = arrow_w
 
-    # Vertical: centre arrow on math axis.
+    # Vertical: the arrow sits on the baseline like any relation, as in amsmath's
+    # \arrowfill@; the font draws its shaft on the math axis.  Centring the ink
+    # on the axis instead would drop harpoon shafts below it (or raise them).
     axis_em = mc.axis_height / upm * scale
     if g_ref !== nothing
-        arrow_y = y0 + axis_em - (Float64(g_ref.y_min) + Float64(g_ref.y_max)) / (2.0 * upm) * scale
+        arrow_y = y0
         arrow_top = arrow_y + Float64(g_ref.y_max) / upm * scale
         arrow_bot = arrow_y + Float64(g_ref.y_min) / upm * scale
     else
@@ -90,14 +92,13 @@ function _layout_xarrow!(node, ctx, style, x0, y0, scale, boxes)
         arrow_bot = arrow_y - 0.3 * scale
     end
 
-    # Place the extensible arrow body: the font's horizontal construction, or
-    # glyph pieces when the font has none for this arrow.
-    if hc !== nothing
-        _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
-    else
-        extent = _layout_arrow_from_pieces!(ctx, cp, arrow_w, x0, y0, scale, boxes)
-        extent === nothing || ((arrow_top, arrow_bot) = extent)
-    end
+    # Place the extensible arrow body.  A font that cannot stretch the arrow
+    # through its MATH table gets one built from pieces, as amsmath does.
+    fill = get(_XARROW_FILL_PIECES, cmd, nothing)
+    filled = fill !== nothing && g_ref !== nothing && arrow_w > natural_w &&
+        _horiz_construction_falls_short(ctx, arrow_ps, arrow_w, scale) &&
+        _layout_arrow_fill!(ctx, fill, g_ref, arrow_w, arrow_y, x0, scale, boxes)
+    filled || _layout_wide_accent!(ctx, arrow_ps, arrow_w, arrow_y, x0, scale, boxes)
 
     # Place the above label: bottom of ink at arrow_top + kern.
     if above_start <= above_stop
@@ -133,8 +134,8 @@ end
 function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     mc, upm = ctx.mc, ctx.upm
     num_node, den_node = node.children[1], node.children[2]
-    num_s = frac_num_style(style);  num_scale = _scale_for_child(scale, style, num_s, mc)
-    den_s = frac_den_style(style);  den_scale = _scale_for_child(scale, style, den_s, mc)
+    num_s = frac_num_style(style); num_scale = _scale_for_child(scale, style, num_s, mc)
+    den_s = frac_den_style(style); den_scale = _scale_for_child(scale, style, den_s, mc)
 
     rule_thickness = mc.fraction_rule_thickness / upm * scale
     axis_em = mc.axis_height / upm * scale
@@ -170,13 +171,19 @@ function _layout_frac!(node, ctx, style, x0, y0, scale, boxes)
     num_shift = max(num_shift, axis_em + rule_thickness / 2 + num_gap + num_depth)
     den_shift = max(den_shift, den_height - axis_em + rule_thickness / 2 + den_gap)
 
+    # Rule 15e: the fraction is flanked by null delimiters, so the rule stops
+    # `_NULL_DELIMITER_SPACE` short of the neighbouring atoms on each side.
     frac_w = max(num_w, den_w)
+    nds = _NULL_DELIMITER_SPACE
+    xf = x0 + nds
     Δnum = (frac_w - num_w) / 2
     Δden = (frac_w - den_w) / 2
-    _translate_range!(boxes, num_start, num_stop, x0 + Δnum, y0 + num_shift)
-    _translate_range!(boxes, den_start, den_stop, x0 + Δden, y0 - den_shift)
-    push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), x0, rule_y, scale))
-    return frac_w
+    _translate_range!(boxes, num_start, num_stop, xf + Δnum, y0 + num_shift)
+    _translate_range!(boxes, den_start, den_stop, xf + Δden, y0 - den_shift)
+    push!(boxes, LayoutBox(Space(nds), x0, y0, scale))
+    push!(boxes, LayoutBox(HRule(frac_w, rule_thickness), xf, rule_y, scale))
+    push!(boxes, LayoutBox(Space(nds), xf + frac_w, y0, scale))
+    return frac_w + 2nds
 end
 
 # Layout for \binom / \dbinom / \tbinom (NodeKind.Genfrac): a no-rule fraction
@@ -237,14 +244,14 @@ function _layout_genfrac!(node, ctx, style, x0, y0, scale, boxes)
 
     # Place left delimiter, fraction content (centred), right delimiter.
     cursor = x0
-    left_w = !isempty(left_name) ? _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes) : 0.0
+    left_w = _layout_delim!(ctx, left_name, required_du, cursor, y0, scale, boxes)
     cursor += left_w
     Δnum = (inner_w - num_w) / 2
     Δden = (inner_w - den_w) / 2
     _translate_range!(boxes, num_start, num_stop, left_w + x0 + Δnum, y0 + num_shift)
     _translate_range!(boxes, den_start, den_stop, left_w + x0 + Δden, y0 - den_shift)
     cursor += inner_w
-    !isempty(right_name) && (cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes))
+    cursor += _layout_delim!(ctx, right_name, required_du, cursor, y0, scale, boxes)
     return cursor - x0
 end
 
@@ -301,6 +308,9 @@ function _layout_sqrt!(node, ctx, style, x0, y0, scale, boxes)
     required_du = required_cover_du
     degree_before = has_degree ? mc.radical_kern_before_degree / upm * scale : 0.0
     degree_after = has_degree ? mc.radical_kern_after_degree / upm * scale : 0.0
+    # The after-degree kern is negative; as in LuaTeX, it never pulls the sign
+    # left of where it would sit with no degree.
+    degree_after = max(degree_after, -(degree_before + degree_w))
     radical_x = has_degree ? x0 + degree_before + degree_w + degree_after : x0
 
     rule_top_em = y0 + rule_top_local
@@ -357,6 +367,15 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     end
     push!(segments, current_seg)
 
+    # Around a lone array the delimiters are sized against the array's box,
+    # struts included, as TeX does; that box is not visible in the glyphs.
+    if isempty(middles)
+        m = _sole_matrix(segments[1])
+        if m !== nothing && _takes_outer_delimiters(m)
+            return _layout_matrix!(m, ctx, style, x0, y0, scale, boxes; left = left_name, right = right_name)
+        end
+    end
+
     # Lay out each segment at the origin; record ranges for allocation-free
     # measurement and later in-place positioning.
     seg_starts = Vector{Int}(undef, length(segments))
@@ -379,15 +398,18 @@ function _layout_delimited!(node, ctx, style, x0, y0, scale, boxes)
     content_top = max(content_top, y0 + mc.axis_height / upm * scale)
     content_bot = min(content_bot, y0 - mc.axis_height / upm * scale)
 
-    # Required delimiter advance: sized so every delimiter covers the content
-    # symmetrically around the math axis (same formula for left, middle, and right).
-    # Converted to unscaled design units because GlyphVariant.advance and
-    # GlyphAssemblyPart.full_advance are stored in unscaled design units.
+    # Required delimiter size (TeX rule 19): symmetric about the math axis, the
+    # same for left, middle, and right, allowing TeX's delimiter factor and
+    # shortfall.  In unscaled design units, the units of GlyphVariant.advance
+    # and GlyphAssemblyPart.full_advance.
     axis_em = y0 + mc.axis_height / upm * scale
     h_above = max(0.0, content_top - axis_em)
     h_below = max(0.0, axis_em - content_bot)
-    required_em = 2.0 * max(h_above, h_below)
-    required_du = required_em / scale * upm
+    # A matrix among other content is measured by its ink here but by its
+    # strutted box in TeX, so it gets full coverage instead.
+    δ = max(h_above, h_below)
+    required_du = any(_contains_matrix, node.children) ? 2δ / scale * upm :
+        _left_right_required_du(δ, scale, upm)
 
     # Place left delimiter, then (segment + middle delimiter)*, then last segment + right.
     cursor = x0
@@ -470,6 +492,14 @@ function _emit_texbox!(boxes::Vector{LayoutBox}, box, x0::Float64, y0::Float64)
         push!(boxes, LayoutBox(b.element, x0 + b.x, y0 + b.y, b.scale))
     end
     return nothing
+end
+
+# `$…$` inside `\text{…}`: restart math in text style at the current size, as
+# amsmath's `\text` does (an inner subscript is one script level smaller than
+# the surrounding text, whatever style the `\text` itself sits in).
+function _layout_inline_math!(node, ctx, style, x0, y0, scale, boxes)
+    isempty(node.children) && return 0.0
+    return _layout_node!(node.children[1], _with_math_mode(ctx), Text, x0, y0, scale, boxes)
 end
 
 function _layout_text!(node, ctx, style, x0, y0, scale, boxes)

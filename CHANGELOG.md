@@ -24,6 +24,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `\bmod`, `\pmod`, `\mod`, and `\pod` with amsmath's spacing (previously
   `\bmod` rendered nothing and `\pmod{n}` dropped its argument), and the TeX
   primitive `\mathchoice`.
+- `'` in math is a prime, as in TeX and KaTeX: `f'` is `f^{\prime}`, and
+  `f'_1` stacks the prime over the subscript. As in unicode-math, a run of two
+  to four primes is one multiple-prime character (`f''^2` is `f^{\dprime 2}`),
+  a longer run is single primes with a -1.5 mu kern between them, and a font
+  without the multiple-prime character gets the kerned single primes. Inside
+  `\text{…}` it stays an apostrophe. `\dprime`, `\trprime`, `\qprime`,
+  `\backdprime`, and `\backtrprime` are available as commands.
+- Glyphs set in Script and ScriptScript style use the font's OpenType `ssty`
+  script alternates (the first alternate in Script, the second in
+  ScriptScript), as XeTeX and LuaTeX do with unicode-math. Script letters,
+  digits, primes, and radical degrees are slightly larger and wider than the
+  scaled base glyphs, as the font designers intended; widths now agree with
+  LuaLaTeX to 0.001 pt at 10 pt in New Computer Modern and TeX Gyre Bonum.
+  `MathTable` has a new `script_alternates` field.
+- `$…$` inside math `\text{…}` is laid out as math, as amsmath and KaTeX allow
+  (`\text{if $x>0$}`). It previously printed literal dollar signs and upright
+  text. A `$` nested in braces no longer forces a `LaTeXString` onto the
+  document route in the Makie adapters.
+- `TeXLayoutHandler` implements Makie 0.25's public `layout_text` interface,
+  including glyph IDs, exact font faces, horizontal and vertical rule specs,
+  block bounds, and per-plot or theme-level selection.
+- `\\[len]` row spacing in matrices, arrays, `cases`, `smallmatrix`, and the
+  alignments, with LaTeX's semantics: in an array a positive length deepens
+  the row to at least the strut depth plus the length, and elsewhere it adds
+  space. It was parsed and ignored.
+- TeX units `pt`, `ex`, `mm`, `cm`, `in`, `bp`, `pc`, `dd`, `cc`, and `sp`
+  (at 10 pt = 1 em) in `\kern`, `\hskip`, and `\\[len]`; only `em` and `mu`
+  were understood, so `\kern 3pt` gave no space.
+
+### Changed
+- Makie 0.25 integration no longer relies on intercepting
+  `MathTeXEngine.generate_tex_elements(::LaTeXString)`. The legacy automatic
+  adapter remains active only for Makie versions without the public text-handler
+  interface.
+- Inline-math routing and cached glyph/face resolution moved from the two
+  renderer extensions into `src/render_support.jl`, so both adapters share one
+  implementation and one per-`FontFamily` runtime cache.
+- Matrix environments are spaced as in LaTeX + amsmath. Columns are 1 em
+  apart (5 mu each side before), `array` keeps 0.5 em outside its first and
+  last columns, the matrix family has no outer margin, and `cases` puts a
+  `\quad` between its columns. Rows carry `\arraystretch` struts (1.2 em
+  baseline to baseline for short entries, 1.2 × that in `cases`) instead of
+  ink-tight rows with a 3 mu gap, and the matrix delimiters (and `\left…\right`
+  around a lone matrix) are sized against that box by rule 19 instead of
+  covering the ink. `||` in an array spec adds `\doublerulesep` (0.2 em).
+  `smallmatrix` sets its entries in script style (with `ssty` alternates)
+  rather than at 0.9×, with amsmath's spacing. Widths agree with LuaLaTeX to
+  0.001 pt across 30 cases in New Computer Modern and TeX Gyre Bonum. A
+  one-column `cases` ends with the `\quad` of amsmath's template.
+- The alignments (`aligned`, `gathered`, `align`, `gather`, and `split`) are
+  spaced as in amsmath: every row carries a strut and rows are 1.5 em apart
+  baseline to baseline (`\baselineskip` + `\jot`), or 0.4 em clear of each
+  other when taller; column pairs are 1 em apart and there is no outer
+  margin. Rows were ink-tight with a 3 mu gap, pairs 0.56 em apart, and
+  `gather` had 5 mu margins. Widths, heights, and depths agree with LuaLaTeX
+  to 0.001 pt.
+- `glyph_metrics(family, name)` is memoised per font and glyph name. Layouts
+  with delimiters, large operators, or scripts are 1.5–6× faster in the
+  benchmark suite (FreeType's name lookup dominated them).
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,
@@ -45,9 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are laid out instead of being dropped.
 - Notes on `\overbrace`/`\underbrace` now inherit sizing commands such as
   `\large` and the `smallmatrix` scale.
-- The Makie extension no longer throws a `StringIndexError` for a
-  `LaTeXString` whose last character before the closing `$` is non-ASCII
-  (for example `L"$2π$"`).
 - `\liminf` and `\limsup` are set as "lim inf" and "lim sup" with amsmath's
   3 mu thin space between the words, instead of as one word.
 - `\operatorname*{…}` no longer renders a literal `*` followed by the name in
@@ -58,11 +114,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that captured the scripts.
 - The command reference's delimiter table shows `\left\|` for the double bar;
   Markdown table escaping had rendered it as `\left|`, the same as the single bar.
-- Extensible arrows (`\xrightarrow` and family) are drawn in fonts whose MATH
-  table has no horizontal construction for them: Fira Math (all of them),
-  Luciole, and STIX Two (harpoons, two-headed arrows, `\xlongequal`) drew only
-  the labels.  The arrow is built from glyph pieces, as amsmath does, or shown
-  at natural width when it has no piece decomposition (hooks, mapsto).
 - Unbraced text commands in document text take one token as their argument, as
   in TeX: `\textbf x rest` makes only "x" bold, where the style used to run to
   the end of the input.  A paragraph break between a text command and its
@@ -78,9 +129,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their width when the text is styled (`\text{\textbf{a}\quad b}`) or shaped
   with `HarfBuzzShaper`; they were shaped as a single interword space.
 - Laying out from several threads at once no longer crashes inside FreeType or
-  returns wrong glyph metrics.  The module-level caches (fonts, units per em,
-  MATH tables, and the HarfBuzz and Makie extensions' caches) are locked, and
-  FreeType calls on a cached face hold that face's lock.  Single-threaded
+  returns wrong glyph metrics. The module-level caches (fonts, units per em,
+  glyph metrics by name, MATH tables, the renderer adapters' shared glyph
+  runtime, and the HarfBuzz and MathTeXEngine extensions' caches) are locked,
+  and FreeType calls on a cached face hold that face's lock. Single-threaded
   layout is about 3–6% slower.
 - Explicit spaces and kerns (`\,`, `\quad`, `~`, `\kern`, …) no longer reset
   automatic inter-atom spacing.  As in TeX and KaTeX, the atoms on either side
@@ -98,32 +150,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   half of any shortfall added to each shift.  They previously used the fraction
   constants with separate clearances against the math axis.
 - Radical degrees (`\sqrt[n]{…}`) are raised from the bottom of the radical
-  sign, as LuaTeX does, rather than from the baseline.  `RadicalDegreeBottomRaisePercent`
-  is a proportion of the sign's total height, so measuring it from the baseline
-  placed the degree too high, and above the sign altogether for deep radicands
-  such as `\sqrt[3]{\frac{a}{b}}`.  The degree's baseline, not its ink bottom,
-  is now placed at that height, as in LuaTeX, XeTeX, and KaTeX.
+  sign, as LuaTeX does, rather than from the baseline.
+  `RadicalDegreeBottomRaisePercent` is a proportion of the sign's total height,
+  so measuring it from the baseline placed the degree too high, and above the
+  sign altogether for deep radicands such as `\sqrt[3]{\frac{a}{b}}`. The
+  degree's baseline, not its ink bottom, is now placed at that height, as in
+  LuaTeX, XeTeX, and KaTeX. The negative kern after the degree no longer pulls a
+  narrow degree's sign left into the preceding material.
 - A `%` comment followed by a blank line keeps the paragraph break with Windows
   (CRLF) line endings, and when the blank line contains a form feed or vertical
   tab, matching the document parser's own blank-line rule.
-- `makie_cairo` stress images are legible again.  The CairoMakie PNG was
-  reinterpreted byte by byte, stretching each image fourfold vertically and
-  striping it with the alpha channel, and Makie aligns a `LaTeXString` by the
-  bottom of its glyph bounding box rather than its baseline, which pushed the
-  tops of tall formulae off the canvas.  Every `makie_cairo` image changes, so
-  references that include them must be regenerated.
 - Math characters are followed by their italic correction, as in TeX, so
   `f(x)`, `f^2`, `fg`, and `y=` no longer crowd the overhang of a slanted
-  letter.  A subscript still sits at the uncorrected advance, under the slant
+  letter. A subscript still sits at the uncorrected advance, under the slant
   (`f_i`), and a one-character group (`{f}_i`) is treated as the character, as
-  TeX does.  Upright text and operator names get no correction.  The width of
-  a scripted atom no longer counts the correction taken back for its subscript,
-  which made `\int_0` and `V_i` too wide.  Inline math in documents now
-  measures to its full advance, so a trailing correction or the space after a
-  final script (`$x_i$ word`) separates it from the following text, as in TeX.
-  Widths of `$f$`, `$VW$`, `$\sqrt{f}$`, `$\overline{fy}$`, and `$b \pmod{n}$`
-  now equal LuaLaTeX's and XeLaTeX's.  Seven layout snapshots change for these
-  reasons alone.
+  TeX does. Upright text and operator names get no correction. The width of a
+  scripted atom no longer counts the correction taken back for its subscript,
+  which made `\int_0` and `V_i` too wide. Inline math in documents now measures
+  to its full advance, so a trailing correction or the space after a final
+  script (`$x_i$ word`) separates it from the following text, as in TeX. Widths
+  of `$f$`, `$VW$`, `$\sqrt{f}$`, `$\overline{fy}$`, and `$b \pmod{n}$` now
+  equal LuaLaTeX's and XeLaTeX's.
+- `\begin{equation}` is laid out exactly like `\[…\]`. It was centred on the
+  math axis like an array, which moved its baseline.
+- Fractions (`\frac`, `\dfrac`, `\binom`, …) and the undelimited arrays
+  (`matrix`, `array`, `smallmatrix`, `aligned`, …) are Ord atoms, as in LaTeX
+  (whose `\frac` is `{…\over…}`) and KaTeX. They were Inner, which put a
+  thin space between a fraction and a neighbouring letter, parenthesis,
+  fraction, or matrix (`\frac12 x`, `\frac12(x)`, `a\frac12`) where LaTeX
+  has none. The delimited environments (`pmatrix`, `cases`, …) and
+  `\left…\right` stay Inner.
+- Inline-math delimiter stripping in both Makie adapters now uses valid UTF-8
+  string indices, so formulas ending in a multibyte character such as `$α$` do
+  not raise a `StringIndexError`.
+- Document text keeps explicit spaces: `\ `, `\space`, and `\nobreakspace`
+  give an interword space, and `\quad`, `\qquad`, `\enspace`, `\,`, `\:` and
+  `\;` give spaces of their exact width. They were previously dropped, so
+  `Mr.\ Smith` printed as "Mr.Smith". As in TeX, a control word such as
+  `\quad` swallows the spaces after it.
+- The body of an environment with no layout of its own (`center`, `quote`, …)
+  is kept as ordinary text in documents instead of being discarded.
+- An environment nested in an unbraced alignment cell keeps its own `&`, `\\`
+  and `\end`. `\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y \end{cases}
+  \end{aligned}` previously produced a one-cell `cases` and spilled the rest
+  into the `aligned` grid.
+- Scripts on an accented single character attach to the character, as TeX's
+  rule 12 and KaTeX require. `\hat{y}_{t+1}` previously dropped its subscript
+  0.11–0.16 em below that of `y_{t+1}`, and `\tilde{A}^2` raised its
+  superscript 0.3 em, so accented labels sat at different heights from their
+  neighbours when aligned by their bottom edge.
+- `TeXLayoutHandler` treats Makie's `lineheight` as a multiplier of the
+  document baselineskip. It previously replaced the baselineskip outright, so
+  handler documents were set 1.0 em apart instead of 1.2 em and a pinned
+  `LayoutOptions(line_height = …)` was ignored.
+- `TeXLayoutHandler` reports the last line's baseline for multi-line documents,
+  so `valign = :baseline` anchors them the way it anchors Makie's own text.
+- The Makie handler tests use the public `Makie.layout_text` protocol instead of
+  `Text` compute-graph node names that changed when Makie's text-handler pull
+  request merged, and `tools/Project.toml` accepts CairoMakie 0.16.
+- Upright glyphs taken from a family's regular font (`\text{…}`, `\mbox{…}`,
+  and operator names such as `\sin`) are measured in that font's own units per
+  em and emitted as `GlyphID`s naming the exact font file. They were previously
+  scaled by the math font's units per em, so a 2048-unit TrueType text font
+  beside a 1000-unit math font set its text about twice too wide. The FreeType
+  tools render these glyphs from their font file.
+- Extensible arrows render in fonts whose MATH table cannot stretch them.
+  Fira Math has no horizontal arrow constructions and STIX Two none for `↠`,
+  `⇌`, or `=`, so `\xrightarrow`, `\xlongequal`, and similar drew no arrow at
+  all. Such arrows are now built from a head and repeated shaft pieces, as
+  amsmath's `\arrowfill@` builds them, and `\xmapsto`, the hook arrows, and the
+  stacked harpoons fall back to the arrow glyph at its natural width.
+- Fractions are flanked by TeX's null delimiter space (`\nulldelimiterspace`,
+  0.12 em, unscaled in scripts), and `\left.`, `\right.`, and the open side of
+  `cases` give the same space. The fraction rule previously ran into the
+  neighbouring atoms (`x\frac{a}{b}x` was 0.24 em narrower than in TeX).
+  Layouts containing fractions or null delimiters widen accordingly.
+- `\left…\right` delimiters are sized by TeX's rule, with `\delimiterfactor`
+  901 and `\delimitershortfall` 5 pt: a delimiter need reach only
+  max(0.901 × 2δ, 2δ − 0.5 em) for content extending δ from the axis. They
+  previously had to cover the content completely, so `\left(\frac{a}{b}\right)`
+  in text style took a parenthesis two sizes larger than TeX's. Matrix
+  delimiters are unchanged, because the matrix grid lacks TeX's row struts.
+- The text alphabets (`\mathit`, `\mathrm`, `\mathbf`, `\mathsf`, `\mathtt`)
+  add no italic correction between letters, as LaTeX's text fonts do, so
+  `\mathit{AaBbXx}` is no longer letter-spaced.
+- `\left…\right` around a matrix keeps full delimiter coverage, like the
+  matrix environments' own delimiters, since the matrix grid lacks TeX's row
+  struts.
+- Assembled horizontal braces and arrows widen their part overlaps to match
+  the required width, as vertical assemblies already did. They could overshoot
+  by up to one extender per side (a Pagella `\underbrace` ran 0.84 em past its
+  content on each side, and assembled arrowheads ran into the next atom).
+- Extensible arrows sit on the baseline like other relations rather than
+  having their ink centred on the axis, which put harpoon shafts off the axis.
+- Display-style large operators fall back to the largest size variant when
+  none reaches `DisplayOperatorMinHeight`. STIX Two's minimum exceeds all its
+  variants, so `\sum` and `\bigoplus` stayed text-size in display style; so did
+  Schola's `\bigoplus`.
+- `\neg`, `\lnot`, and the harpoon relations (`\leftharpoonup`,
+  `\rightleftharpoons`, `\upharpoonright`, …) render instead of drawing nothing.
+- The stress suite's `makie_cairo` captures are usable: CairoMakie's RGBA
+  output was reinterpreted as bytes (a striped, 4×-tall image), and the label
+  was clipped at the top because Makie aligns its padded block box rather
+  than the ink. Captures are now converted to greyscale and cropped to the
+  ink. Existing `makie_cairo` reference images need regenerating.
+- `TeXLayoutHandler` reports glyph and block metrics padded to the font's
+  ascender and descender rather than bare ink bounds, matching what Makie's own
+  layouters and `MathTeXEngine.TeXChar` report. Previously `align = (:*, :center)`
+  placed labels of differing ink height on different baselines, and `Axis`
+  tick-label space depended on whether a label happened to have a descender.
 
 ## [v0.3.2] - 2026-07-26
 

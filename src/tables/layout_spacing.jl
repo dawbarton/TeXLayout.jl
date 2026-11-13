@@ -5,6 +5,92 @@ const _THIN = 3 / 18
 const _MEDIUM = 4 / 18
 const _THICK = 5 / 18
 
+# Width of a null delimiter (`\left.`, the missing delimiters of `\frac`), in em
+# of the formula's base size.  TeX's `\nulldelimiterspace` is a fixed 1.2 pt at
+# 10 pt, unscaled in script styles, and KaTeX resets the null delimiter to the
+# base size likewise.
+const _NULL_DELIMITER_SPACE = 0.12
+
+# TeX's `\delimiterfactor` (901, as a fraction of 1000) and `\delimitershortfall`
+# (5 pt at 10 pt, in em of the formula's base size): a `\left…\right` delimiter
+# need cover only max(0.901 × 2δ, 2δ − 0.5 em) of content extending δ from the
+# axis (rule 19).  LaTeX's defaults; KaTeX uses the same values.
+const _DELIMITER_FACTOR = 0.901
+const _DELIMITER_SHORTFALL = 0.5
+
+# Array geometry of LaTeX + amsmath at 10 pt (\baselineskip 12 pt), in em.
+# `array` puts `\arraycolsep` (5 pt) on both sides of every column; amsmath's
+# matrices cancel the outer two, and `cases` is `@{}l@{\quad}l@{}`.  Every row
+# carries `\@arstrut`, `\arraystretch` × 0.7 `\baselineskip` high and
+# `\arraystretch` × 0.3 `\baselineskip` deep, and rows are stacked with no
+# further gap.  A `|` rule takes no width; consecutive rules (`||`) are
+# `\doublerulesep` (2 pt) apart.
+const _ARRAYCOLSEP = 0.5
+const _ARRAY_STRUT_HEIGHT = 0.84
+const _ARRAY_STRUT_DEPTH = 0.36
+const _DOUBLERULESEP = 0.2
+
+# amsmath's `smallmatrix` is `\null\,\vcenter{…}\,` with `\scriptstyle` entries
+# separated by `\thickspace` (0.2777 em, in text mode there) and rows on a 6 pt
+# `\baselineskip` with 1.5 pt `\lineskip` and `\lineskiplimit`.
+const _SMALLMATRIX_GAP = 0.2777
+const _SMALLMATRIX_BASELINESKIP = 0.6
+const _SMALLMATRIX_LINESKIP = 0.15
+
+# amsmath's alignments (`aligned`, `gathered`, and the display forms) put a
+# `\strut@` (the 8.4 pt × 3.6 pt `\strutbox`) in every row and `\openup\jot`
+# (3 pt) the interline parameters: `\baselineskip` 12 → 15 pt, `\lineskip`
+# 1 → 4 pt, `\lineskiplimit` 0 → 3 pt.  Column pairs are `\minalignsep`
+# (10 pt) apart.
+const _JOT = 0.3
+const _MINALIGNSEP = 1.0
+
+# Column spacing and row model of every array-like environment, in em of the
+# environment's size: `outer` before the first and after the last column, `gap`
+# between columns (between column pairs in the alignments), and `strut` times
+# the (0.84 em, 0.36 em) row strut as each row's minimum height and depth.
+# `rows` is `:touch` for LaTeX's array, whose rows abut, or `:interline` for
+# TeX's interline glue: baselines `baselineskip` apart unless that leaves less
+# than `lineskiplimit` between the rows, else `lineskip` between them.
+# `vcenter` centres the grid on the math axis (TeX's `\vcenter`, used by every
+# array and inline alignment); otherwise the first row sits on the baseline.
+const _MatrixSpacing = @NamedTuple{
+    outer::Float64, gap::Float64, strut::Float64, rows::Symbol,
+    baselineskip::Float64, lineskip::Float64, lineskiplimit::Float64, vcenter::Bool,
+}
+const _ARRAY_ROWS = (
+    strut = 1.0, rows = :touch, baselineskip = 0.0, lineskip = 0.0, lineskiplimit = 0.0,
+    vcenter = true,
+)
+const _ALIGN_SPACING = (
+    outer = 0.0, gap = _MINALIGNSEP, strut = 1.0, rows = :interline,
+    baselineskip = 1.2 + _JOT, lineskip = 0.1 + _JOT, lineskiplimit = 0.0 + _JOT,
+    vcenter = true,
+)
+const _MATRIX_SPACING = Dict{String, _MatrixSpacing}(
+    "array" => (; outer = _ARRAYCOLSEP, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "matrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "pmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "bmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "Bmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "vmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "Vmatrix" => (; outer = 0.0, gap = 2 * _ARRAYCOLSEP, _ARRAY_ROWS...),
+    "cases" => (; outer = 0.0, gap = 1.0, _ARRAY_ROWS..., strut = 1.2),
+    "smallmatrix" => (
+        outer = _THIN, gap = _SMALLMATRIX_GAP, strut = 0.0, rows = :interline,
+        baselineskip = _SMALLMATRIX_BASELINESKIP, lineskip = _SMALLMATRIX_LINESKIP,
+        lineskiplimit = _SMALLMATRIX_LINESKIP, vcenter = true,
+    ),
+    # Display alignments are laid out as their inline forms (`align` as
+    # `aligned`, `gather` as `gathered`): there is no display width to spread
+    # `align`'s column pairs over.
+    "align" => _ALIGN_SPACING, "aligned" => _ALIGN_SPACING, "split" => _ALIGN_SPACING,
+    "gather" => _ALIGN_SPACING, "gathered" => _ALIGN_SPACING,
+    # `equation` is not an alignment but a plain display, like `\[…\]`: no
+    # strut, and its content stays on the baseline.
+    "equation" => (; _ALIGN_SPACING..., strut = 0.0, vcenter = false),
+)
+
 # Automatic inter-atom spacing for Display/Text style: (prev, next) → em.
 # Derived from KaTeX spacingData.ts; pairs with no entry have zero spacing.
 const _SPACINGS = Dict{Tuple{Symbol, Symbol}, Float64}(

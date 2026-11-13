@@ -58,6 +58,37 @@ end
 
 # Lay out a glyph assembly centred on the math axis.  Returns the horizontal
 # advance of the widest part.
+# Overlaps between adjacent parts of an expanded assembly, and its resulting
+# length (design units).  Start with the minimum overlap at each gap (the
+# longest possible assembly for this many extenders), then widen the overlaps,
+# in proportion to each gap's spare connector length, to shrink the assembly
+# toward `required_du`.  Without this, fonts that provide only one pre-built
+# variant (e.g. STIX Two bar/|) always overshoot: n extenders round the length
+# up to the nearest multiple, so assembled delimiters come out visibly taller,
+# and assembled braces and arrows wider, than their content.
+function _assembly_overlaps(
+        parts::Vector{GlyphAssemblyPart}, required_du::Float64, min_conn::Int
+    )::Tuple{Vector{Int}, Float64}
+    overlaps = [_gap_min_overlap(parts[i], parts[i + 1], min_conn) for i in 1:(length(parts) - 1)]
+    total_du = _assembly_total_du(parts, overlaps)
+    if !isempty(overlaps) && total_du > required_du
+        excess = total_du - required_du
+        max_extra = [
+            min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
+                for i in eachindex(overlaps)
+        ]
+        total_cap = Float64(sum(max_extra))
+        if total_cap > 0.0
+            for i in eachindex(overlaps)
+                extra = round(Int, excess * max_extra[i] / total_cap)
+                overlaps[i] += clamp(extra, 0, max_extra[i])
+            end
+            total_du = _assembly_total_du(parts, overlaps)
+        end
+    end
+    return overlaps, total_du
+end
+
 function _layout_assembly!(
         asm::GlyphAssembly,
         ctx::_LayoutCtx,
@@ -75,44 +106,7 @@ function _layout_assembly!(
     parts = _expand_assembly_parts(asm.parts, n)
     isempty(parts) && return 0.0
 
-    # Start with minimum overlaps at each gap (giving the maximum possible height
-    # for this n), then increase them uniformly to shrink the assembly toward
-    # required_du.  Without this adjustment, fonts that provide only one pre-built
-    # variant (e.g. STIX Two bar/|) always overshoot: n extenders round the height
-    # up to the nearest multiple, making assembled delimiters visibly taller than
-    # their \left/\right companions (which use exact pre-built variants).
-    overlaps = Vector{Int}(undef, max(0, length(parts) - 1))
-    for i in eachindex(overlaps)
-        overlaps[i] = _gap_min_overlap(parts[i], parts[i + 1], min_conn)
-    end
-
-    # Total assembly height in design units with minimum overlaps.
-    total_du = Float64(parts[1].full_advance)
-    for i in eachindex(overlaps)
-        total_du += parts[i + 1].full_advance - overlaps[i]
-    end
-
-    # Distribute extra overlap to bring total_du toward required_du.
-    # Excess is spread proportionally across gaps by their available connector
-    # capacity; each gap is clamped to its per-gap maximum.
-    if !isempty(overlaps) && total_du > required_du
-        excess = total_du - required_du
-        max_extra = [
-            min(parts[i].end_connector, parts[i + 1].start_connector) - overlaps[i]
-                for i in eachindex(overlaps)
-        ]
-        total_cap = Float64(sum(max_extra))
-        if total_cap > 0.0
-            for i in eachindex(overlaps)
-                extra = round(Int, excess * max_extra[i] / total_cap)
-                overlaps[i] += min(extra, max_extra[i])
-            end
-            total_du = Float64(parts[1].full_advance)
-            for i in eachindex(overlaps)
-                total_du += parts[i + 1].full_advance - overlaps[i]
-            end
-        end
-    end
+    overlaps, total_du = _assembly_overlaps(parts, required_du, min_conn)
 
     # Derive ink bounds from first/last glyph metrics.  When assembly parts have
     # y_min ≠ 0 (e.g. STIX Two bar: y_min=-234, y_max=706, full_advance=941),
@@ -287,6 +281,19 @@ function _layout_radical!(
     return _place_variant(chosen)
 end
 
+# True when `n` is, or groups, a matrix-like environment (`matrix`, `array`,
+# `aligned`, …), whose struts and row gaps the emitted glyphs do not show.
+_contains_matrix(n::Node)::Bool = n.kind === NodeKind.Matrix ||
+    (n.kind in (NodeKind.Group, NodeKind.Sequence) && any(_contains_matrix, n.children))
+
+# Size, in unscaled design units, that a `\left…\right` delimiter must reach to
+# enclose content extending `δ_em` above or below the math axis (TeX rule 19):
+# max(2δ × `\delimiterfactor`, 2δ − `\delimitershortfall`).
+function _left_right_required_du(δ_em::Float64, scale::Float64, upm::Float64)::Float64
+    total = max(2δ_em * _DELIMITER_FACTOR, 2δ_em - _DELIMITER_SHORTFALL, 0.0)
+    return total / scale * upm
+end
+
 # Lay out one delimiter (left or right) at position (x0, y0), centred on the
 # math axis.  Tries pre-built size variants first; falls back to the glyph
 # assembly when no variant is large enough.  Returns horizontal advance.
@@ -299,7 +306,10 @@ function _layout_delim!(
         scale::Float64,
         boxes::Vector{LayoutBox},
     )::Float64
-    isempty(glyph_name) && return 0.0
+    if isempty(glyph_name)
+        push!(boxes, LayoutBox(Space(_NULL_DELIMITER_SPACE), x0, y0, scale))
+        return _NULL_DELIMITER_SPACE
+    end
     upm = ctx.upm
     mc = ctx.mc
 
@@ -338,49 +348,8 @@ end
 # `base_w_em` (em units) at vertical position `accent_y`.  Selects the smallest
 # pre-built variant whose advance width covers the base; if none exists, assembles
 # the glyph from parts using the same helpers used for vertical assemblies.
-# Falls back to the largest variant (or the base glyph) if the assembly is empty.
-# Lay out an extensible arrow `w` em wide from glyph pieces, for a font whose MATH
-# table has no horizontal construction for it (see _XARROW_PIECES).  As in
-# amsmath's \arrowfill@, the pieces sit on the baseline so their shafts line
-# up, and extenders fill the space between the end pieces with some overlap.
-# Arrows without pieces get their base glyph, centred, at natural width.
-# Returns the ink (top, bottom) of the emitted glyphs, or `nothing` if none.
-function _layout_arrow_from_pieces!(
-        ctx::_LayoutCtx, cp::UInt32, w::Float64, x0::Float64, y0::Float64,
-        scale::Float64, boxes::Vector{LayoutBox},
-    )
-    upm = ctx.upm
-    em(du) = du / upm * scale
-    start = lastindex(boxes) + 1
-    pieces = get(_XARROW_PIECES, cp, nothing)
-    if pieces === nothing
-        g = _char_glyph(ctx, Char(cp))
-        g === nothing && return nothing
-        push!(boxes, LayoutBox(g, x0 + (w - em(g.advance_width)) / 2, y0, scale))
-    else
-        left, ext, right = (_char_glyph(ctx, Char(c)) for c in pieces)
-        (left === nothing || ext === nothing || right === nothing) && return nothing
-        right_x = x0 + w - em(right.advance_width)
-        push!(boxes, LayoutBox(left, x0, y0, scale))
-        # Fill the ink gap between the end pieces, overlapping each neighbour.
-        ext_w = em(ext.x_max - ext.x_min)
-        overlap = ext_w / 4
-        a = x0 + em(left.x_max) - overlap
-        b = right_x + em(right.x_min) + overlap
-        if b > a && ext_w > overlap
-            n = 1 + ceil(Int, max(0.0, b - a - ext_w) / (ext_w - overlap))
-            step = n == 1 ? 0.0 : (b - a - ext_w) / (n - 1)
-            for i in 0:(n - 1)
-                ink_left = n == 1 ? (a + b - ext_w) / 2 : a + i * step
-                push!(boxes, LayoutBox(ext, ink_left - em(ext.x_min), y0, scale))
-            end
-        end
-        push!(boxes, LayoutBox(right, right_x, y0, scale))
-    end
-    stop = lastindex(boxes)
-    return (_boxes_top(boxes, start, stop, upm), _boxes_bottom(boxes, start, stop, upm))
-end
-
+# Falls back to the largest variant if the assembly is empty, and to the base glyph
+# at its natural size if the font has no construction for it.
 function _layout_wide_accent!(
         ctx::_LayoutCtx,
         accent_ps::String,
@@ -395,7 +364,6 @@ function _layout_wide_accent!(
     required_du = base_w_em / scale * upm   # convert em to design units
 
     hc = get(ctx.horiz_constructions, accent_ps, nothing)
-    hc === nothing && return nothing
 
     # Helper: centre a named glyph over the base and push it to boxes.
     # Uses ink midpoint (x_min+x_max)/2 rather than advance_width/2: this correctly
@@ -406,6 +374,12 @@ function _layout_wide_accent!(
         g === nothing && return
         ink_center = (g.x_min + g.x_max) / (2.0 * upm) * scale
         return push!(boxes, LayoutBox(g, x0 + base_w_em / 2 - ink_center, accent_y, scale))
+    end
+
+    # No construction at all: the glyph can only be set at its natural size.
+    if hc === nothing
+        _place(accent_ps)
+        return nothing
     end
 
     # Try pre-built variants first (smallest that covers the base).
@@ -422,17 +396,8 @@ function _layout_wide_accent!(
         n = _min_extender_reps(asm.parts, required_du, min_conn)
         parts = _expand_assembly_parts(asm.parts, n)
         if !isempty(parts)
-            # Compute overlap for each adjacent pair.
-            overlaps = [
-                _gap_min_overlap(parts[i], parts[i + 1], min_conn)
-                    for i in 1:(length(parts) - 1)
-            ]
-            # Total width of the assembly in design units.
-            total_du = Float64(parts[1].full_advance) +
-                sum(
-                Float64(parts[i + 1].full_advance) - overlaps[i]
-                    for i in eachindex(overlaps); init = 0.0
-            )
+            # Overlaps widened so the assembly matches the base width.
+            overlaps, total_du = _assembly_overlaps(parts, required_du, min_conn)
             total_w = total_du / upm * scale
             # Centre the assembly over the base.
             ax = x0 + (base_w_em - total_w) / 2
@@ -453,6 +418,64 @@ function _layout_wide_accent!(
     # Fall back to the largest pre-built variant, or the base glyph.
     _place(isempty(hc.variants) ? accent_ps : last(hc.variants).glyph_name)
     return nothing
+end
+
+# True when the font's horizontal construction for `ps` cannot reach `width_em`:
+# there is no construction, or it has no assembly and no variant wide enough.
+function _horiz_construction_falls_short(
+        ctx::_LayoutCtx, ps::String, width_em::Float64, scale::Float64
+    )::Bool
+    hc = get(ctx.horiz_constructions, ps, nothing)
+    hc === nothing && return true
+    hc.assembly === nothing || return false
+    required_du = width_em / scale * ctx.upm
+    return isempty(hc.variants) || Float64(last(hc.variants).advance) < required_du
+end
+
+# Build an extensible arrow of advance `width_em` from a left piece, repeated
+# fillers, and a right piece (codepoints), as amsmath's `\arrowfill@` does, for
+# fonts whose MATH table cannot stretch the arrow itself.  Every piece sits on
+# the same baseline `y`, so their shafts line up as the font designed them to
+# (TeX sets `\relbar\joinrel\rightarrow` the same way).  The ink spans the
+# advance less the side bearings of `g_ref`, the arrow at its natural width.
+# Adjacent pieces overlap by at least `_XARROW_FILL_OVERLAP` of the filler's ink
+# width.  Returns false, emitting nothing, when a piece is missing from the font.
+function _layout_arrow_fill!(
+        ctx::_LayoutCtx,
+        pieces::NTuple{3, UInt32},
+        g_ref::Glyph,
+        width_em::Float64,
+        y::Float64,
+        x0::Float64,
+        scale::Float64,
+        boxes::Vector{LayoutBox},
+    )::Bool
+    upm = ctx.upm
+    left, filler, right = (_char_glyph(ctx, Char(cp)) for cp in pieces)
+    (left === nothing || filler === nothing || right === nothing) && return false
+    em(du) = Float64(du) / upm * scale
+
+    # Ink span of the stretched arrow.
+    ink_left = x0 + em(g_ref.x_min)
+    ink_right = x0 + width_em - em(g_ref.advance_width - g_ref.x_max)
+    push!(boxes, LayoutBox(left, ink_left - em(left.x_min), y, scale))
+    push!(boxes, LayoutBox(right, ink_right - em(right.x_max), y, scale))
+
+    # Cover the gap between the end pieces' inner ink edges with fillers.
+    f_w = em(filler.x_max - filler.x_min)
+    f_w > 0 || return true
+    ov = _XARROW_FILL_OVERLAP * f_w
+    gap_left = ink_left + em(left.x_max - left.x_min) - ov
+    gap_right = ink_right - em(right.x_max - right.x_min) + ov
+    span = gap_right - gap_left
+    span > 0 || return true
+    n = span <= f_w ? 1 : 1 + ceil(Int, (span - f_w) / (f_w - ov))
+    step = n == 1 ? 0.0 : (span - f_w) / (n - 1)
+    first_left = n == 1 ? gap_left + (span - f_w) / 2 : gap_left
+    for i in 0:(n - 1)
+        push!(boxes, LayoutBox(filler, first_left + i * step - em(filler.x_min), y, scale))
+    end
+    return true
 end
 
 # Lay out a horizontal brace node with optional script note.

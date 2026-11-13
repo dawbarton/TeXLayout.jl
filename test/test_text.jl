@@ -22,6 +22,7 @@
                 :default_layout_options,
                 :set_default_layout_options!,
                 :HarfBuzzShaper,
+                :TeXLayoutHandler,
             )
         )
     end
@@ -219,8 +220,11 @@
                 full_family,
                 TeXLayout.Text,
             )
-            @test any(b.element isa Glyph for b in math_default)
-            @test !any(b.element isa GlyphID for b in math_default)
+            @test any(b.element isa Glyph for b in math_default)   # the math x and +
+            # The default path does not shape: one regular-font glyph per character.
+            default_text = filter(b -> b.element isa GlyphID, math_default)
+            @test [b.element.represented_char for b in default_text] == collect("office")
+            @test all(b.element.font_path == full_family.regular for b in default_text)
 
             math_hb = TeXLayout.layout(
                 parse_latex(raw"x+\text{office}"),
@@ -801,6 +805,33 @@
             doc = TeXLayout.parse_document("\\begin{unknown}x\\end{unknown}")
             @test !isempty(doc)
             @test doc[1] isa TeXLayout.ParagraphBlock
+            # The body is kept as ordinary text; only the delimiters vanish.
+            @test doc[1].lines[1].runs[1].spans[1].text == "x"
+            centred = TeXLayout.parse_document(raw"\begin{center}Hi\end{center} there")
+            @test only(only(centred).lines[1].runs).spans[1].text == "Hi there"
+        end
+
+        @testset "Unbraced and spaced command arguments take one item" begin
+            span_texts(doc) = [(s.text, s.attrs.slot) for s in only(only(doc).lines).runs[1].spans]
+            unbraced = TeXLayout.parse_document(raw"\textbf x and more")
+            @test span_texts(unbraced) ==
+                [("x", TeXLayout.FontSlot.Bold), (" and more", TeXLayout.FontSlot.Regular)]
+            spaced = TeXLayout.parse_document(raw"\textbf {x} y")
+            @test span_texts(spaced) ==
+                [("x", TeXLayout.FontSlot.Bold), (" y", TeXLayout.FontSlot.Regular)]
+            # An unbraced argument does not swallow a paragraph break.
+            broken = TeXLayout.parse_document("\\textbf x\n\nNext")
+            @test count(b -> b isa TeXLayout.ParagraphBlock, broken) == 2
+        end
+
+        @testset "Explicit spaces in text" begin
+            width(s) = TeXLayout.layout_document(s; family).width
+            @test width(raw"Mr.\ Smith") ≈ width("Mr. Smith")
+            @test width(raw"Mr.\ Smith") > width("Mr.Smith")
+            # Control words swallow the following space; control symbols do not.
+            @test width(raw"a\quad b") ≈ width("ab") + 1.0
+            @test width(raw"a\,b") ≈ width("ab") + 3 / 18
+            @test width(raw"a\qquad b") ≈ width("ab") + 2.0
         end
 
         @testset "The worked example: document structure (spec §3 worked example)" begin
@@ -1042,7 +1073,7 @@
                 @test TeXLayout.default_layout_options() isa TeXLayout.LayoutOptions
 
                 # Keyword form overrides only the named fields (merge).
-                TeXLayout.set_default_layout_options!(width = 30.0, display_align = :right)
+                TeXLayout.set_default_layout_options!(; width = 30.0, display_align = :right)
                 cur = TeXLayout.default_layout_options()
                 @test cur.width == 30.0
                 @test cur.display_align === TeXLayout.Alignment.Right
@@ -1063,7 +1094,7 @@
                 @test TeXLayout.default_layout_options().width === nothing
 
                 # Unknown option name is rejected.
-                @test_throws ArgumentError TeXLayout.set_default_layout_options!(widht = 1.0)
+                @test_throws ArgumentError TeXLayout.set_default_layout_options!(; widht = 1.0)
             finally
                 TeXLayout.set_default_layout_options!(saved)
             end
@@ -1089,7 +1120,7 @@
             )
             @test length(glyphs) == 2
             @test glyphs[1].y ≈ 0.0
-            @test glyphs[2].y ≈ -1.2   atol = 0.1
+            @test glyphs[2].y ≈ -1.2 atol = 0.1
         end
 
         @testset "Blank line applies paragraph skip" begin
@@ -1168,6 +1199,19 @@
             @test length(glyphs) == 1
             @test abs(glyphs[1].y) < 0.2
             @test result.descent < 1.0
+        end
+
+        @testset "equation is a plain display, like \\[…\\]" begin
+            # amsmath's equation has no strut and no \vcenter: its content sits
+            # on the display baseline exactly as in \[…\].
+            full_family = font_family(:new_cm)
+            records(box) = sort([(string(typeof(b.element)), b.x, b.y, b.scale) for b in box.boxes])
+            for body in ("E = mc^2", raw"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}")
+                env = TeXLayout.layout_document("A\\begin{equation}$body\\end{equation}B"; family = full_family)
+                brk = TeXLayout.layout_document("A\\[$body\\]B"; family = full_family)
+                @test records(env) == records(brk)
+                @test (env.width, env.ascent, env.descent) == (brk.width, brk.ascent, brk.descent)
+            end
         end
 
         @testset "Display skips are explicit extra space, not synthetic lines" begin

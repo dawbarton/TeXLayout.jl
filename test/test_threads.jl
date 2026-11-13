@@ -23,6 +23,7 @@ for trial in 1:5
     # Start each trial from cold caches so that cache population also races.
     empty!(TeXLayout._FONT_CACHE)
     empty!(TeXLayout._MATH_TABLE_CACHE)
+    empty!(TeXLayout._NAMED_METRICS_CACHE)
     out = Vector{Any}(undef, length(jobs))
     @threads :dynamic for k in eachindex(jobs)
         out[k] = lay(jobs[k]...)

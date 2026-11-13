@@ -18,18 +18,18 @@
 
     @testset "is_cramped" begin
         @test !is_cramped(Display)
-        @test  is_cramped(CrampedDisplay)
+        @test is_cramped(CrampedDisplay)
         @test !is_cramped(Text)
-        @test  is_cramped(CrampedText)
+        @test is_cramped(CrampedText)
         @test !is_cramped(Script)
-        @test  is_cramped(CrampedScript)
+        @test is_cramped(CrampedScript)
         @test !is_cramped(ScriptScript)
-        @test  is_cramped(CrampedScriptScript)
+        @test is_cramped(CrampedScriptScript)
     end
 
     @testset "is_display" begin
-        @test  is_display(Display)
-        @test  is_display(CrampedDisplay)
+        @test is_display(Display)
+        @test is_display(CrampedDisplay)
         @test !is_display(Text)
         @test !is_display(Script)
         @test !is_display(ScriptScript)
@@ -38,15 +38,15 @@
     @testset "is_script" begin
         @test !is_script(Display)
         @test !is_script(Text)
-        @test  is_script(Script)
-        @test  is_script(CrampedScript)
+        @test is_script(Script)
+        @test is_script(CrampedScript)
         @test !is_script(ScriptScript)
     end
 
     @testset "is_script_script" begin
         @test !is_script_script(Script)
-        @test  is_script_script(ScriptScript)
-        @test  is_script_script(CrampedScriptScript)
+        @test is_script_script(ScriptScript)
+        @test is_script_script(CrampedScriptScript)
     end
 
     @testset "sup_style" begin

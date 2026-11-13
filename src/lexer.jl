@@ -52,19 +52,19 @@ function tokenize(input::AbstractString)::Vector{Token}
             end
 
         elseif c == '^'
-            push!(tokens, Token(TokenKind.Sup, "^", i));  i = next
+            push!(tokens, Token(TokenKind.Sup, "^", i)); i = next
         elseif c == '_'
-            push!(tokens, Token(TokenKind.Sub, "_", i));  i = next
+            push!(tokens, Token(TokenKind.Sub, "_", i)); i = next
         elseif c == '{'
-            push!(tokens, Token(TokenKind.LBrace, "{", i));  i = next
+            push!(tokens, Token(TokenKind.LBrace, "{", i)); i = next
         elseif c == '}'
-            push!(tokens, Token(TokenKind.RBrace, "}", i));  i = next
+            push!(tokens, Token(TokenKind.RBrace, "}", i)); i = next
         elseif c == '$'
-            push!(tokens, Token(TokenKind.MathShift, "\$", i));  i = next
+            push!(tokens, Token(TokenKind.MathShift, "\$", i)); i = next
         elseif c == '&'
-            push!(tokens, Token(TokenKind.Ampersand, "&", i));  i = next
+            push!(tokens, Token(TokenKind.Ampersand, "&", i)); i = next
         elseif c == '~'
-            push!(tokens, Token(TokenKind.Space, "~", i));  i = next
+            push!(tokens, Token(TokenKind.Space, "~", i)); i = next
         elseif c == '%'
             # LaTeX comment: discard the rest of the line.  TeX also removes the
             # line's end-of-line character — so a line ending in `%` joins the
@@ -101,7 +101,7 @@ function tokenize(input::AbstractString)::Vector{Token}
             i = next
         else
             # Everything else is an ordinary character (may be multi-byte UTF-8).
-            push!(tokens, Token(TokenKind.Char, string(c), i));  i = next
+            push!(tokens, Token(TokenKind.Char, string(c), i)); i = next
         end
     end
 

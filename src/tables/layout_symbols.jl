@@ -99,32 +99,41 @@ const _XARROW_CODEPOINTS = Dict{String, UInt32}(
     "\\xlongequal" => 0x003D,  # = (plain equals; extensible via horiz_constructions)
 )
 
+# Pieces `(left, filler, right)` from which an extensible arrow is built when the
+# font has no horizontal construction able to reach the required width.  This is
+# amsmath's `\arrowfill@`: `\xrightarrow` is `\relbar` leaders followed by
+# `\rightarrow`, `\xRightarrow` uses `\Relbar` (an equals sign), and so on.
+# Arrows whose tail is not a plain shaft (`\xmapsto`, the hook arrows, and the
+# stacked harpoons) have no single-codepoint tail piece and are absent: they keep
+# the arrow glyph at its natural width.
+const _XARROW_FILL_PIECES = let minus = UInt32(0x2212), equal = UInt32(0x003D)
+    Dict{String, NTuple{3, UInt32}}(
+        "\\xrightarrow" => (minus, minus, 0x2192),
+        "\\xleftarrow" => (0x2190, minus, minus),
+        "\\xleftrightarrow" => (0x2190, minus, 0x2192),
+        "\\xRightarrow" => (equal, equal, 0x21D2),
+        "\\xLeftarrow" => (0x21D0, equal, equal),
+        "\\xLeftrightarrow" => (0x21D0, equal, 0x21D2),
+        "\\xrightharpoonup" => (minus, minus, 0x21C0),
+        "\\xrightharpoondown" => (minus, minus, 0x21C1),
+        "\\xleftharpoonup" => (0x21BC, minus, minus),
+        "\\xleftharpoondown" => (0x21BD, minus, minus),
+        "\\xtwoheadrightarrow" => (minus, minus, 0x21A0),
+        "\\xtwoheadleftarrow" => (0x219E, minus, minus),
+        "\\xlongequal" => (equal, equal, equal),
+    )
+end
+
+# Minimum ink overlap between adjacent pieces of a filled arrow, as a fraction of
+# the filler's ink width, so that antialiased edges do not leave visible seams.
+const _XARROW_FILL_OVERLAP = 0.1
+
 # TeX's delim1 and delim2 (Rule 15e) in em: the minimum delimiter size for a
 # generalized fraction such as \binom in Display style and in other styles.
 # The MATH table has no equivalent; these are Computer Modern's values
 # (cmsy10 \fontdimen20 and 21), which KaTeX also uses.  LuaTeX's luaotfload
 # defaults to 2.40 and 1.01; XeTeX substitutes DelimitedSubFormulaMinHeight.
 const _GENFRAC_DELIM_EM = (2.39, 1.01)
-
-# Pieces (left, extender, right) for building an extensible arrow when the font's
-# MATH table has no horizontal construction for it, as amsmath's \arrowfill@
-# does with \relbar (minus) and \Relbar (equals).  Arrows not listed here (hooks,
-# mapsto, paired harpoons) keep their base glyph at its natural width.
-const _XARROW_PIECES = Dict{UInt32, NTuple{3, UInt32}}(
-    0x2192 => (0x2212, 0x2212, 0x2192),  # →
-    0x2190 => (0x2190, 0x2212, 0x2212),  # ←
-    0x2194 => (0x2190, 0x2212, 0x2192),  # ↔
-    0x21D2 => (0x003D, 0x003D, 0x21D2),  # ⇒
-    0x21D0 => (0x21D0, 0x003D, 0x003D),  # ⇐
-    0x21D4 => (0x21D0, 0x003D, 0x21D2),  # ⇔
-    0x003D => (0x003D, 0x003D, 0x003D),  # =
-    0x21C0 => (0x2212, 0x2212, 0x21C0),  # ⇀
-    0x21C1 => (0x2212, 0x2212, 0x21C1),  # ⇁
-    0x21BC => (0x21BC, 0x2212, 0x2212),  # ↼
-    0x21BD => (0x21BD, 0x2212, 0x2212),  # ↽
-    0x21A0 => (0x2212, 0x2212, 0x21A0),  # ↠
-    0x219E => (0x219E, 0x2212, 0x2212),  # ↞
-)
 
 # Canonical PostScript name → Unicode codepoint for glyphs that some fonts
 # (notably FiraMath) name using the "uni{HHHH}" convention instead of the
@@ -200,6 +209,8 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "daleth" => 0x2138, "angle" => 0x2220,
     "top" => 0x22A4, "bot" => 0x22A5,
     "prime" => 0x2032, "backprime" => 0x2035,
+    "dprime" => 0x2033, "trprime" => 0x2034, "qprime" => 0x2057,
+    "backdprime" => 0x2036, "backtrprime" => 0x2037,
     "surd" => 0x221A, "complement" => 0x2201,
     "eth" => 0x00F0,
     # Binary operators
@@ -244,6 +255,13 @@ const _SYMBOL_CODEPOINTS = Dict{String, UInt32}(
     "Rightarrow" => 0x21D2, "Leftarrow" => 0x21D0,
     "leftrightarrow" => 0x2194, "Leftrightarrow" => 0x21D4,
     "mapsto" => 0x21A6, "longmapsto" => 0x27FC,
+    "leftharpoonup" => 0x21BC, "leftharpoondown" => 0x21BD,
+    "rightharpoonup" => 0x21C0, "rightharpoondown" => 0x21C1,
+    "upharpoonleft" => 0x21BF, "upharpoonright" => 0x21BE,
+    "downharpoonleft" => 0x21C3, "downharpoonright" => 0x21C2,
+    "rightleftharpoons" => 0x21CC, "leftrightharpoons" => 0x21CB,
+    # Logic
+    "neg" => 0x00AC, "lnot" => 0x00AC,
     "longrightarrow" => 0x27F6, "longleftarrow" => 0x27F5,
     "Longrightarrow" => 0x27F9, "Longleftarrow" => 0x27F8,
     "hookrightarrow" => 0x21AA, "hookleftarrow" => 0x21A9,

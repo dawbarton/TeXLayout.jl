@@ -248,7 +248,7 @@
         node = parse_latex("\\left( x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == "parenleft"
         @test parts[2] == "parenright"
         # \right is consumed — only x remains as an inner child
@@ -260,7 +260,7 @@
         node = parse_latex("\\left. x \\right)")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == ""          # null delimiter maps to empty string
         @test parts[2] == "parenright"
     end
@@ -269,7 +269,7 @@
         node = parse_latex("\\left\\{ x \\right\\}")
         delim = node.children[1]
         @test delim.kind === NodeKind.Delimited
-        parts = split(delim.value, "\x00", limit = 2)
+        parts = split(delim.value, "\x00"; limit = 2)
         @test parts[1] == "braceleft"
         @test parts[2] == "braceright"
     end
@@ -791,6 +791,47 @@
             )
         end
 
+        @testset "Space before ^, _ and \\limits is ignored" begin
+            for (s, kind) in (
+                    ("x ^2", NodeKind.Superscript), ("x _i", NodeKind.Subscript),
+                    ("x ^2 _i", NodeKind.Decorated), ("x_i ^2", NodeKind.Decorated),
+                )
+                tree = parse_latex(s)
+                @test length(tree.children) == 1
+                @test tree.children[1].kind === kind
+            end
+            tree = parse_latex(raw"\sum \limits_0^1")
+            @test length(tree.children) == 1
+            @test tree.children[1].children[1].kind === NodeKind.LimitsOverride
+            # A trailing space with no script after it is left alone.
+            @test [c.value for c in parse_latex("x y").children] == ["x", "y"]
+        end
+
+        @testset "Space before a command argument or delimiter is ignored" begin
+            plain = parse_latex(raw"\left(x\right)").children[1]
+            spaced = parse_latex(raw"\left ( x \right )").children[1]
+            @test spaced.kind === NodeKind.Delimited
+            @test spaced.value == plain.value
+            @test parse_latex(raw"\bigl (").children[1].value == parse_latex(raw"\bigl(").children[1].value
+            root = parse_latex(raw"\sqrt [3]{x}").children[1]
+            @test root.kind === NodeKind.Sqrt && length(root.children) == 2
+            @test root.children[1].children[1].value == "3"
+            text = parse_latex(raw"\text {ab}").children[1]
+            @test text.kind === NodeKind.Text
+            @test [c.value for c in text.children[1].children] == ["a", "b"]
+            for s in (raw"a\hskip 1em b", raw"a\kern 1 em b", raw"a\kern{ 1em }b")
+                spaces = filter(c -> c.kind === NodeKind.Space, parse_latex(s).children)
+                @test length(spaces) == 1 && spaces[1].width ≈ 1.0
+            end
+            @test only(parse_latex(raw"\mkern 3mu").children).width ≈ 3 / 18
+            # TeX units at 10 pt = 1 em.
+            for (s, w) in ((raw"\kern 3pt", 0.3), (raw"\hskip 1mm", 7.227 / 25.4), (raw"\kern2ex", 0.862))
+                @test only(parse_latex(s).children).width ≈ w
+            end
+            @test only(parse_latex(raw"\kern 3zz").children).width == 0.0
+            arrow = parse_latex(raw"\xrightarrow [a]{b}").children[1]
+            @test arrow.kind === NodeKind.XArrow && length(arrow.children) == 2
+        end
         @testset "Space before ^/_ is ignored: x ^2, x^2 _1" begin
             sup = only(parse_latex("x ^2").children)
             @test sup.kind === NodeKind.Superscript
@@ -872,6 +913,86 @@
                 [NodeKind.Char, NodeKind.Space, NodeKind.Char]
             @test cell.children[2].width ≈ TeXLayout._NORMAL_SPACE_EM
         end
+    end
+
+    @testset "Matrix row spacing \\[len]" begin
+        gaps(src) = TeXLayout._decode_matrix_payload(only(parse_latex(src).children).value).row_gaps
+        @test gaps(raw"\begin{matrix} a \\[10pt] b \\ c \\[-0.5em] d \end{matrix}") ≈ [1.0, 0.0, -0.5, 0.0]
+        @test gaps(raw"\begin{matrix} a \\ b \\[3mm] \end{matrix}") ≈ [0.0, 7.227 / 25.4 * 3]
+        # As with amsmath's \new@ifnextchar, a bracket after a space starts the
+        # next row rather than giving a length.
+        @test gaps(raw"\begin{aligned} a &= b \\ [5pt] c &= d \end{aligned}") == [0.0, 0.0]
+        # A register or an unknown unit gives no space.
+        @test gaps(raw"\begin{matrix} a \\[\jot] b \end{matrix}") == [0.0, 0.0]
+        # Without gaps the payload keeps its three-field form.
+        @test only(parse_latex(raw"\begin{matrix} a \\ b \end{matrix}").children).value == "matrix\0" * "2\0c"
+    end
+
+    @testset "Primes" begin
+        sig(n) = (n.kind, n.value, map(sig, n.children))
+        prime = sig(TeXLayout.Node(NodeKind.Command, "\\prime"))
+        tree = parse_latex("f'")
+        @test only(tree.children).kind === NodeKind.Superscript
+        @test sig.(only(tree.children).children[2].children) == [prime]
+        twice = only(parse_latex("f''^2").children)
+        @test twice.kind === NodeKind.Superscript
+        # As in unicode-math, two to four primes are one multiple-prime
+        # character, and a longer run is kerned single primes.
+        dprime = sig(TeXLayout.Node(NodeKind.Command, "\\dprime"))
+        @test sig.(twice.children[2].children) == [dprime, sig(TeXLayout.Node(NodeKind.Char, "2"))]
+        for (src, cmd) in (("f'''", "\\trprime"), ("f''''", "\\qprime"))
+            @test sig.(only(parse_latex(src).children).children[2].children) == [sig(TeXLayout.Node(NodeKind.Command, cmd))]
+        end
+        five = only(parse_latex("f'''''").children).children[2].children
+        @test count(n -> sig(n) == prime, five) == 5
+        @test all(n -> n.width ≈ -1.5 / 18, filter(n -> n.kind === NodeKind.Space, five))
+        @test count(n -> n.kind === NodeKind.Space, five) == 4
+        decorated = only(parse_latex("f'_1").children)
+        @test decorated.kind === NodeKind.Decorated
+        @test decorated.children[2].value == "1"
+        @test sig.(decorated.children[3].children) == [prime]
+        # A prime with no base attaches to an empty group, like a bare ^2.
+        @test sig(parse_latex("'x").children[1].children[1]) == sig(TeXLayout.Node(NodeKind.Group, TeXLayout.Node[]))
+        @test parse_latex("^2").children[1].kind === NodeKind.Superscript
+        # Inside \text{} an apostrophe stays an apostrophe.
+        text = only(parse_latex(raw"\text{don't}").children)
+        @test [c.value for c in text.children[1].children] == ["d", "o", "n", "'", "t"]
+    end
+
+    @testset "Math inside \\text{…}" begin
+        text = only(parse_latex(raw"\text{if $x>0$ else}").children)
+        kinds = [c.kind for c in text.children[1].children]
+        @test NodeKind.InlineMath in kinds
+        math = text.children[1].children[findfirst(==(NodeKind.InlineMath), kinds)]
+        @test [c.value for c in math.children[1].children] == ["x", ">", "0"]
+        @test text.children[1].children[end].value == "e"   # text resumes after $
+        # An unclosed $ stops at the end of the text group.
+        unclosed = parse_latex(raw"\text{a $x} b")
+        @test length(unclosed.children) == 2
+        @test unclosed.children[2].value == "b"
+    end
+
+    @testset "\\operatorname* uses display limits" begin
+        node = only(parse_latex(raw"\operatorname*{argmax}_x").children)
+        @test node.children[1].kind === NodeKind.LimitsOverride
+        @test node.children[1].value == "displaylimits"
+        @test node.children[1].children[1].kind === NodeKind.Operator
+        @test node.children[1].children[1].value == "argmax"
+        @test parse_latex(raw"\operatorname{argmax}").children[1].kind === NodeKind.Operator
+        @test parse_latex(raw"\sum\displaylimits_0").children[1].children[1].value == "displaylimits"
+    end
+
+    @testset "Environments nest inside unbraced alignment cells" begin
+        tree = parse_latex(raw"\begin{aligned} f &= \begin{cases} 1 & x \\ 0 & y\end{cases}\end{aligned}")
+        aligned = only(tree.children)
+        @test TeXLayout._decode_matrix_payload(aligned.value).nrow == 1
+        cases = aligned.children[2].children[3]
+        @test cases.kind === NodeKind.Matrix
+        @test TeXLayout._decode_matrix_payload(cases.value).nrow == 2
+        @test length(cases.children) == 4
+        nested = only(parse_latex(raw"\begin{pmatrix}\begin{matrix}a&b\end{matrix}&c\end{pmatrix}").children)
+        @test length(nested.children) == 2
+        @test length(nested.children[1].children[1].children) == 2
     end
 
     @testset "Standard LaTeX operator names: \\sinh, \\cosh, \\tanh, \\coth, \\lg" begin

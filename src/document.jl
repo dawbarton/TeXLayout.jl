@@ -131,10 +131,18 @@ end
 const _DISPLAY_ENVS = _DISPLAY_MATH_ENVS
 const _BLANK_LINE_RE = r"\n[ \t\r\f\v]*\n"
 
+# Control spaces that produce one significant interword space in text, like `~`.
+const _TEXT_INTERWORD_SPACES = ("\\ ", "\\\n", "\\\t", "\\space", "\\nobreakspace")
+
+# A control word (`\quad`) swallows the spaces after it; a control symbol
+# (`\,`, `\ `) does not.
+@inline _is_control_word(cmd::AbstractString) =
+    ncodeunits(cmd) > 1 && isletter(cmd[nextind(cmd, 1)])
+
 # ── Recursive text-mode parser ────────────────────────────────────────────────
 
-# Handle a single {…} group, applying new_attrs inside it, then restoring.
-# Called with `{` as the current token in all three calling contexts:
+# Handle a command argument or {…} group, applying new_attrs inside it, then
+# restoring.  Called in three contexts:
 #   - font-switch command (new_attrs differs from builder.attrs)
 #   - \text / \mbox (new_attrs == builder.attrs, just a grouping scope)
 #   - bare { (new_attrs == builder.attrs, plain grouping)
@@ -265,12 +273,40 @@ function _parse_text_body!(p::_Parser, builder::_DocBuilder, in_group::Bool; sin
                 _end_paragraph!(builder)
                 node = parse_environment!(p, env_name)
                 push!(builder.blocks, DisplayBlock(node, Symbol(env_name)))
-            else
+            elseif haskey(_MATRIX_ENVS, env_name)
                 in_group || _commit_space!(builder)
                 _flush_text_run!(builder)
                 node = parse_environment!(p, env_name)
                 push!(builder.cur_runs, MathRun(node, Text))
             end
+            # Any other environment (`center`, `quote`, …) has no layout of its
+            # own: its body continues as ordinary text and the matching `\end` is
+            # dropped below, rather than the whole body being discarded.
+
+        elseif tok.kind === TokenKind.Command && tok.value == "\\end"
+            _advance!(p)
+            _read_brace_word!(p)   # end of an environment rendered as plain text
+
+        elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_INTERWORD_SPACES
+            # Control space: one significant interword space, like `~` (soft line
+            # breaking does not exist yet, so its breakability is not observable).
+            _advance!(p)
+            if in_group
+                write(builder.buf, " ")
+            else
+                builder.pending_space = true
+                builder.pending_nbsp = true
+            end
+            _is_control_word(tok.value) && _skip_space_before_argument!(p)
+
+        elseif tok.kind === TokenKind.Command && haskey(_SPACE_WIDTHS, tok.value)
+            # Fixed-width spaces (`\quad`, `\,`, `\enspace`, …) become an inline
+            # math run holding a space of exactly that width.
+            in_group || _commit_space!(builder)
+            _advance!(p)
+            _flush_text_run!(builder)
+            push!(builder.cur_runs, MathRun(space_node(_SPACE_WIDTHS[tok.value]), Text))
+            _is_control_word(tok.value) && _skip_space_before_argument!(p)
 
         elseif tok.kind === TokenKind.Command && tok.value ∈ _TEXT_STYLE_COMMANDS
             in_group || _commit_space!(builder)

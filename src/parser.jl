@@ -12,13 +12,26 @@ mutable struct _Parser
     pos::Int
 end
 
+# A TeX dimension `value unit` in em (`_TEX_UNIT_EM`), or `nothing` for an
+# unknown unit.
+_dimension_em(value::Real, unit::AbstractString) =
+    (f = get(_TEX_UNIT_EM, lowercase(unit), nothing); f === nothing ? nothing : value * f)
+
+# A dimension written out as text (`2pt`, ` -0.5 em `) in em; 0.0 when it is not
+# a number followed by a known two-letter unit (`\jot` and other registers are
+# not supported).
+function _dimension_text_em(s::AbstractString)::Float64
+    m = match(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*([A-Za-z]{2})\s*$", s)
+    m === nothing && return 0.0
+    return something(_dimension_em(parse(Float64, m[1]), m[2]), 0.0)
+end
 # Characters that may start or continue the number of a TeX dimension.
 const _DIMEN_NUMBER_CHARS = "0123456789.+-"
 
 # Parse a TeX dimension after \kern / \mkern / \hskip / \mskip and return its
 # value in em units.  Supports a braced form (\kern{1em}) and an unbraced form
-# (\kern1em).  Only "em" and "mu" units are recognised; anything else yields 0.
-# One math unit (mu) = 1/18 em by the standard TeX convention.
+# (\kern1em).  Units are those of `_TEX_UNIT_EM`; an unknown unit yields 0.
+# \mkern and \mskip take math units (mu, 1/18 em) whatever the unit says.
 function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
     # `\kern 1em`: TeX drops the space after a control word.  Look past it only
     # when a dimension follows, so letters in malformed `\kern x` stay content.
@@ -29,7 +42,7 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
         p.pos += n
     end
     braced = _current(p).kind === TokenKind.LBrace
-    braced && _advance!(p)   # consume '{'
+    braced && (_advance!(p); _skip_ignorable_spaces!(p))   # consume '{'
 
     # Collect sign + digits + decimal point.
     num = Char[]
@@ -38,6 +51,9 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
         c ∈ _DIMEN_NUMBER_CHARS || break
         push!(num, c); _advance!(p)
     end
+
+    # TeX allows spaces between the number and its unit (`\kern 1 em`).
+    _skip_ignorable_spaces!(p)
 
     # Collect exactly 2 letter chars for the unit (em, mu, ex, pt, …).
     unit = Char[]
@@ -48,18 +64,13 @@ function _parse_kern_dimension!(p::_Parser, mu_units::Bool)::Float64
         push!(unit, c); _advance!(p)
     end
 
+    braced && _skip_ignorable_spaces!(p)
     braced && _current(p).kind === TokenKind.RBrace && _advance!(p)   # consume '}'
 
     val = tryparse(Float64, isempty(num) ? "0" : String(num))
     val === nothing && return 0.0
-    unit_str = lowercase(String(unit))
-    if mu_units || unit_str == "mu"
-        return val / 18
-    elseif unit_str == "em"
-        return val
-    else
-        return 0.0   # unsupported unit: zero-width space
-    end
+    mu_units && return val / 18
+    return something(_dimension_em(val, String(unit)), 0.0)   # unknown unit: no space
 end
 
 @inline _current(p::_Parser) = p.tokens[p.pos]
@@ -73,11 +84,24 @@ end
 # and instead emitted as a normal interword space by `_parse_primary!`.
 @inline _is_ignorable_space(tok::Token) = tok.kind === TokenKind.Space && tok.value != "~"
 
+# Skip ignorable whitespace at the current position.  TeX discards spaces after a
+# control word and between a command and its arguments, so `\left (`, `\text {a}`,
+# `\sqrt [3]{x}` and `\kern 1 em` all read the following token.
 function _skip_ignorable_spaces!(p::_Parser)
     while _is_ignorable_space(_current(p))
         _advance!(p)
     end
-    return nothing
+    return p
+end
+
+# The first token at or after the current position that is not ignorable
+# whitespace, without consuming anything.
+function _peek_past_spaces(p::_Parser)::Token
+    i = p.pos
+    while _is_ignorable_space(p.tokens[i])
+        i += 1
+    end
+    return p.tokens[i]
 end
 
 # Number of ignorable Space tokens starting at the current position.  Used to
@@ -90,6 +114,42 @@ function _ignorable_space_run(p::_Parser)::Int
     end
     return n
 end
+
+# unicode-math's single characters for a run of two, three, or four primes.
+const _MULTI_PRIME_COMMANDS = Dict(2 => "\\dprime", 3 => "\\trprime", 4 => "\\qprime")
+
+# Kern between repeated primes: unicode-math's `\g__um_primekern_muskip`,
+# -\thinmuskip/2 = -1.5 mu.
+const _PRIME_KERN = -1.5 / 18
+
+# `n` single primes separated by `_PRIME_KERN`, as unicode-math sets a run of
+# more than four primes.
+function _kerned_primes(n::Int)::Vector{Node}
+    out = Node[Node(NodeKind.Command, "\\prime")]
+    for _ in 2:n
+        push!(out, space_node(_PRIME_KERN), Node(NodeKind.Command, "\\prime"))
+    end
+    return out
+end
+
+# The NodeKind.LimitsOverride flag for \limits, \nolimits, or \displaylimits
+# (limits in Display style only, TeX's default for \mathop), else `nothing`.
+# Plain comparisons: this runs after every atom.
+@inline function _limits_flag(tok::Token)::Union{String, Nothing}
+    tok.kind === TokenKind.Command || return nothing
+    v = tok.value
+    v == "\\limits" && return "limits"
+    v == "\\nolimits" && return "nolimits"
+    v == "\\displaylimits" && return "displaylimits"
+    return nothing
+end
+
+# Tokens that continue the atom before them: scripts, primes, and the
+# \limits / \nolimits / \displaylimits modifiers.
+@inline _is_prime(tok::Token) = tok.kind === TokenKind.Char && tok.value == "'"
+@inline _is_limits_modifier(tok::Token) = _limits_flag(tok) !== nothing
+@inline _continues_atom(tok::Token) = tok.kind === TokenKind.Sup ||
+    tok.kind === TokenKind.Sub || _is_prime(tok) || _is_limits_modifier(tok)
 
 # Expression parsers leave their boundary token unconsumed for the caller that
 # owns it. Explicit braced groups always establish a fresh `}` boundary, while
@@ -199,10 +259,20 @@ function _parse_text_sequence_children!(p::_Parser)::Vector{Node}
         if k === TokenKind.Space
             push!(children, Node(NodeKind.Char, " "))
             _advance!(p)
+        elseif k === TokenKind.MathShift
+            # `\text{if $x>0$}`: math nested in text, as amsmath and KaTeX allow.
+            # The math stops at the closing `$` or, if that is missing, at the
+            # `}` that closes the text group.
+            _advance!(p)   # consume opening $
+            body = _parse_math_until!(
+                p, t -> t.kind === TokenKind.MathShift || t.kind === TokenKind.RBrace,
+            )
+            _current(p).kind === TokenKind.MathShift && _advance!(p)   # consume closing $
+            push!(children, Node(NodeKind.InlineMath, [body]))
         else
             start = p.pos
             literal = _parse_text_literal_command!(p)
-            push!(children, literal === nothing ? _parse_atom!(p) : literal)
+            push!(children, literal === nothing ? _parse_atom!(p; math = false) : literal)
             # TeX drops the spaces after a control word that took no argument
             # (`\quad b`), but keeps them after a control symbol (`\, b`) and
             # after an argument's closing brace (`\textbf{a} b`).
@@ -215,7 +285,7 @@ end
 # Parse the braced argument of \text{} or \mbox{}, preserving spaces.  Spaces
 # before the argument are math-mode whitespace, so `\text {a}` matches `\text{a}`.
 function _parse_text_argument!(p::_Parser)::Node
-    _skip_ignorable_spaces!(p)
+    _skip_ignorable_spaces!(p)   # `\text {abc}`: the space before the brace is not content
     if _current(p).kind === TokenKind.LBrace
         _advance!(p)   # consume '{'
         children = _parse_text_sequence_children!(p)
@@ -228,71 +298,86 @@ function _parse_text_argument!(p::_Parser)::Node
     end
 end
 
-# The NodeKind.LimitsOverride flag for \limits, \nolimits, or \displaylimits
-# (limits in Display style only, TeX's default for \mathop), else `nothing`.
-# Plain comparisons: this runs after every atom.
-@inline function _limits_flag(tok::Token)::Union{String, Nothing}
-    tok.kind === TokenKind.Command || return nothing
-    v = tok.value
-    v == "\\limits" && return "limits"
-    v == "\\nolimits" && return "nolimits"
-    v == "\\displaylimits" && return "displaylimits"
-    return nothing
-end
-
-@inline _is_limits_modifier(tok::Token) = _limits_flag(tok) !== nothing
-
-# Skip whitespace between a base and its scripts (`x ^2`, `\sum \limits_{i}`),
-# which TeX ignores in math mode.  The whitespace is consumed only when a script
-# or limits modifier follows, so significant spaces in \text{…} bodies survive.
-function _skip_spaces_before_script!(p::_Parser)
-    n = _ignorable_space_run(p)
-    n == 0 && return nothing
-    tok = _peek(p, n)
-    if tok.kind === TokenKind.Sup || tok.kind === TokenKind.Sub || _is_limits_modifier(tok)
-        p.pos += n
-    end
-    return nothing
-end
-
-# Parse a single "atom": a primary optionally decorated with ^ and/or _.
-function _parse_atom!(p::_Parser, isstop = _is_group_end)::Node
+# Parse a single "atom": a primary optionally decorated with ^, _, primes, and a
+# \limits-style modifier.
+#
+# In math mode (`math = true`) whitespace between the primary and its scripts is
+# insignificant (`x ^2`, `\sum \limits_0`), and `'` is a prime: `f'` is
+# `f^{\prime}` and `f''^2` is `f^{\dprime 2}`.  As in unicode-math, a run of
+# two to four primes is one multiple-prime character (U+2033, U+2034, U+2057);
+# layout falls back to repeated primes for a font without it.  Inside
+# `\text{…}` (`math = false`) spaces are content and `'` is an apostrophe, so
+# neither rule applies.
+function _parse_atom!(p::_Parser, isstop = _is_group_end; math::Bool = true)::Node
     # Ordinary whitespace is ignored at the atom level; `~` falls through to
     # _parse_primary! and becomes a normal interword space.
     _skip_ignorable_spaces!(p)
 
-    base = _parse_primary!(p, isstop)
+    # A script or prime with nothing before it attaches to an empty base, as
+    # KaTeX does for `^2` or `'x`, instead of rendering the `^` or `'` literally.
+    base = if math && (_continues_atom(_current(p)) && !_is_limits_modifier(_current(p)))
+        Node(NodeKind.Group, Node[])
+    else
+        _parse_primary!(p, isstop)
+    end
+
+    # The next token that could continue this atom; spaces before it only count
+    # in text mode.  Consuming the spaces is deferred until a continuation is
+    # found, so a plain space after an atom is left for the caller.
+    next_token() = math ? _peek_past_spaces(p) : _current(p)
+    take_spaces!() = math && _skip_ignorable_spaces!(p)
 
     # Consume explicit \limits / \nolimits / \displaylimits modifiers after the
     # primary, wrapping the base so the script branches can dispatch on it.  As
     # in TeX the last modifier wins; it replaces an existing override (including
     # the \displaylimits of \operatorname*) instead of nesting another wrapper.
-    _skip_spaces_before_script!(p)
-    while (flag = _limits_flag(_current(p))) !== nothing
+    while (flag = _limits_flag(next_token())) !== nothing
+        take_spaces!()
         _advance!(p)
         inner = base.kind === NodeKind.LimitsOverride ? base.children[1] : base
         base = Node(NodeKind.LimitsOverride, flag, [inner])
-        _skip_spaces_before_script!(p)
     end
 
-    has_sup = false; has_sub = false
-    sup_node = base;  sub_node = base  # placeholders
+    has_sup = false; has_sub = false; has_primes = false
+    sup_node = base; sub_node = base  # placeholders
+    primes = Node[]
 
-    # Collect at most one ^ and one _, in either order.
-    for _ in 1:2
-        _skip_spaces_before_script!(p)
-        k = _current(p).kind
-        if k === TokenKind.Sup && !has_sup
+    # Collect at most one ^, one _, and one run of primes, in any order.  A prime
+    # after an explicit superscript is a TeX error ("double superscript"); it is
+    # left for the next atom, which gives it an empty base.
+    while true
+        tok = next_token()
+        if tok.kind === TokenKind.Sup && !has_sup
+            take_spaces!()
             _advance!(p)
             sup_node = _parse_argument!(p, isstop)
             has_sup = true
-        elseif k === TokenKind.Sub && !has_sub
+        elseif tok.kind === TokenKind.Sub && !has_sub
+            take_spaces!()
             _advance!(p)
             sub_node = _parse_argument!(p, isstop)
             has_sub = true
+        elseif math && _is_prime(tok) && !has_sup && !has_primes
+            take_spaces!()
+            while _is_prime(_current(p))
+                _advance!(p)
+                push!(primes, Node(NodeKind.Command, "\\prime"))
+            end
+            has_primes = true
+            n = length(primes)
+            if 2 <= n <= 4
+                primes = [Node(NodeKind.Command, _MULTI_PRIME_COMMANDS[n])]
+            elseif n > 4
+                primes = _kerned_primes(n)
+            end
         else
             break
         end
+    end
+    if has_primes
+        # Primes come first in the superscript; an explicit ^ after them joins it.
+        sup_node = Node(NodeKind.Sequence, has_sup ? [primes; sup_node] : primes)
+        has_sup = true
     end
 
     if has_sup && has_sub
@@ -445,6 +530,7 @@ function _parse_matrix_body!(
     )::Node
     cells = Node[]   # flat row-major list of completed cells
     row_lengths = Int[]   # number of cells in each row
+    row_gaps = Float64[]   # \\[len] after each row, in em
     current_cell = Node[]
     ncol_current = 0   # cells completed in the current row (0-based)
 
@@ -466,11 +552,12 @@ function _parse_matrix_body!(
     while true
         tok = _current(p)
 
+        # The environment's own `&`, `\\`, and `\end` are handled before
+        # `outer_stop`: inside a cell of an enclosing alignment, `outer_stop`
+        # matches those same tokens, and checking it first ended a nested
+        # `cases` or `matrix` at its own first `&`.
         if tok.kind === TokenKind.EOF
             break   # unclosed environment: lenient, keep what we have
-
-        elseif outer_stop(tok)
-            break   # malformed environment: preserve the surrounding boundary
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\end"
             _advance!(p)
@@ -483,18 +570,27 @@ function _parse_matrix_body!(
 
         elseif tok.kind === TokenKind.Command && tok.value == "\\\\"
             _advance!(p)
-            # Skip optional row-spacing argument \\[dim]
+            # Optional row spacing \\[len], recognised only directly after the
+            # \\: amsmath's environments read it with \new@ifnextchar, which does
+            # not skip spaces, so that a row may start with a bracket.
+            gap = 0.0
             if _current(p).kind === TokenKind.Char && _current(p).value == "["
                 _advance!(p)   # consume '['
+                buf = IOBuffer()
                 while _current(p).kind !== TokenKind.EOF && _current(p).value != "]"
-                    _advance!(p)
+                    print(buf, _advance!(p).value)
                 end
                 _current(p).kind !== TokenKind.EOF && _advance!(p)   # consume ']'
+                gap = _dimension_text_em(String(take!(buf)))
             end
             finish_row!()
+            push!(row_gaps, gap)
 
         elseif _is_ignorable_space(tok)
             _advance!(p)   # skip whitespace in matrix bodies (math mode); `~` is kept
+
+        elseif outer_stop(tok)
+            break   # malformed environment: preserve the surrounding boundary
 
         else
             push!(current_cell, _parse_atom!(p, is_cell_end))
@@ -504,6 +600,7 @@ function _parse_matrix_body!(
     # Commit the last (possibly incomplete) row if non-empty.
     if !isempty(current_cell) || ncol_current > 0
         finish_row!()
+        push!(row_gaps, 0.0)
     end
 
     nrow = length(row_lengths)
@@ -541,7 +638,7 @@ function _parse_matrix_body!(
         end
     end
 
-    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec)), cells)
+    return Node(NodeKind.Matrix, _encode_payload(_MatrixPayload(env_name, nrow, colspec, row_gaps)), cells)
 end
 
 # Parse a command token and return the appropriate node.

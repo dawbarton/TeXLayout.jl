@@ -12,7 +12,7 @@ using TeXLayout
 using TeXLayout: FontFamily, LayoutBox, layout, parse_latex
 using FreeTypeAbstraction
 using PNGFiles
-using Colors: Gray, RGB, N0f8, color
+using Colors: Gray, RGB, N0f8
 using Downloads
 using SHA
 using Tar
@@ -33,6 +33,8 @@ module MakieStress
 end
 
 const REFERENCE_ASSET = "stress_test_reference.tar"
+
+include("makie_handler.jl")
 
 const ALL_FONTS = [
     :new_cm, :pagella, :luciole, :stix_two,
@@ -108,16 +110,22 @@ function _write_png(path::String, canvas::Matrix{UInt8})
     return path
 end
 
+# Read a PNG as 8-bit greyscale.  CairoMakie writes RGBA; reinterpreting its
+# pixels as bytes directly would stack the channels into a 4×-tall image.
 function _read_png(path::String)::Matrix{UInt8}
-    return collect(reinterpret(UInt8, PNGFiles.load(path)))
+    return collect(reinterpret(UInt8, Gray{N0f8}.(PNGFiles.load(path))))
 end
 
-# CairoMakie saves RGB(A) PNGs.  Convert them to the grey canvas used by the
-# other suites; reinterpreting colour pixels as UInt8 would turn each channel
-# into its own image row (stretching the image and striping it with alpha).
-function _read_png_gray(path::String)::Matrix{UInt8}
-    image = PNGFiles.load(path)
-    return collect(reinterpret(UInt8, Gray{N0f8}.(color.(image))))
+# Crop a greyscale canvas to its ink plus `margin` pixels, so captures do not
+# depend on where Makie's alignment put the label on the canvas.
+function _crop_to_ink(img::Matrix{UInt8}; margin::Int = 24, threshold::UInt8 = 0xf5)::Matrix{UInt8}
+    ink = findall(<(threshold), img)
+    isempty(ink) && return img
+    r1, r2 = extrema(i[1] for i in ink)
+    c1, c2 = extrema(i[2] for i in ink)
+    rows = max(1, r1 - margin):min(size(img, 1), r2 + margin)
+    cols = max(1, c1 - margin):min(size(img, 2), c2 + margin)
+    return img[rows, cols]
 end
 
 function _font_name(family::FontFamily)::String
@@ -222,31 +230,26 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
             (0.0, 4.0, -1.0, 1.0) :
             MathStress.em_bbox(boxes, mt.upm; pad = 0.4)
 
+        # Makie aligns the label by its own block box, padded to the font's
+        # ascender and descender, rather than TeXLayout's ink box, so leave 1.5 em
+        # of slack on every side and crop to the ink afterwards.
         px = MathStress.BASE_PX
-        margin = 32
+        margin = 32 + ceil(Int, 1.5 * px)
         w = max(240, 2margin + ceil(Int, (bx2 - bx1) * px))
         h = max(160, 2margin + ceil(Int, (by2 - by1) * px))
-        fig = CairoMakie.Figure(size = (w, h), backgroundcolor = :white)
+        fig = CairoMakie.Figure(; size = (w, h), backgroundcolor = :white)
         ax = CairoMakie.Axis(fig[1, 1]; backgroundcolor = :white)
         CairoMakie.hidespines!(ax)
         CairoMakie.hidedecorations!(ax)
         CairoMakie.xlims!(ax, 0, w)
         CairoMakie.ylims!(ax, 0, h)
 
-        # Makie aligns a LaTeXString by the bottom of its glyph bounding box
-        # (`:baseline` falls back to `:bottom`), not by the formula baseline.
-        # Shift the anchor by Makie's own alignment offset so that the TeXLayout
-        # origin lands on (x, y), as the em-space bounding box assumes.
-        latex = LaTeXStrings.LaTeXString("\$" * expr * "\$")
-        _, _, tex_offset = CairoMakie.Makie.texelems_and_glyph_collection(
-            latex, CairoMakie.Vec2f(px), (:left, :bottom), CairoMakie.Makie.to_rotation(0.0f0),
-            CairoMakie.RGBAf(0, 0, 0, 1), CairoMakie.RGBAf(0, 0, 0, 0), 0.0f0, -1.0f0,
-        )
-        x = margin - bx1 * px + tex_offset[1]
-        y = margin - by1 * px + tex_offset[2]
+        x = margin - bx1 * px
+        y = margin - by1 * px
         CairoMakie.text!(
             ax, x, y;
-            text = latex,
+            text = LaTeXStrings.LaTeXString("\$" * expr * "\$"),
+            makie_handler_kwargs()...,
             fontsize = px,
             align = (:left, :bottom),
             space = :data,
@@ -256,7 +259,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         tmp = tempname() * ".png"
         try
             CairoMakie.save(tmp, fig)
-            return _read_png_gray(tmp)
+            return _crop_to_ink(_read_png(tmp))
         finally
             rm(tmp; force = true)
         end
@@ -523,7 +526,7 @@ function main(args = ARGS)
     rest = isempty(args) ? String[] : args[2:end]
 
     if cmd == "generate"
-        generate_outputs(
+        generate_outputs(;
             out = _option(rest, "--out", "stress_outputs/current"),
             fonts = _fonts(rest),
             include_makie = _flag(rest, "--include-makie"),
@@ -535,7 +538,7 @@ function main(args = ARGS)
             _option(rest, "--out", REFERENCE_ASSET),
         )
     elseif cmd == "compare"
-        compare_outputs(
+        compare_outputs(;
             current = _option(rest, "--current", "stress_outputs/current"),
             reference = _option(rest, "--reference", REFERENCE_ASSET),
             diff_dir = _option(rest, "--diff", "stress_outputs/diff"),
@@ -543,7 +546,7 @@ function main(args = ARGS)
         )
     elseif cmd == "all"
         out = _option(rest, "--out", "stress_outputs/current")
-        generate_outputs(
+        generate_outputs(;
             out = out,
             fonts = _fonts(rest),
             include_makie = _flag(rest, "--include-makie"),
@@ -554,7 +557,7 @@ function main(args = ARGS)
             "--reference",
             "$(REFERENCE_ASSET)",
         )
-        compare_outputs(
+        compare_outputs(;
             current = out,
             reference = reference,
             diff_dir = _option(rest, "--diff", "stress_outputs/diff"),

@@ -43,6 +43,17 @@ const _TEXT_LITERAL_CHARS = merge(
     ),
 )
 
+# TeX units in em, taking 10 pt = 1 em, the base size that TeXLayout's other
+# fixed TeX lengths (\nulldelimiterspace, \arraycolsep, …) also assume.  `ex`
+# is Latin Modern's x-height at 10 pt (4.31 pt), the default text font under
+# fontspec and unicode-math; `mu` is 1/18 em.
+const _TEX_UNIT_EM = Dict{String, Float64}(
+    "em" => 1.0, "pt" => 0.1, "ex" => 0.431, "mu" => 1 / 18,
+    "mm" => 7.227 / 25.4, "cm" => 72.27 / 25.4, "in" => 7.227,
+    "bp" => 7.227 / 72, "pc" => 1.2, "dd" => 0.1 * 1238 / 1157,
+    "cc" => 1.2 * 1238 / 1157, "sp" => 0.1 / 65536,
+)
+
 # Explicit horizontal spacing commands mapped to their width in em units.
 # Thin/medium/thick spaces use TeX's 18-mu-per-em convention (3, 4, 5 mu).
 const _SPACE_WIDTHS = Dict{String, Float64}(
@@ -60,6 +71,8 @@ const _SPACE_WIDTHS = Dict{String, Float64}(
     "\\quad" => 1.0,
     "\\qquad" => 2.0,
     "\\ " => _NORMAL_SPACE_EM,   # control space
+    "\\\n" => _NORMAL_SPACE_EM,  # backslash at end of line: also a control space
+    "\\\t" => _NORMAL_SPACE_EM,
     "\\space" => _NORMAL_SPACE_EM,
     "\\nobreakspace" => _NORMAL_SPACE_EM,
 )
@@ -183,29 +196,30 @@ const _HORIZ_BRACE_COMMANDS = Set{String}(
 
 # Matrix/array-like environments introduced by \begin{name}.
 # Each entry specifies the PostScript glyph names of the auto-sized left and right
-# delimiters (empty string = no delimiter), the column alignment,
-# and a scale factor relative to the surrounding text (1.0 for all except smallmatrix).
+# delimiters (empty string = no delimiter, or a null delimiter when the other
+# side has one) and the column alignment.  Spacing and cell style are layout
+# concerns (`_MATRIX_SPACING`).
 # "dblverticalbar" is the NewCMMath PS name for U+2016 ‖; other fonts may differ, but
 # glyph_name_by_codepoint fallback is used if the literal name is absent.
-const _MatrixEnvInfo = @NamedTuple{left::String, right::String, align::Alignment.T, scale::Float64}
+const _MatrixEnvInfo = @NamedTuple{left::String, right::String, align::Alignment.T}
 const _MATRIX_ENVS = Dict{String, _MatrixEnvInfo}(
-    "matrix" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "pmatrix" => (left = "parenleft", right = "parenright", align = Alignment.Center, scale = 1.0),
-    "bmatrix" => (left = "bracketleft", right = "bracketright", align = Alignment.Center, scale = 1.0),
-    "Bmatrix" => (left = "braceleft", right = "braceright", align = Alignment.Center, scale = 1.0),
-    "vmatrix" => (left = "bar", right = "bar", align = Alignment.Center, scale = 1.0),
-    "Vmatrix" => (left = "dblverticalbar", right = "dblverticalbar", align = Alignment.Center, scale = 1.0),
-    "smallmatrix" => (left = "", right = "", align = Alignment.Center, scale = 0.9),
-    "cases" => (left = "braceleft", right = "", align = Alignment.Left, scale = 1.0),
+    "matrix" => (left = "", right = "", align = Alignment.Center),
+    "pmatrix" => (left = "parenleft", right = "parenright", align = Alignment.Center),
+    "bmatrix" => (left = "bracketleft", right = "bracketright", align = Alignment.Center),
+    "Bmatrix" => (left = "braceleft", right = "braceright", align = Alignment.Center),
+    "vmatrix" => (left = "bar", right = "bar", align = Alignment.Center),
+    "Vmatrix" => (left = "dblverticalbar", right = "dblverticalbar", align = Alignment.Center),
+    "smallmatrix" => (left = "", right = "", align = Alignment.Center),
+    "cases" => (left = "braceleft", right = "", align = Alignment.Left),
     # \begin{array}{colspec} — explicit per-column alignment and vertical rules.
-    "array" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "array" => (left = "", right = "", align = Alignment.Center),
     # Display-math environments (document layer treats these as DisplayBlocks).
-    "align" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "aligned" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "split" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "gather" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "gathered" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
-    "equation" => (left = "", right = "", align = Alignment.Center, scale = 1.0),
+    "align" => (left = "", right = "", align = Alignment.Center),
+    "aligned" => (left = "", right = "", align = Alignment.Center),
+    "split" => (left = "", right = "", align = Alignment.Center),
+    "gather" => (left = "", right = "", align = Alignment.Center),
+    "gathered" => (left = "", right = "", align = Alignment.Center),
+    "equation" => (left = "", right = "", align = Alignment.Center),
 )
 
 # Display alignment/math environments.  Their cells are typeset in Display style
