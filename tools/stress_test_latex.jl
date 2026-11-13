@@ -27,6 +27,8 @@ using TeXLayout
 using TeXLayout: FontFamily
 using FreeTypeAbstraction
 
+include("common.jl")
+
 # ── Stress-test content ────────────────────────────────────────────────────────
 
 include("stress_test_content.jl")
@@ -117,32 +119,16 @@ function run_stress_test_tex(outpath::String, font_name::String)
     return println("Written $outpath")
 end
 
-# ── Font helpers ───────────────────────────────────────────────────────────────
-
-function _resolve_font(spec)::FontFamily
-    spec isa FontFamily && return spec
-    s = string(spec)
-    startswith(s, ":") && return font_family(Symbol(s[2:end]))
-    isfile(s) && return FontFamily(s)
-    return font_family(Symbol(s))
-end
-
-function _default_output(font_name::String)::String
-    slug = lowercase(replace(font_name, r"[^a-zA-Z0-9]+" => "_"))
-    slug = strip(slug, '_')
-    return "stress_test_$(slug).tex"
-end
-
 # ── Script entrypoint ─────────────────────────────────────────────────────────
 
 if abspath(PROGRAM_FILE) == @__FILE__
     _font_spec = length(ARGS) >= 1 ? ARGS[1] : ":new_cm"
     _output = length(ARGS) >= 2 ? ARGS[2] : nothing
 
-    family = _resolve_font(_font_spec)
+    family = resolve_font(_font_spec)
     face_math = FTFont(family.math)
     font_name = FreeTypeAbstraction.family_name(face_math)
-    outpath = _output !== nothing ? String(_output) : _default_output(font_name)
+    outpath = _output !== nothing ? String(_output) : "stress_test_$(font_slug(font_name)).tex"
 
     run_stress_test_tex(outpath, font_name)
 end

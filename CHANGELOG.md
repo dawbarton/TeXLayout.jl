@@ -83,6 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `glyph_metrics(family, name)` is memoised per font and glyph name. Layouts
   with delimiters, large operators, or scripts are 1.5–6× faster in the
   benchmark suite (FreeType's name lookup dominated them).
+- The FreeType tools (`visualise_bitmap.jl`, `visualise_text.jl`,
+  `visualise_metrics.jl`, and the math and text stress renderers) and
+  `compare_tex.jl` find each glyph's face as the renderer adapters do, through
+  `GlyphRuntime`'s slot fallback chains, instead of taking the first font in
+  the slot. A glyph that no font in its chain has is reported once instead of
+  being skipped silently. Their font, canvas, and box-drawing helpers live in
+  the new `tools/common.jl`. Stress images are unchanged.
 
 ### Fixed
 - Math-mode whitespace now follows TeX in more places: spaces before `^`, `_`,

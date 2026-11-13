@@ -4,7 +4,7 @@
 # Makie 0.25 uses TeXLayoutHandler; older Makie releases use the legacy automatic
 # MathTeXEngine adapter.
 #
-# Layout uses the same per-expression em_bbox measurements as the FreeType
+# Layout uses the same per-expression measurements (`makie_bbox`) as the FreeType
 # renderer, so the horizontal arrangement is equivalent.  Positions are in
 # pixel units (1 data unit = 1 px) with fontsize = BASE_PX so that 1 em =
 # BASE_PX pixels.  Makie y increases upward; screen y increases downward.
@@ -33,6 +33,7 @@ const TITLE_H = 30    # title-bar strip height (px)
 const SEC_PX = 13     # font size for section-header text
 const TITLE_PX = 16   # font size for title text
 
+include("common.jl")
 include("makie_handler.jl")
 
 # ── Bounding box ───────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ include("makie_handler.jl")
 # (as a naive implementation would) causes row heights to be underestimated and formulae
 # to be shifted well above the section header above them.  font_ascender and font_descender
 # must be in em units (as returned by FreeTypeAbstraction.ascender/descender).
-function em_bbox(boxes, upm, font_ascender::Float64, font_descender::Float64; pad = 0.1)
+function makie_bbox(boxes, upm, font_ascender::Float64, font_descender::Float64; pad = 0.1)
     bx1 = bx2 = by1 = by2 = 0.0
     has_glyph = false
     for box in boxes
@@ -118,7 +119,7 @@ function run_stress_test_makie(
                 boxes = layout(parse_latex(expr), family, style)
                 bounds = isempty(boxes) ?
                     (0.0, 1.0, fd_default, fa_default) :
-                    em_bbox(boxes, upm, font_ascender, font_descender; pad = 0.05)
+                    makie_bbox(boxes, upm, font_ascender, font_descender; pad = 0.05)
                 (bounds, any(box -> !(box.element isa Space), boxes))
             catch
                 ((0.0, 1.0, fd_default, fa_default), false)
@@ -239,22 +240,6 @@ function run_stress_test_makie(
     return println("Written $outpath  ($(W)×$(H) px)")
 end
 
-# ── Font helpers ───────────────────────────────────────────────────────────────
-
-function _resolve_font(spec)::FontFamily
-    spec isa FontFamily && return spec
-    s = string(spec)
-    startswith(s, ":") && return font_family(Symbol(s[2:end]))
-    isfile(s) && return FontFamily(s)
-    return font_family(Symbol(s))
-end
-
-function _default_output(font_name::String, format::Symbol)::String
-    slug = lowercase(replace(font_name, r"[^a-zA-Z0-9]+" => "_"))
-    slug = strip(slug, '_')
-    return "stress_test_$(slug).$(format)"
-end
-
 # ── Script entrypoint ─────────────────────────────────────────────────────────
 
 if abspath(PROGRAM_FILE) == @__FILE__
@@ -265,12 +250,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
     _format in (:png, :pdf, :svg) ||
         error("Unknown format $(repr(_format)). Choose: png, pdf, svg")
 
-    family = _resolve_font(_font_spec)
+    family = resolve_font(_font_spec)
     mt = TeXLayout.load_math_table(family.math)
     face_math = FTFont(family.math)
     font_name = FreeTypeAbstraction.family_name(face_math)
     outpath = _output !== nothing ? String(_output) :
-        _default_output(font_name, _format)
+        "stress_test_$(font_slug(font_name)).$(_format)"
 
     run_stress_test_makie(family, outpath, mt, font_name)
 end

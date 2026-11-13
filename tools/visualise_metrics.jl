@@ -17,12 +17,11 @@
 using Pkg
 Pkg.activate(@__DIR__; io = devnull)
 
-using FreeTypeAbstraction
 using TeXLayout
-using TeXLayout:
-    FontFamily, Glyph, GlyphID, HRule, LayoutBox, Space, VRule, layout, parse_latex
-using PNGFiles
-using Colors: RGB, N0f8
+using TeXLayout: Glyph, GlyphID, HRule, VRule, layout, parse_latex
+using Colors: RGB
+
+include("common.jl")
 
 @inline rgb(r, g, b) = (UInt8(r), UInt8(g), UInt8(b))
 
@@ -58,53 +57,6 @@ function usage(io::IO = stderr)
     return nothing
 end
 
-function parse_font(spec::AbstractString)
-    startswith(spec, ":") && return font_family(Symbol(spec[2:end]))
-    isfile(spec) || error("Font path not found: $spec")
-    return FontFamily(spec)
-end
-
-function load_family()
-    length(ARGS) >= 3 && return parse_font(ARGS[3])
-    return default_font_family()
-end
-
-function em_bbox(boxes::Vector{LayoutBox}, upm::Real)
-    upm_f = Float64(upm)
-    bx1 = bx2 = by1 = by2 = 0.0
-    for box in boxes
-        el = box.element
-        if el isa Glyph || el isa GlyphID
-            # A GlyphID names its own font file, whose UPM may differ.
-            s = box.scale / (el isa GlyphID ? TeXLayout._font_upm(el.font_path) : upm_f)
-            bx1 = min(bx1, box.x + el.x_min * s, box.x + el.advance_width * s)
-            bx2 = max(bx2, box.x + el.x_max * s, box.x + el.advance_width * s)
-            by1 = min(by1, box.y + el.y_min * s)
-            by2 = max(by2, box.y + el.y_max * s)
-        elseif el isa HRule
-            bx1 = min(bx1, box.x)
-            bx2 = max(bx2, box.x + el.width)
-            by1 = min(by1, box.y)
-            by2 = max(by2, box.y + el.thickness)
-        elseif el isa VRule
-            bx1 = min(bx1, box.x)
-            bx2 = max(bx2, box.x + el.thickness)
-            by1 = min(by1, box.y)
-            by2 = max(by2, box.y + el.height)
-        elseif el isa Space
-            bx1 = min(bx1, box.x, box.x + el.width)
-            bx2 = max(bx2, box.x, box.x + el.width)
-        end
-    end
-    by1 = min(by1, -0.2)
-    by2 = max(by2, 0.2)
-    return (bx1 - PAD_EM, bx2 + PAD_EM, by1 - PAD_EM, by2 + PAD_EM)
-end
-
-@inline function clamp_index(i::Int, lo::Int, hi::Int)
-    return i < lo ? lo : (i > hi ? hi : i)
-end
-
 @inline function blend_pixel!(
         canvas::Array{UInt8, 3}, row::Int, col::Int,
         color::NTuple{3, UInt8}, alpha::Float64
@@ -123,10 +75,10 @@ function fill_rect!(
         r1::Int, c1::Int, r2::Int, c2::Int,
         color::NTuple{3, UInt8}, alpha::Float64
     )
-    rr1 = clamp_index(min(r1, r2), 1, size(canvas, 1))
-    rr2 = clamp_index(max(r1, r2), 1, size(canvas, 1))
-    cc1 = clamp_index(min(c1, c2), 1, size(canvas, 2))
-    cc2 = clamp_index(max(c1, c2), 1, size(canvas, 2))
+    rr1 = clamp(min(r1, r2), 1, size(canvas, 1))
+    rr2 = clamp(max(r1, r2), 1, size(canvas, 1))
+    cc1 = clamp(min(c1, c2), 1, size(canvas, 2))
+    cc2 = clamp(max(c1, c2), 1, size(canvas, 2))
     for row in rr1:rr2, col in cc1:cc2
         blend_pixel!(canvas, row, col, color, alpha)
     end
@@ -138,10 +90,10 @@ function rect_outline!(
         r1::Int, c1::Int, r2::Int, c2::Int,
         color::NTuple{3, UInt8}
     )
-    rr1 = clamp_index(min(r1, r2), 1, size(canvas, 1))
-    rr2 = clamp_index(max(r1, r2), 1, size(canvas, 1))
-    cc1 = clamp_index(min(c1, c2), 1, size(canvas, 2))
-    cc2 = clamp_index(max(c1, c2), 1, size(canvas, 2))
+    rr1 = clamp(min(r1, r2), 1, size(canvas, 1))
+    rr2 = clamp(max(r1, r2), 1, size(canvas, 1))
+    cc1 = clamp(min(c1, c2), 1, size(canvas, 2))
+    cc2 = clamp(max(c1, c2), 1, size(canvas, 2))
     for col in cc1:cc2
         blend_pixel!(canvas, rr1, col, color, OVERLAY_ALPHA[:outline])
         blend_pixel!(canvas, rr2, col, color, OVERLAY_ALPHA[:outline])
@@ -157,9 +109,9 @@ function hline!(
         canvas::Array{UInt8, 3}, row::Int, c1::Int, c2::Int,
         color::NTuple{3, UInt8}
     )
-    rr = clamp_index(row, 1, size(canvas, 1))
-    cc1 = clamp_index(min(c1, c2), 1, size(canvas, 2))
-    cc2 = clamp_index(max(c1, c2), 1, size(canvas, 2))
+    rr = clamp(row, 1, size(canvas, 1))
+    cc1 = clamp(min(c1, c2), 1, size(canvas, 2))
+    cc2 = clamp(max(c1, c2), 1, size(canvas, 2))
     for col in cc1:cc2
         blend_pixel!(canvas, rr, col, color, OVERLAY_ALPHA[:guide])
     end
@@ -170,9 +122,9 @@ function vline!(
         canvas::Array{UInt8, 3}, col::Int, r1::Int, r2::Int,
         color::NTuple{3, UInt8}
     )
-    cc = clamp_index(col, 1, size(canvas, 2))
-    rr1 = clamp_index(min(r1, r2), 1, size(canvas, 1))
-    rr2 = clamp_index(max(r1, r2), 1, size(canvas, 1))
+    cc = clamp(col, 1, size(canvas, 2))
+    rr1 = clamp(min(r1, r2), 1, size(canvas, 1))
+    rr2 = clamp(max(r1, r2), 1, size(canvas, 1))
     for row in rr1:rr2
         blend_pixel!(canvas, row, cc, color, OVERLAY_ALPHA[:guide])
     end
@@ -189,7 +141,6 @@ end
 end
 
 function write_image(path::AbstractString, canvas::Array{UInt8, 3})
-    H, W, _ = size(canvas)
     perm = permutedims(canvas, (3, 1, 2))  # 3×H×W: channels innermost for reinterpret
     return PNGFiles.save(path, reinterpret(reshape, RGB{N0f8}, perm))
 end
@@ -199,14 +150,14 @@ function main()
 
     expr = length(ARGS) >= 1 ? ARGS[1] : raw"\frac{a}{b}"
     outf = length(ARGS) >= 2 ? ARGS[2] : "visualise_metrics.png"
-    family = load_family()
+    family = length(ARGS) >= 3 ? resolve_font(ARGS[3]) : default_font_family()
 
     mt = TeXLayout.load_math_table(family.math)
     boxes = layout(parse_latex(expr), family, TeXLayout.Display)
     isempty(boxes) && @warn "No layout boxes produced for expression: $expr"
 
     upm = mt.upm
-    bx1, bx2, by1, by2 = em_bbox(boxes, upm)
+    bx1, bx2, by1, by2 = em_bbox(boxes, upm; advance = true, ymin = -0.2, ymax = 0.2, pad = PAD_EM)
 
     W = max(1, 2MARGIN + round(Int, (bx2 - bx1) * BASE_PX))
     H = max(1, 2MARGIN + round(Int, (by2 - by1) * BASE_PX))
@@ -219,14 +170,6 @@ function main()
     axis_row = em_to_px_y(mt.constants.axis_height / upm)
     hline!(canvas, baseline_row, 1, W, BASELINE)
     hline!(canvas, axis_row, 1, W, AXIS)
-
-    face_cache = Dict{String, FTFont}()
-    function face_for(slot)
-        path = TeXLayout._font_path_for_slot(family, slot)
-        return get!(face_cache, path) do
-            FTFont(path)
-        end
-    end
 
     for box in boxes
         el = box.element
@@ -268,30 +211,11 @@ function main()
                 BLUE, OVERLAY_ALPHA[:descender]
             )
 
-            pixel_size = max(1, round(Int, box.scale * BASE_PX))
-            local bmp, ext
-            try
-                bmp, ext = if el isa GlyphID
-                    id_face = get!(() -> FTFont(el.font_path), face_cache, el.font_path)
-                    renderface(id_face, Int(el.glyph_id), pixel_size)
-                else
-                    renderface(face_for(el.font_slot), el.glyph_name, pixel_size)
-                end
-            catch err
-                @warn "renderface failed for $(el): $err"
-                continue
-            end
-
-            pen_col = em_to_px_x(box.x)
-            pen_row = em_to_px_y(box.y)
-            bmp_left = pen_col + round(Int, ext.horizontal_bearing[1])
-            bmp_top = pen_row - round(Int, ext.horizontal_bearing[2])
-
-            for row in axes(bmp, 2), col in axes(bmp, 1)
-                alpha = bmp[col, row]
-                alpha == 0x00 && continue
-                composite_black!(canvas, bmp_top + row - 1, bmp_left + col - 1, alpha)
-            end
+            glyph = render_glyph(family, el, max(1, round(Int, box.scale * BASE_PX)))
+            glyph === nothing || foreach_ink(
+                (r, c, a) -> composite_black!(canvas, r, c, a),
+                glyph..., em_to_px_x(box.x), em_to_px_y(box.y),
+            )
 
             rect_outline!(canvas, ink_top, ink_left, ink_bottom, ink_right, OUTLINE)
             vline!(canvas, origin_col, ink_top, ink_bottom, OUTLINE)

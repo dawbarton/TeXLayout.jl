@@ -34,6 +34,7 @@ end
 
 const REFERENCE_ASSET = "stress_test_reference.tar"
 
+include("common.jl")
 include("makie_handler.jl")
 
 const ALL_FONTS = [
@@ -106,7 +107,7 @@ end
 
 function _write_png(path::String, canvas::Matrix{UInt8})
     mkpath(dirname(path))
-    PNGFiles.save(path, reinterpret(Gray{N0f8}, canvas))
+    write_gray_png(path, canvas)
     return path
 end
 
@@ -131,10 +132,6 @@ end
 function _font_name(family::FontFamily)::String
     face = FTFont(family.math)
     return FreeTypeAbstraction.family_name(face)
-end
-
-function _resolve_font(name::Symbol)::FontFamily
-    return font_family(name)
 end
 
 function _manifest_case!(
@@ -169,10 +166,8 @@ end
 # ── Renderers ────────────────────────────────────────────────────────────────
 
 function _render_math_cases!(root::String, font::Symbol, manifest_cases)
-    family = _resolve_font(font)
+    family = resolve_font(font)
     mt = TeXLayout.load_math_table(family.math)
-    face_math = FTFont(family.math)
-    face_regular = family.regular !== nothing ? FTFont(family.regular) : nothing
 
     for (section_title, items) in MathStress.STRESS_SECTIONS
         section_dir = _stable_dir(section_title, section_title)
@@ -180,7 +175,7 @@ function _render_math_cases!(root::String, font::Symbol, manifest_cases)
             case_name = String(first(split(expr, '\n')))
             case_dir = _stable_dir(case_name, "math|$(section_title)|$(style)|$(expr)")
             rel = joinpath(string(font), "math_freetype", section_dir, case_dir * ".png")
-            canvas = MathStress.render_expr(expr, family, mt, face_math, face_regular, style)
+            canvas = MathStress.render_expr(expr, family, mt, style)
             _write_png(joinpath(root, rel), canvas)
             _manifest_case!(
                 manifest_cases, font, "math_freetype", section_title,
@@ -192,15 +187,14 @@ function _render_math_cases!(root::String, font::Symbol, manifest_cases)
 end
 
 function _render_text_cases!(root::String, font::Symbol, manifest_cases)
-    family = _resolve_font(font)
-    paths = TextStress._slot_paths(family)
+    family = resolve_font(font)
 
     for (section_title, cases) in TextStress.TEXT_STRESS_SECTIONS
         section_dir = _stable_dir(section_title, section_title)
         for case in cases
             case_dir = _stable_dir(case.name, "text|$(section_title)|$(case.name)|$(case.source)|$(case.kwargs)")
             rel = joinpath(string(font), "text_freetype", section_dir, case_dir * ".png")
-            canvas = TextStress.render_document(case, family, paths)
+            canvas = TextStress.render_document(case, family)
             _write_png(joinpath(root, rel), canvas)
             _manifest_case!(
                 manifest_cases, font, "text_freetype", section_title,
@@ -228,7 +222,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
         end
         bx1, bx2, by1, by2 = isempty(boxes) ?
             (0.0, 4.0, -1.0, 1.0) :
-            MathStress.em_bbox(boxes, mt.upm; pad = 0.4)
+            MathStress.sheet_bbox(boxes, mt.upm; pad = 0.4)
 
         # Makie aligns the label by its own block box, padded to the font's
         # ascender and descender, rather than TeXLayout's ink box, so leave 1.5 em
@@ -270,7 +264,7 @@ function _render_makie_case(expr::String, family::FontFamily)::Matrix{UInt8}
 end
 
 function _render_makie_cases!(root::String, font::Symbol, manifest_cases)
-    family = _resolve_font(font)
+    family = resolve_font(font)
     for case in MAKIE_CASES
         section_dir = _stable_dir(case.section, case.section)
         case_dir = _stable_dir(case.name, "makie|$(case.section)|$(case.name)|$(case.source)")
@@ -286,17 +280,15 @@ function _render_makie_cases!(root::String, font::Symbol, manifest_cases)
 end
 
 function _render_sheets!(root::String, font::Symbol; include_makie::Bool)
-    family = _resolve_font(font)
+    family = resolve_font(font)
     font_name = _font_name(family)
     sheet_dir = joinpath(root, string(font), "sheets")
     mkpath(sheet_dir)
 
     mt = TeXLayout.load_math_table(family.math)
-    face_math = FTFont(family.math)
-    face_regular = family.regular !== nothing ? FTFont(family.regular) : nothing
     _write_png(
         joinpath(sheet_dir, "$(string(font))_math_freetype.png"),
-        MathStress._build_sheet(family, mt, face_math, face_regular, font_name),
+        MathStress._build_sheet(family, mt, font_name),
     )
     _write_png(
         joinpath(sheet_dir, "$(string(font))_text_freetype.png"),

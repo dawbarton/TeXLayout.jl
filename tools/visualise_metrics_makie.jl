@@ -22,6 +22,8 @@ using LaTeXStrings: LaTeXString
 using TeXLayout
 using TeXLayout: FontFamily, generate_tex_elements
 
+include("common.jl")
+
 const BASE_PX = 110
 const MARGIN = 28
 const PAD_EM = 0.16
@@ -42,17 +44,6 @@ function usage(io::IO = stderr)
     return nothing
 end
 
-function parse_font(spec::AbstractString)
-    startswith(spec, ":") && return font_family(Symbol(spec[2:end]))
-    isfile(spec) || error("Font path not found: $spec")
-    return TeXLayout.FontFamily(spec)
-end
-
-function load_family()
-    length(ARGS) >= 3 && return parse_font(ARGS[3])
-    return default_font_family()
-end
-
 function wrap_latex(expr::AbstractString)
     str = String(expr)
     length(str) >= 2 && first(str) == '$' && last(str) == '$' && return LaTeXString(str)
@@ -61,10 +52,10 @@ end
 
 include("makie_handler.jl")
 
+# Units per em of the font the renderer draws `element` from.
 function glyph_upm(element, family)
-    path = element isa TeXLayout.GlyphID ?
-        element.font_path :
-        TeXLayout._font_path_for_slot(family, element.font_slot)
+    resolved = resolve_glyph(family, element)
+    path = resolved === nothing ? family.math : resolved[3]
     return TeXLayout._font_upm(path)
 end
 
@@ -107,7 +98,7 @@ function main()
 
     expr = length(ARGS) >= 1 ? ARGS[1] : raw"\frac{a}{b}"
     outf = length(ARGS) >= 2 ? ARGS[2] : "visualise_metrics_makie.png"
-    family = load_family()
+    family = length(ARGS) >= 3 ? resolve_font(ARGS[3]) : default_font_family()
 
     set_default_font_family!(family)
     latex = wrap_latex(expr)

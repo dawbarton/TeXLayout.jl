@@ -51,6 +51,8 @@ using TeXLayout
 using TeXLayout: Glyph, GlyphID, HRule, VRule, layout, parse_latex
 using FreeTypeAbstraction
 
+include("common.jl")
+
 struct Options
     engine::String
     fonts::Vector{Symbol}
@@ -105,15 +107,15 @@ function _glyph_name_of_id(path::String, gid::Integer)::String
     return String(buf[1:(something(i, length(buf) + 1) - 1)])
 end
 
-# TeX code that prints one glyph of the font at `path`, by name or by ID.
-function _glyph_tex(engine::String, path::String, size::Float64; name = nothing, gid = nothing)
+# TeX code that prints glyph `gid` of the font at `path`: by glyph ID under
+# XeLaTeX, by glyph name through luaotfload under LuaLaTeX.
+function _glyph_tex(engine::String, path::String, size::Float64, gid::Integer)
     font = "\\font\\tlf=\"[$path]\" at $(fmt(size))pt\\tlf"
     if engine == "lualatex"
-        glyph_name = name === nothing ? _glyph_name_of_id(path, gid) : name
+        glyph_name = _glyph_name_of_id(path, gid)
         return font * "\\directlua{tex.sprint(\"\\\\char\" .. luaotfload.aux.slot_of_name(font.current(), \"$glyph_name\"))}"
     end
-    id = gid === nothing ? FreeTypeAbstraction.glyph_index(_face(path), name) : gid
-    return font * "\\XeTeXglyph$(id)"
+    return font * "\\XeTeXglyph$(gid)"
 end
 
 # A binomial node with its delimiters removed (for `B:` cases).
@@ -128,11 +130,14 @@ function texlayout_tikz(io, tree, family, style, opts::Options)
         el = b.element
         x, y = fmt(b.x * pt), fmt(b.y * pt)
         if el isa Glyph
-            path = TeXLayout._font_path_for_slot(family, el.font_slot)
-            glyph = _glyph_tex(opts.engine, path, pt * b.scale; name = el.glyph_name)
+            # The face and glyph index a renderer adapter would draw.
+            resolved = resolve_glyph(family, el)
+            resolved === nothing && continue
+            _, gid, path = resolved
+            glyph = _glyph_tex(opts.engine, path, pt * b.scale, gid)
             println(io, "  \\node[tl] at ($(x)pt,$(y)pt) {$glyph};")
         elseif el isa GlyphID
-            glyph = _glyph_tex(opts.engine, el.font_path, pt * b.scale; gid = el.glyph_id)
+            glyph = _glyph_tex(opts.engine, el.font_path, pt * b.scale, el.glyph_id)
             println(io, "  \\node[tl] at ($(x)pt,$(y)pt) {$glyph};")
         elseif el isa HRule
             println(io, "  \\fill[tlfill] ($(x)pt,$(y)pt) rectangle ++($(fmt(el.width * pt))pt,$(fmt(el.thickness * pt))pt);")
