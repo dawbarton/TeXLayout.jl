@@ -38,6 +38,9 @@ implemented; this file records what is not, and the intended direction.
   and `\overbrace{a}+b` against LuaLaTeX first.  A script on the brace's far
   side (`^{m}` in `\underbrace{x+y}_{n}^{m}`) is set here as an ordinary
   superscript; as a `\limits` Op, TeX would centre it above the nucleus.
+  The brace itself is also chosen differently: `\overbrace{a+b}` is 0.05 to
+  0.21 em wider here than in LuaLaTeX (all eight bundled fonts) and up to
+  0.08 em taller.
 - LuaTeX adds a delimiter variant's italic correction after a `\left`
   delimiter (NewCM's `bmatrix` is 0.09 pt wider there); XeTeX does not, and
   neither does TeXLayout.
@@ -60,8 +63,24 @@ implemented; this file records what is not, and the intended direction.
   (`_layout_radical_assembly!`), so they can overshoot the required height by up
   to one extender; horizontal and delimiter assemblies now share
   `_assembly_overlaps`.
-- `\bigm\{` and `\bigm|` come out at different heights (about 1.9 em and
-  1.1 em in Bonum); check the `\big` size tiers against each font's variants.
+- `\big` … `\Bigg` use KaTeX's fixed targets (1.2, 1.8, 2.4, and 3.0 em),
+  but amsmath sets `\left⟨d⟩\vcenter to k\big@size{}\right.` with
+  k = 1, 1.5, 2, 2.5 and `\big@size` = 1.2 × the height plus depth of the
+  math strut (a parenthesis), so TeX's target depends on the font and passes
+  through `\delimiterfactor` (see `katex_rules.md`).  Against the height of
+  amsmath's box in LuaLaTeX at 10 pt (an upper bound on its delimiter),
+  TeXLayout's delimiters are 1.1 to 1.43 times as tall in Pagella, Termes,
+  Bonum, Schola, and STIX Two, 1.1 times for Fira Math's three larger sizes,
+  and 1.17 to 1.25 times for New Computer Modern's parentheses; they agree in
+  Luciole and for New Computer Modern's brackets and braces.  Fix together
+  with the Bonum oddity that `\bigm\{` and `\bigm|` come out at about 1.9 em
+  and 1.1 em.
+- Delimiter variants are compared by their MATH advance; LuaTeX appears to
+  compare the glyph's height plus depth, 1 du less in the bundled fonts.  At an
+  exact edge the choice differs: Schola's `\tbinom` (`delim2`, 1.01 em) gets
+  `parenleft.v1` (1011 du advance, 1010 du ink) here and `.v2` in LuaLaTeX.
+  (New Computer Modern's display `\binom` also differs, from the recorded
+  choice of 2.39 em over luaotfload's 2.40; see `katex_rules.md`, 15e.)
 - Fira Math's overbracket assembly has a visible step in its top rule.
 
 ## Sizing
@@ -99,6 +118,13 @@ implemented; this file records what is not, and the intended direction.
   Measure `x_{(a)}` and `x^{\hat{a}}` in LuaLaTeX first.  Conversely, the text
   alphabets (`\mathrm`, `\mathit`, …) are text fonts in unicode-math and get
   no `ssty` there, but take the math font's alternates here.
+- Extensible arrows follow KaTeX's padding (`_XARROW_KERN`, 0.111 em), not
+  amsmath's `\ext@arrow` (labels padded by 5 mu and 9 mu in script style, set
+  as `\limits` scripts of a `\mathop`).  In LuaLaTeX at 10 pt,
+  `\xrightarrow[a]{b}` is 0.03 to 0.35 em wider here than in TeX, depending on
+  the font, and its lower label sits higher (depth 0.44 em against 0.62 em in
+  New Computer Modern); with a long label (`\xrightarrow{abcdef}`) the widths
+  agree within 0.06 em except in Luciole (0.35 em).
 - Extensible arrows without a single-codepoint tail piece (`\xmapsto`, the hook
   arrows, the stacked harpoons) stay at natural width in fonts lacking a
   horizontal construction (Fira Math).  They could be built from a vertical
