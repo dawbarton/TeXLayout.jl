@@ -48,24 +48,24 @@ Each `LayoutBox` carries a `TeXElement` (a `Glyph`, `GlyphID`, `HRule`, `VRule`,
 
 ## Makie integration
 
-Makie 0.25's public text-layout interface is implemented by
-`TeXLayoutHandler`. Select it on a text plot or in a theme to route
-`LaTeXString` values through TeXLayout without type piracy. Makie 0.24 retains
-the legacy automatic adapter.
+On Makie 0.24, the current release, loading TeXLayout alongside CairoMakie or
+GLMakie is enough: an automatic adapter lays out every `LaTeXString`.
 
 ```julia
-using TeXLayout
-using CairoMakie, LaTeXStrings
+using TeXLayout, CairoMakie, LaTeXStrings
 
 fig = Figure()
 ax  = Axis(fig[1, 1])
 text!(ax, 0.5, 0.5;
       text      = L"\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}",
-      text_handler = TeXLayoutHandler(),
       fontsize  = 32,
       align     = (:center, :center))
 save("output.png", fig)
 ```
+
+Makie 0.25, still in development, adds a public text-layout interface.
+TeXLayout implements it with `TeXLayoutHandler`, which avoids the adapter's type
+piracy: pass `text_handler = TeXLayoutHandler()` to a text plot or a theme.
 
 See [Makie integration](03-makie.md) for font-matching tips and known limitations.
 

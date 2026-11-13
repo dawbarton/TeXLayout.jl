@@ -232,8 +232,9 @@ end
 `LayoutBox` is deliberately renderer-agnostic — it carries no dependency on any
 particular graphics library.
 
-**Makie users:** on Makie 0.25, pass `text_handler = TeXLayoutHandler()` to a
-text plot or theme. Makie 0.24 uses the legacy automatic adapter. See
+**Makie users:** on Makie 0.24, the current release, loading TeXLayout is
+enough; an automatic adapter lays out every `LaTeXString`. On Makie 0.25, in
+development, pass `text_handler = TeXLayoutHandler()` to a text plot or theme. See
 [Makie Integration](03-makie.md).
 
 **Custom renderers:** iterate over `boxes` and dispatch on the element type:

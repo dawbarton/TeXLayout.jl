@@ -2178,3 +2178,32 @@
   advance-against-ink variant edge stay in `future.md`.
 - `compare_tex.jl` now falls back to ImageMagick 6's `convert` (never on
   Windows, where `convert` is a disk utility).
+
+## 2026-11-13T21:19+00:00 v0.4.0 release preparation
+
+- Release prepared on `feat/makie-layout-text-interface`, fast-forwarded to
+  `main` after #61 merged (the session may push only that branch).
+- Version 0.3.2 → 0.4.0: rendered output changes throughout, so a minor bump
+  under 0.x.  General's AutoMerge allows a +1 minor bump but holds a breaking
+  release unless the registration's release notes mention "breaking" (or
+  "changelog"); the `@JuliaRegistrator register` comment must include them.
+- Makie compat stays `"0.24, 0.25"` although Makie 0.25 is unregistered
+  (latest 0.24.17 on 2026-11-13): the handler is tested against
+  `ff/breaking-0.25`.  If the released 0.25 differs, ship 0.4.1 and ask
+  General to cap 0.4.0's Makie compat.  AutoMerge's guidelines (page dated
+  February 2025) say nothing against compat naming an unreleased version.
+- README, `index.md`, `01-getting-started.md`, and `03-makie.md` now give the
+  Makie 0.24 usage (automatic `MathTeXEngineExt`) first and the 0.25 handler as
+  in development.  Checked in a fresh environment with only TeXLayout,
+  CairoMakie, and LaTeXStrings as direct dependencies: the extension activates
+  on Makie 0.24.17 and the README example renders correctly.
+- Changelog edited for a release reader: a breaking-change summary; the four
+  entries fixing the unreleased `TeXLayoutHandler` folded into its Added entry;
+  two stale statements that matrix delimiters cover the ink removed (the code
+  sizes them by rule 19 against the strutted box, with full coverage only for
+  a matrix among other content in `\left…\right`); missing compare links for
+  v0.1.1 to v0.2.2 added.
+- No stress rerun: since the `v0.4.0-stress` files (931901c) the only `src/`
+  and `ext/` commits are #61's refactors, shown byte-identical.
+- After the release: check the TagBot tag and release, and that `stable` docs
+  deploy (first use of the `DOCUMENTER_KEY` SSH input to TagBot).
