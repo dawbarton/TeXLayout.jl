@@ -2102,3 +2102,34 @@
   1.25.15) were folded into #60 with Dependabot's pinned SHAs, applied to
   every occurrence: #55 had missed the `makie-0-25` job's cache pin, which
   was added after it opened.
+
+## 2026-11-13T16:59+00:00 Structural review and maintainability refactor
+
+- Review conclusion: no wholesale restructure; six targeted steps, each a
+  separate commit, with tests, all 1416 stress images and 24 sheets
+  byte-identical to `main`, and benchmarks unchanged within this machine's
+  noise (interleave runs; load is high).
+- (a) `tools/common.jl` holds the tools' shared font, glyph, and canvas
+  helpers.  Tools now resolve glyphs through `GlyphRuntime` (the whole slot
+  fallback chain), as the adapters do, instead of `_font_path_for_slot` (the
+  first font only).  No current case resolves differently.
+- (b) `_LayoutCtx` holds the `MathTable` itself (`ctx.mt.constants`, …) plus
+  `upm`; variants are built with one `_with` helper.
+- (c) Typed `Node.payload` (`_DelimiterPairPayload`, `_BigDelimiterPayload`,
+  `_MatrixPayload`) replaces `\0`-separated `Node.value`.  A stale
+  `isempty(node.value)` guard in `_layout_big_delim!` silently dropped every
+  `\big` delimiter after the change; the stress suite caught it, the unit
+  tests did not.
+- (d) Tests split by feature (`test_layout_*.jl`, `test_text_*.jl`, shared
+  `helpers.jl`); `Pkg.test(test_args = [...])` selects files by substring.
+- (e) Math-alphabet mapping moved to `src/tables/math_alphabets.jl`.
+- (f) `AGENTS.md` cut from 593 to 109 lines (purpose, map, invariants,
+  working rules); architecture moved to `docs/src/91-design/` (seven pages),
+  replacing `91-developer.md`.  `future.md` is the single list of
+  limitations.
+- Documenter gotchas: a bare `[`FontFamily`](@ref)` had resolved to a heading
+  on the deleted developer page, so it needs `@ref TeXLayout.FontFamily`; a
+  `|` inside a code span still ends a table cell in Julia's Markdown parser.
+- Open: `tools/visualise_metrics_makie.jl` draws its metric guides offset
+  from the glyphs; identical on `main`, so pre-existing.  `compare_tex.jl`
+  PDF builds fail locally for want of `standalone.cls` in TinyTeX.

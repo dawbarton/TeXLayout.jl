@@ -1,3 +1,8 @@
+# HarfBuzzExt: the HarfBuzz-backed `TextShaper`.  Loaded with HarfBuzz_jll, it
+# adds `shape_span(::HarfBuzzShaper, …)`, which shapes document text spans (and
+# math `\text{…}` when that shaper is requested) with ligatures, kerning, and
+# OpenType features such as `smcp` for `\textsc`.
+
 module HarfBuzzExt
 
 import HarfBuzz_jll

@@ -1,3 +1,7 @@
+# Internal enumerations (EnumX namespaces): font slots, text families, layout
+# modes, alignments, AST node kinds, and token kinds.  They are deliberately not
+# exported; use them qualified, as `NodeKind.Char` or `TokenKind.EOF`.
+
 using EnumX
 
 EnumX.@enumx FontSlot begin
@@ -34,10 +38,10 @@ EnumX.@enumx NodeKind begin
     Subscript     # base_{subscript} when superscript is absent
     Decorated     # base with both sub and sup: x_i^2
     Frac          # \frac{num}{den}
-    Genfrac       # \binom etc.: no-rule fraction + delimiters; value encoded by _DelimiterPairPayload
+    Genfrac       # \binom etc.: no-rule fraction + delimiters; payload is a _DelimiterPairPayload
     Sqrt          # \sqrt[degree]{body}
-    Delimited     # \left…\right pair; value encoded by _DelimiterPairPayload
-    BigDelim      # \bigl/\bigr/\big etc.; value encoded by _BigDelimiterPayload
+    Delimited     # \left…\right pair; payload is a _DelimiterPairPayload
+    BigDelim      # \bigl/\bigr/\big etc.; payload is a _BigDelimiterPayload
     Accent        # \hat, \bar, \vec, etc.
     OverUnder     # \overline / \underline; value is "overline" or "underline"
     Command       # unrecognised command or atom-producing command (\alpha, \int, …)
@@ -47,7 +51,7 @@ EnumX.@enumx NodeKind begin
     LimitsOverride # \limits / \nolimits / \displaylimits: wraps a base; value is "limits", "nolimits", or "displaylimits"
     FontSwitch    # \mathbf{…}, \mathit{…}, etc.; value = variant name; children[1] = body
     HorizBrace    # \overbrace / \underbrace / …; value = command name; children[1] = body
-    Matrix        # \begin{env}…\end{env}: value encoded by _MatrixPayload; children = flat row-major cells
+    Matrix        # \begin{env}…\end{env}: payload is a _MatrixPayload; children = flat row-major cells
     Middle        # \middle<delim>: auto-sized inner delimiter; value = PS glyph name
     StyleOverride # \dfrac / \displaystyle etc.; value = style name; children[1] = body
     Sizing        # \large / \tiny etc.; value = Float64 multiplier string; children[1] = body

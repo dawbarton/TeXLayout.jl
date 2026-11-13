@@ -77,7 +77,7 @@ See [Makie integration](03-makie.md) for font-matching tips and known limitation
 - [LaTeX Command Reference](04-commands.md) — supported commands, operators, accents, environments, and spacing.
 - [API Reference](05-api.md) — the small exported configuration surface and
   qualified advanced APIs.
-- [Developer Docs](91-developer.md) — architecture, invariants, and contributing guide.
+- [Design](91-design/01-overview.md) — architecture, data structures, layout algorithms, invariants, and how to extend and test TeXLayout.
 
 ## Acknowledgements
 

@@ -19,7 +19,8 @@
 # because $\displaystyle ...$ is still inline mode for amsmath's \if@display.
 #
 # Requirements: lualatex or xelatex with unicode-math, fontspec, mathtools,
-# extarrows, and TikZ (TeX Live), and ImageMagick (`magick`) for the PNGs.
+# extarrows, TikZ, and the standalone class (TeX Live), and ImageMagick
+# (`magick`) for the PNGs.
 #
 # Usage:
 #   julia --project=tools tools/compare_tex.jl [options] EXPR [EXPR ...]
