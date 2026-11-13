@@ -2118,8 +2118,9 @@
 - (c) Typed `Node.payload` (`_DelimiterPairPayload`, `_BigDelimiterPayload`,
   `_MatrixPayload`) replaces `\0`-separated `Node.value`.  A stale
   `isempty(node.value)` guard in `_layout_big_delim!` silently dropped every
-  `\big` delimiter after the change; the stress suite caught it, the unit
-  tests did not.
+  `\big` delimiter after the change.  The stress suite flagged it first, but
+  reinserting the guard later showed that three existing `\big` testsets fail
+  too (corrected; this note first said the unit tests missed it).
 - (d) Tests split by feature (`test_layout_*.jl`, `test_text_*.jl`, shared
   `helpers.jl`); `Pkg.test(test_args = [...])` selects files by substring.
 - (e) Math-alphabet mapping moved to `src/tables/math_alphabets.jl`.

@@ -166,6 +166,37 @@
         @test adv2 > adv1
     end
 
+    @testset "\\big to \\Bigg: a delimiter at every size, growing with the size" begin
+        # Each size reads its glyph and size from the node's payload, so a
+        # layout that cannot read the payload draws nothing.  The largest sizes
+        # may be assemblies, so measure the ink extent of all the glyphs.
+        function ink_height(src)
+            glyphs = find_glyphs(layout(parse_latex(src), family, Display))
+            @test !isempty(glyphs)
+            isempty(glyphs) && return 0.0
+            top = maximum(g.y + g.element.y_max * g.scale / mt.upm for g in glyphs)
+            bottom = minimum(g.y + g.element.y_min * g.scale / mt.upm for g in glyphs)
+            return top - bottom
+        end
+        heights = ink_height.(["(", raw"\bigl(", raw"\Bigl(", raw"\biggl(", raw"\Biggl("])
+        @test all(diff(heights) .> 0)
+    end
+
+    @testset "\\bigl, \\bigr, and \\bigm take open, close, and relation spacing" begin
+        # The parser tests check the class stored in the payload; this checks
+        # that layout reads it.  x of the i-th glyph; Display style, so
+        # 1 mu = 1/18 em.
+        gx(src, i) = find_glyphs(layout(parse_latex(src), family, Display))[i].x
+        thick, medium = TeXLayout._THICK, TeXLayout._MEDIUM
+        # A relation has a thick space on each side; a plain \big is ordinary.
+        @test gx(raw"a\bigm|b", 2) - gx(raw"a\big|b", 2) ≈ thick atol = 1.0e-9
+        @test gx(raw"a\bigm|b", 3) - gx(raw"a\big|b", 3) ≈ 2thick atol = 1.0e-9
+        # A binary operator after an opening delimiter, or before a closing
+        # one, becomes ordinary and loses its medium spaces (TeX rules 5 and 6).
+        @test gx(raw"\big(+x", 3) - gx(raw"\bigl(+x", 3) ≈ 2medium atol = 1.0e-9
+        @test gx(raw"x+\big)", 3) - gx(raw"x+\bigr)", 3) ≈ 2medium atol = 1.0e-9
+    end
+
     @testset "\\bigl. produces no glyph boxes (null delimiter)" begin
         boxes = layout(parse_latex(raw"\bigl."), family, Display)
         @test isempty(find_glyphs(boxes))
